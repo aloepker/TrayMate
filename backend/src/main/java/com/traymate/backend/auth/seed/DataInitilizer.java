@@ -44,18 +44,18 @@ public class DataInitilizer implements CommandLineRunner {
                     .role("ROLE_CAREGIVER")
                     .build();
 
-            //create default resident
-            User resident = User.builder()
-                    .fullName("Test Resident")
-                    .email("resident@traymate.com")
-                    .password(encoder.encode("res123"))
-                    .role("ROLE_RESIDENT")
+            //create default kitchen staff
+            User kitchen = User.builder()
+                    .fullName("Kitchen Staff")
+                    .email("kitchen@traymate.com")
+                    .password(encoder.encode("kitchen123"))
+                    .role("ROLE_KITCHEN_STAFF")
                     .build();
 
             //save all users to the database
             repo.save(admin);
             repo.save(caregiver);
-            repo.save(resident);
+            repo.save(kitchen);
 
             System.out.println("Default users seeded");
         }
