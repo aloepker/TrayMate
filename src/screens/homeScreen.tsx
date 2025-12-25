@@ -1,27 +1,49 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+//this is the call for the global styling file
+import { globalStyles } from '../styles/styles';
 
-// The 'navigation' prop is automatically passed by the Stack Navigator in App.tsx
 const HomeScreen = ({ navigation }: any) => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Resident Management System</Text>
+    <View style={globalStyles.container}>
+      <Text style={globalStyles.title}>Home Screen / Test switchboard</Text>
       
-      <TouchableOpacity 
-        style={styles.button}
-        onPress={() => navigation.navigate('AddResident')}
-      >
-        <Text style={styles.buttonText}>Go to Add Resident Form</Text>
-      </TouchableOpacity>
+      {/* First Row: 3 Buttons */}
+      <View style={[globalStyles.buttonRow, { marginBottom: 12 }]}>
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('AddResident')}>
+          <Text style={globalStyles.buttonText}>Add Resident</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('BrowseMealOptions')}>
+          <Text style={globalStyles.buttonText}>Browse Meals</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('Login')}>
+          <Text style={globalStyles.buttonText}>Login</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Second Row: 4 Buttons */}
+      <View style={globalStyles.buttonRow}>
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('AddMealOptions')}>
+          <Text style={globalStyles.buttonText}>Add Meals</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('EditResidentList')}>
+          <Text style={globalStyles.buttonText}>Edit List</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('ResidentInfoEdit')}>
+          <Text style={globalStyles.buttonText}>Edit Info</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('UpcomingMeals')}>
+          <Text style={globalStyles.buttonText}>Upcoming</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 24, marginBottom: 20 },
-  button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 8 },
-  buttonText: { color: '#white', fontWeight: 'bold' }
-});
 
 export default HomeScreen;
