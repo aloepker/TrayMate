@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "MyRNApp.app"
-               BlueprintName = "MyRNApp"
-               ReferencedContainer = "container:MyRNApp.xcodeproj">
+               BuildableName = "TrayMate.app"
+               BlueprintName = "TrayMate"
+               ReferencedContainer = "container:TrayMate.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "MyRNAppTests.xctest"
-               BlueprintName = "MyRNAppTests"
-               ReferencedContainer = "container:MyRNApp.xcodeproj">
+               BuildableName = "TrayMateTests.xctest"
+               BlueprintName = "TrayMateTests"
+               ReferencedContainer = "container:TrayMate.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "MyRNApp.app"
-            BlueprintName = "MyRNApp"
-            ReferencedContainer = "container:MyRNApp.xcodeproj">
+            BuildableName = "TrayMate.app"
+            BlueprintName = "TrayMate"
+            ReferencedContainer = "container:TrayMate.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "MyRNApp.app"
-            BlueprintName = "MyRNApp"
-            ReferencedContainer = "container:MyRNApp.xcodeproj">
+            BuildableName = "TrayMate.app"
+            BlueprintName = "TrayMate"
+            ReferencedContainer = "container:TrayMate.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

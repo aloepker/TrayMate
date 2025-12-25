@@ -1,4 +1,4 @@
-package com.myrnapp
+package com.ByteOfCare.TrayMate
 
 import android.app.Application
 import com.facebook.react.PackageList
