@@ -143,7 +143,6 @@ const handlePress = () => {
     </SafeAreaView>
   );
 
-
 };
 
 
