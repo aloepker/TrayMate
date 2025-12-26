@@ -1,0 +1,12 @@
+admin terminal 1:
+npm start
+
+admin terminal 2:
+adb reverse tcp:8081 tcp:8081
+
+if there is an issue with the code updating, stop Metro, then:
+	cd android
+	.\gradlew clean
+	.\gradlew installDebug
+	cd ..
+	npm start
