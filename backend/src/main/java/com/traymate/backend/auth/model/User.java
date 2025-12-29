@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.security.core.userdetails.UserDetails;
 
 @Entity
+@Table(name = "users")      //set the table for users in db
 @Getter
 @Setter
 @Builder
