@@ -167,9 +167,9 @@ const MealOptions = ({ navigation }: any) => {
 
   const listHeader = (
     <View style={styles.header}>
-      <TouchableOpacity onPress={() => navigation.goBack()}>
+      {/* <TouchableOpacity onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>Go Back</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
 
       <Text style={styles.title}>TrayMate Menu</Text>
       <Text style={styles.subtitle}>Browse meals and see today's AI recommendation.</Text>
@@ -245,9 +245,10 @@ export default MealOptions;
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 12,
+    width: "100%",
+    alignSelf: "stretch",
   },
   backText: {
     fontSize: 16,
@@ -288,6 +289,8 @@ const styles = StyleSheet.create({
     color: "#F9FAFB",
   },
   recCard: {
+    width: "100%",
+    alignSelf: "stretch",
     marginTop: 16,
     padding: 16,
     borderRadius: 16,
@@ -314,11 +317,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   listContent: {
-    paddingHorizontal: 20,
     paddingBottom: 24,
     gap: 16,
+    width: "100%",
+    alignSelf: "stretch",
   },
   card: {
+    width: "100%",
+    alignSelf: "stretch",
     padding: 16,
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
