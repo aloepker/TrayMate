@@ -1,11 +1,17 @@
 package com.traymate.backend.auth.config;
 
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import lombok.RequiredArgsConstructor;
 
@@ -14,29 +20,51 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    //JWT filter that validates tokens on every request
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    
-    /**
-     * main Spring Security configuration
-     *
-     * defines:
-     * - which endpoints are public
-     * - which require authentication or roles
-     * - where the JWT filter runs in the filter chain
-     */
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // REQUIRED for Expo / mobile / browser clients
+            .cors(cors -> {})
             .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/auth/login").permitAll()                     //login endpoint is public (anyone can attempt to login)
-            .requestMatchers("/auth/register").hasAuthority("ROLE_ADMIN")   //only ADMIN users can register new users
-            .anyRequest().authenticated()                                   //all other endpoints require authentication
-        )
 
-        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .authorizeHttpRequests(auth -> auth
+                // allow preflight requests
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // public auth endpoints
+                .requestMatchers("/auth/login").permitAll()
+
+                // admin-only
+                .requestMatchers("/auth/register").hasAuthority("ROLE_ADMIN")
+
+                // everything else secured
+                .anyRequest().authenticated()
+            )
+
+            // JWT should run AFTER CORS + auth rules
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // REQUIRED CORS CONFIG
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+
+        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedMethods(List.of(
+            "GET", "POST", "PUT", "DELETE", "OPTIONS"
+        ));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source =
+            new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+
+        return source;
     }
 }
