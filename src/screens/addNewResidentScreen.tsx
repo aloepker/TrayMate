@@ -19,7 +19,7 @@ const ResidentForm = ({ navigation }: any) => {
     firstName: '',
     middleName: '', 
     lastName: '',
-    dob: '', // We store the display string here
+    dob: '', 
     gender: '',
     residentId: '',
     email: '',      
@@ -33,26 +33,37 @@ const ResidentForm = ({ navigation }: any) => {
     medications: '' 
   });
 
-  // Date Picker Specific State
+  // 2. ERROR STATE (Stores keys of missing fields)
+  const [errors, setErrors] = useState<string[]>([]);
+
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Helper to update state
+  // Helper to update state and clear specific error on interaction
   const updateField = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
+    
+    // If this field currently has an error, remove it from the error list
+    if (errors.includes(field)) {
+      setErrors(errors.filter(item => item !== field));
+    }
   };
 
-  // Date Selection Handler
   const onDateChange = (event: any, selectedDate?: Date) => {
-    // Android requires hiding the picker immediately
     setShowDatePicker(false);
-    
     if (selectedDate) {
       setCurrentDate(selectedDate);
-      // Format: MM/DD/YYYY
       const formattedDate = selectedDate.toLocaleDateString();
       updateField('dob', formattedDate);
     }
+  };
+
+  // 3. STYLE HELPER
+  const getLabelStyle = (fieldName: string) => {
+    return [
+      globalStyles.label, 
+      errors.includes(fieldName) && { color: 'red' } 
+    ];
   };
 
   const handleBackPress = () => {
@@ -62,7 +73,6 @@ const ResidentForm = ({ navigation }: any) => {
     ]);
   };
 
-  // 2. VALIDATION (Only runs when button is clicked)
   const handleSubmit = () => {
     const requiredFields = [
       { key: 'firstName', label: 'First Name' },
@@ -77,19 +87,70 @@ const ResidentForm = ({ navigation }: any) => {
       { key: 'foodAllergies', label: 'Food Allergies' },
     ];
 
-    const missingFields = requiredFields
+    // Identify which keys are missing
+    const missingFieldKeys = requiredFields
       .filter(field => !formData[field.key as keyof typeof formData].trim())
-      .map(field => field.label);
+      .map(field => field.key);
 
-    if (missingFields.length > 0) {
+    if (missingFieldKeys.length > 0) {
+      setErrors(missingFieldKeys); // Update UI to show red text
       Alert.alert(
         "Missing Required Fields",
-        "Please fill out the following:\n\n- " + missingFields.join('\n- ')
+        "Please fill out the fields highlighted in red."
       );
       return;
     }
 
-    console.log("Success! Data:", formData);
+    // Success / JSON creation
+    const { 
+        firstName, middleName, lastName, dob, gender, 
+        residentId, email, phone, emergencyContact, 
+        emergencyPhone, doctor, doctorPhone, 
+        medicalConditions, foodAllergies, medications 
+    } = formData;
+
+    const newResidentData = {
+        firstName: firstName.trim(),
+        middleName: middleName.trim(),
+        lastName: lastName.trim(),
+        dob: dob,
+        gender: gender.trim(),
+        residentId: residentId.trim(),
+        email: email.toLowerCase().trim(),
+        phone: phone.trim(),
+        emergencyContact: emergencyContact.trim(),
+        emergencyPhone: emergencyPhone.trim(),
+        doctor: doctor.trim(),
+        doctorPhone: doctorPhone.trim(),
+        medicalConditions: medicalConditions.trim(),
+        foodAllergies: foodAllergies.trim(),
+        medications: medications.trim()
+    };
+
+    const jsonToSend = JSON.stringify(newResidentData);
+// API Call would go here 
+/*
+    try {
+      const response = await fetch('YOUR_BACKEND_URL_HERE', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // 'Authorization': 'Bearer YOUR_TOKEN_IF_NEEDED',
+        },
+        body: jsonToSend,
+      });
+
+      if (response.ok) {
+        Alert.alert("Success", "Resident Saved.");
+        navigation.goBack();
+      } else {
+        const errorData = await response.json();
+        Alert.alert("Error", errorData.message || "Failed to save to cloud.");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Network Error", "Please check your internet connection and try again.");
+    } */
     Alert.alert("Success", "Resident Saved.");
   };
 
@@ -102,7 +163,7 @@ const ResidentForm = ({ navigation }: any) => {
           {/* Row 1: Names */}
           <View style={globalStyles.row}>
             <View style={[globalStyles.inputGroup, { flex: 2 }]}>
-              <Text style={globalStyles.label}>First Name*</Text>
+              <Text style={getLabelStyle('firstName')}>First Name*</Text>
               <TextInput style={globalStyles.input} value={formData.firstName} onChangeText={(v) => updateField('firstName', v)} placeholder="John" />
             </View>
             <View style={[globalStyles.inputGroup, { flex: 1 }]}>
@@ -110,42 +171,37 @@ const ResidentForm = ({ navigation }: any) => {
               <TextInput style={globalStyles.input} value={formData.middleName} onChangeText={(v) => updateField('middleName', v)} placeholder="B." />
             </View>
             <View style={[globalStyles.inputGroup, { flex: 2 }]}>
-              <Text style={globalStyles.label}>Last Name*</Text>
+              <Text style={getLabelStyle('lastName')}>Last Name*</Text>
               <TextInput style={globalStyles.input} value={formData.lastName} onChangeText={(v) => updateField('lastName', v)} placeholder="Doe" />
             </View>
           </View>
 
           {/* Row 2: Personal Details */}
           <View style={globalStyles.row}>
-            {/* DATE OF BIRTH DROPDOWN/MENU */}
             <View style={globalStyles.inputGroup}>
-              <Text style={globalStyles.label}>Date of Birth*</Text>
-              <TouchableOpacity 
-                style={globalStyles.input} 
-                onPress={() => setShowDatePicker(true)}
-              >
+              <Text style={getLabelStyle('dob')}>Date of Birth*</Text>
+              <TouchableOpacity style={globalStyles.input} onPress={() => setShowDatePicker(true)}>
                 <Text style={{ marginTop: 5, color: formData.dob ? '#000' : '#C7C7CD' }}>
                   {formData.dob || "Select Date"}
                 </Text>
               </TouchableOpacity>
-              
               {showDatePicker && (
                 <DateTimePicker
                   value={currentDate}
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   onChange={onDateChange}
-                  maximumDate={new Date()} // Can't be born in the future
+                  maximumDate={new Date()}
                 />
               )}
             </View>
 
             <View style={globalStyles.inputGroup}>      
-              <Text style={globalStyles.label}>Gender*</Text>
+              <Text style={getLabelStyle('gender')}>Gender*</Text>
               <TextInput style={globalStyles.input} value={formData.gender} onChangeText={(v) => updateField('gender', v)} placeholder="Select Gender" />
             </View>
             <View style={globalStyles.inputGroup}>
-              <Text style={globalStyles.label}>Resident ID*</Text>
+              <Text style={getLabelStyle('residentId')}>Resident ID*</Text>
               <TextInput style={globalStyles.input} value={formData.residentId} onChangeText={(v) => updateField('residentId', v)} placeholder="Unique ID" />
             </View>
           </View>
@@ -165,22 +221,22 @@ const ResidentForm = ({ navigation }: any) => {
           {/* Row 4: Medical Primary */}
           <View style={globalStyles.row}>
             <View style={[globalStyles.inputGroup]}>
-              <Text style={globalStyles.label}>Emergency Contact*</Text>
+              <Text style={getLabelStyle('emergencyContact')}>Emergency Contact*</Text>
               <TextInput style={globalStyles.input} value={formData.emergencyContact} onChangeText={(v) => updateField('emergencyContact', v)} />
             </View>
             <View style={[globalStyles.inputGroup]}>
-              <Text style={globalStyles.label}>Emergency Phone*</Text>
+              <Text style={getLabelStyle('emergencyPhone')}>Emergency Phone*</Text>
               <TextInput style={globalStyles.input} value={formData.emergencyPhone} onChangeText={(v) => updateField('emergencyPhone', v)} placeholder="(555) 000-0000" />
             </View>
           </View>
 
           <View style={globalStyles.row}>
             <View style={[globalStyles.inputGroup]}>
-              <Text style={globalStyles.label}>Primary Care Doctor*</Text>
+              <Text style={getLabelStyle('doctor')}>Primary Care Doctor*</Text>
               <TextInput style={globalStyles.input} value={formData.doctor} onChangeText={(v) => updateField('doctor', v)} />
             </View>
             <View style={[globalStyles.inputGroup]}>
-              <Text style={globalStyles.label}>Doctor's Phone Number*</Text>
+              <Text style={getLabelStyle('doctorPhone')}>Doctor's Phone Number*</Text>
               <TextInput style={globalStyles.input} value={formData.doctorPhone} onChangeText={(v) => updateField('doctorPhone', v)} />
             </View>
           </View>
@@ -198,7 +254,7 @@ const ResidentForm = ({ navigation }: any) => {
 
           <View style={globalStyles.row}>
             <View style={globalStyles.inputGroup}>
-              <Text style={globalStyles.label}>Food Allergies*</Text>
+              <Text style={getLabelStyle('foodAllergies')}>Food Allergies*</Text>
               <TextInput style={globalStyles.input} value={formData.foodAllergies} onChangeText={(v) => updateField('foodAllergies', v)} />
             </View>
             <View style={globalStyles.inputGroup}>
