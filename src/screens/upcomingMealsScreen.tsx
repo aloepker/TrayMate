@@ -49,8 +49,8 @@ const UpcomingMeal = ({ navigation }: any) => {
   };
 
   const goToMenu = () => {
-    navigation.navigate('BrowseMenus');
-  };
+  navigation.navigate('BrowseMealOptions');
+};
 
   return (
     <View style={styles.fullContainer}>
