@@ -3,33 +3,39 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
+// Import the CartProvider
+import { CartProvider } from './src/screens/context/CartContext';
+
 // Importing screen files
 import HomeScreen from './src/screens/homeScreen';
 import AddResidentScreen from './src/screens/addNewResidentScreen';
 import BrowseMealOptionsScreen from './src/screens/browseMealOptionsScreen';
+import CartScreen from './src/screens/CartScreen';
 import LoginScreen from './src/screens/loginScreen';
 import AddMealOptionsScreen from './src/screens/kitchenAddMealOptionsScreen';
 import EditResidentListScreen from './src/screens/editResidentListScreen';
 import ResidentInfoEditScreen from './src/screens/residentInfoEditScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 
-
-
 const Stack = createStackNavigator();
+
 // Adding them to the navigation stack
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="AddResident" component={AddResidentScreen} />
-        <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="AddMealOptions" component={AddMealOptionsScreen} />
-        <Stack.Screen name="EditResidentList" component={EditResidentListScreen} />
-        <Stack.Screen name="ResidentInfoEdit" component={ResidentInfoEditScreen} />
-        <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <CartProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Home">
+          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="AddResident" component={AddResidentScreen} />
+          <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
+          <Stack.Screen name="Cart" component={CartScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="AddMealOptions" component={AddMealOptionsScreen} />
+          <Stack.Screen name="EditResidentList" component={EditResidentListScreen} />
+          <Stack.Screen name="ResidentInfoEdit" component={ResidentInfoEditScreen} />
+          <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </CartProvider>
   );
 }
