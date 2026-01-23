@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { StatusBar } from "react-native";
+import { useCart } from "./context/CartContext";
 
 // global styling file (from your teammate setup)
 import { globalStyles } from "../styles/styles";
@@ -87,10 +88,18 @@ const MealOptions = ({ navigation }: any) => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
 
+  // Use the cart context
+  const { cart, addToCart, getCartCount } = useCart();
+
   const [menuLoading, setMenuLoading] = useState<boolean>(true);
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Navigate to cart screen
+  const goToCart = () => {
+    navigation.navigate('Cart');
+  };
 
   // Mock "fetch menu"
   const loadMenu = useCallback(async (period: PeriodOption["value"]) => {
@@ -162,6 +171,15 @@ const MealOptions = ({ navigation }: any) => {
           ))}
         </View>
       ) : null}
+
+      {/* Add to Cart Button */}
+      <TouchableOpacity 
+        style={styles.addToCartButton}
+        onPress={() => addToCart(item)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.addToCartText}>+ Add to Cart</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -206,6 +224,13 @@ const MealOptions = ({ navigation }: any) => {
   return (
     <SafeAreaView style={[globalStyles.container, styles.safeArea]}>
       <StatusBar barStyle="dark-content" />
+
+      {/* Cart Badge - shows when cart has items */}
+      {getCartCount() > 0 && (
+        <TouchableOpacity style={styles.cartBadge} onPress={goToCart}>
+          <Text style={styles.cartBadgeText}>🛒 Cart ({getCartCount()})</Text>
+        </TouchableOpacity>
+      )}
 
       {error ? (
         <View style={styles.errorBanner}>
@@ -383,6 +408,47 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#374151",
     fontWeight: "500",
+  },
+  // Add to Cart Button
+  addToCartButton: {
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: "#10b981",
+    alignItems: "center",
+    shadowColor: "#10b981",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  addToCartText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: 0.5,
+  },
+  // Cart Badge
+  cartBadge: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    zIndex: 1000,
+    backgroundColor: "#1F2937",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  cartBadgeText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   loadingState: {
     flex: 1,
