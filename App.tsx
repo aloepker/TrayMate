@@ -12,7 +12,7 @@ import AddResidentScreen from './src/screens/addNewResidentScreen';
 import BrowseMealOptionsScreen from './src/screens/browseMealOptionsScreen';
 import CartScreen from './src/screens/CartScreen';
 import LoginScreen from './src/screens/loginScreen';
-import AddMealOptionsScreen from './src/screens/kitchenAddMealOptionsScreen';
+import AddMealOptionsScreen from './src/screens/addMealOptionsScreen';
 import EditResidentListScreen from './src/screens/editResidentListScreen';
 import ResidentInfoEditScreen from './src/screens/residentInfoEditScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
