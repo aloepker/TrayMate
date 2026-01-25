@@ -2,6 +2,14 @@
 
 # dependencies
 node_modules/
+../node_modules/
+
+# expo
+.expo/
+
+# env
+.env
+.env.*
 
 # Expo
 .expo/
@@ -41,3 +49,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# environment variables
+.env
+.env.*
