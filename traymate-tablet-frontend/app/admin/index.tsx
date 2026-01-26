@@ -9,6 +9,8 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 
@@ -20,6 +22,8 @@ import {
   getResidents,
   getKitchenStaff,
   assignResident,
+  createCaregiver,
+  createKitchenStaff,
 } from "../../services/api";
 
 const grandmaLogo = require("../../assets/images/grandma.png");
@@ -29,6 +33,20 @@ export default function AdminDashboard() {
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ---- Add Caregiver Modal State ----
+  const [showAddCaregiver, setShowAddCaregiver] = useState(false);
+  const [cgName, setCgName] = useState("");
+  const [cgEmail, setCgEmail] = useState("");
+  const [cgPassword, setCgPassword] = useState("");
+  const [savingCaregiver, setSavingCaregiver] = useState(false);
+
+  // ---- Add Kitchen Staff Modal State ----
+  const [showAddKitchen, setShowAddKitchen] = useState(false);
+  const [ksName, setKsName] = useState("");
+  const [ksEmail, setKsEmail] = useState("");
+  const [ksPassword, setKsPassword] = useState("");
+  const [savingKitchen, setSavingKitchen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +104,64 @@ export default function AdminDashboard() {
       );
     } catch (e: any) {
       Alert.alert("Assignment failed", e.message);
+    }
+  };
+
+  const submitCaregiver = async () => {
+    if (!cgName.trim() || !cgEmail.trim() || !cgPassword) {
+      Alert.alert("Missing info", "Please enter name, email, and password.");
+      return;
+    }
+
+    try {
+      setSavingCaregiver(true);
+
+      const created = await createCaregiver({
+        name: cgName.trim(),
+        email: cgEmail.trim(),
+        password: cgPassword,
+      });
+
+      setCaregivers((prev) => [created, ...prev]);
+
+      // Clear sensitive fields + close
+      setCgName("");
+      setCgEmail("");
+      setCgPassword("");
+      setShowAddCaregiver(false);
+    } catch (e: any) {
+      Alert.alert("Failed to create caregiver", e.message);
+    } finally {
+      setSavingCaregiver(false);
+    }
+  };
+
+  const submitKitchenStaff = async () => {
+    if (!ksName.trim() || !ksEmail.trim() || !ksPassword) {
+      Alert.alert("Missing info", "Please enter name, email, and password.");
+      return;
+    }
+
+    try {
+      setSavingKitchen(true);
+
+      const created = await createKitchenStaff({
+        name: ksName.trim(),
+        email: ksEmail.trim(),
+        password: ksPassword,
+      });
+
+      setKitchenStaff((prev) => [created, ...prev]);
+
+      // Clear sensitive fields + close
+      setKsName("");
+      setKsEmail("");
+      setKsPassword("");
+      setShowAddKitchen(false);
+    } catch (e: any) {
+      Alert.alert("Failed to create kitchen staff", e.message);
+    } finally {
+      setSavingKitchen(false);
     }
   };
 
@@ -161,7 +237,7 @@ export default function AdminDashboard() {
 
             <Pressable
               style={styles.outlineBtn}
-              onPress={() => console.log("Add caregiver modal later")}
+              onPress={() => setShowAddCaregiver(true)}
             >
               <Text style={styles.outlineBtnText}>＋ Add Caregiver</Text>
             </Pressable>
@@ -216,7 +292,7 @@ export default function AdminDashboard() {
                   key={k.id}
                   name={k.name}
                   email={k.email}
-                  footer={`Shift: ${k.shift ?? "—"}`}
+                  footer={`Kitchen Staff`}
                 />
               ))}
               {!kitchenStaff.length ? (
@@ -226,13 +302,125 @@ export default function AdminDashboard() {
 
             <Pressable
               style={styles.outlineBtn}
-              onPress={() => console.log("Add kitchen staff modal later")}
+              onPress={() => setShowAddKitchen(true)}
             >
               <Text style={styles.outlineBtnText}>＋ Add Kitchen Staff</Text>
             </Pressable>
           </SectionCard>
         </ScrollView>
       )}
+
+      {/* -------------------- Add Caregiver Modal -------------------- */}
+      <Modal visible={showAddCaregiver} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add Caregiver</Text>
+
+            <Text style={styles.modalLabel}>Full name</Text>
+            <TextInput
+              value={cgName}
+              onChangeText={setCgName}
+              placeholder="Enter caregiver name"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Email</Text>
+            <TextInput
+              value={cgEmail}
+              onChangeText={setCgEmail}
+              placeholder="Enter caregiver email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Password</Text>
+            <TextInput
+              value={cgPassword}
+              onChangeText={setCgPassword}
+              placeholder="Create password"
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.modalInput}
+            />
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitCaregiver}
+              disabled={savingCaregiver}
+            >
+              <Text style={styles.modalPrimaryText}>
+                {savingCaregiver ? "Adding..." : "Add Caregiver"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setCgPassword("");
+                setShowAddCaregiver(false);
+              }}
+            >
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ------------------ Add Kitchen Staff Modal ------------------ */}
+      <Modal visible={showAddKitchen} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add Kitchen Staff</Text>
+
+            <Text style={styles.modalLabel}>Full name</Text>
+            <TextInput
+              value={ksName}
+              onChangeText={setKsName}
+              placeholder="Enter staff name"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Email</Text>
+            <TextInput
+              value={ksEmail}
+              onChangeText={setKsEmail}
+              placeholder="Enter staff email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Password</Text>
+            <TextInput
+              value={ksPassword}
+              onChangeText={setKsPassword}
+              placeholder="Create password"
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.modalInput}
+            />
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitKitchenStaff}
+              disabled={savingKitchen}
+            >
+              <Text style={styles.modalPrimaryText}>
+                {savingKitchen ? "Adding..." : "Add Kitchen Staff"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setKsPassword("");
+                setShowAddKitchen(false);
+              }}
+            >
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -278,7 +466,15 @@ function StatCard({
   );
 }
 
-function MiniCard({ name, email, footer }: { name: string; email: string; footer: string }) {
+function MiniCard({
+  name,
+  email,
+  footer,
+}: {
+  name: string;
+  email: string;
+  footer: string;
+}) {
   return (
     <View style={styles.miniCard}>
       <Text style={styles.miniName}>{name}</Text>
@@ -316,9 +512,7 @@ const styles = StyleSheet.create({
   },
   logoutText: { fontWeight: "800", color: "#3C3C3C" },
 
-  loadingWrap: {
-    padding: 24,
-  },
+  loadingWrap: { padding: 24 },
   loadingText: {
     marginTop: 10,
     fontSize: 14,
@@ -367,7 +561,12 @@ const styles = StyleSheet.create({
   },
   statIconText: { fontSize: 18, color: "#FFFFFF" },
   statLabel: { fontSize: 13, color: "#6A6A6A", fontWeight: "800" },
-  statValue: { marginTop: 3, fontSize: 26, fontWeight: "900", color: "#121212" },
+  statValue: {
+    marginTop: 3,
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#121212",
+  },
 
   sectionCard: {
     backgroundColor: "#FFFFFF",
@@ -381,11 +580,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 18, fontWeight: "900", color: "#1A1A1A" },
 
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 14,
-  },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
   miniCard: {
     flexGrow: 1,
     flexBasis: 220,
@@ -395,7 +590,12 @@ const styles = StyleSheet.create({
   },
   miniName: { fontSize: 14, fontWeight: "900", color: "#1A1A1A" },
   miniEmail: { marginTop: 4, fontSize: 12, color: "#6A6A6A" },
-  miniFooter: { marginTop: 10, fontSize: 12, color: "#7A7A7A", fontWeight: "700" },
+  miniFooter: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "#7A7A7A",
+    fontWeight: "700",
+  },
 
   outlineBtn: {
     marginTop: 14,
@@ -427,7 +627,12 @@ const styles = StyleSheet.create({
   },
   personName: { fontSize: 14, fontWeight: "900", color: "#1A1A1A" },
   personMeta: { marginTop: 4, fontSize: 12, color: "#6A6A6A" },
-  restrictions: { marginTop: 4, fontSize: 12, color: "#7A7A7A", fontWeight: "700" },
+  restrictions: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#7A7A7A",
+    fontWeight: "700",
+  },
 
   pickerWrap: {
     width: 240,
@@ -438,4 +643,48 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   picker: { height: 44, width: "100%" },
+
+  // ---------- Modal Styles ----------
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "900", marginBottom: 10 },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: "#F3F3F3",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  modalPrimaryBtn: {
+    marginTop: 16,
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  modalPrimaryText: { color: "#fff", fontWeight: "900" },
+  modalCancel: {
+    marginTop: 12,
+    textAlign: "center",
+    fontWeight: "800",
+    color: "#6B7280",
+  },
 });
