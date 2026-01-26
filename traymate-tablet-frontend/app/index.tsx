@@ -221,8 +221,27 @@ export default function Login() {
 
       console.log("Login success:", data);
 
-      // 🔐 Later: store JWT/session here (SecureStore)
-      router.replace("/(tabs)");
+      // Later: store JWT/session here (SecureStore)
+      //router.replace("/(tabs)");
+      console.log("Login success:", data);
+
+      switch (data.role) {
+        case "ROLE_ADMIN":
+          router.replace("/admin");
+          break;
+
+        // case "ROLE_CAREGIVER":
+        //   router.replace("/caregiver");
+        //   break;
+
+        // case "ROLE_KITCHEN":
+        //   router.replace("/kitchen");
+        //   break;
+
+        default:
+          setError("Unknown role");
+      }
+
     } catch (err: any) {
       setError(err.message);
     } finally {
