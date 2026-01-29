@@ -8,7 +8,9 @@ import {
   ScrollView, 
   SafeAreaView,
   KeyboardAvoidingView, 
-  Platform 
+  Platform,
+  Modal,
+  StyleSheet
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { globalStyles } from '../styles/styles';
@@ -21,8 +23,6 @@ const ResidentForm = ({ navigation }: any) => {
     lastName: '',
     dob: '', 
     gender: '',
-    residentId: '', 
-    email: '',      
     phone: '',      
     emergencyContact: '',
     emergencyPhone: '',
@@ -35,6 +35,7 @@ const ResidentForm = ({ navigation }: any) => {
 
   const [errors, setErrors] = useState<string[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showGenderModal, setShowGenderModal] = useState(false); 
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const updateField = (field: string, value: string) => {
@@ -42,6 +43,11 @@ const ResidentForm = ({ navigation }: any) => {
     if (errors.includes(field)) {
       setErrors(prev => prev.filter(item => item !== field));
     }
+  };
+
+  const selectGender = (val: string) => {
+    updateField('gender', val);
+    setShowGenderModal(false);
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
@@ -60,21 +66,12 @@ const ResidentForm = ({ navigation }: any) => {
     ];
   };
 
-  const handleBackPress = () => {
-    Alert.alert("Are you sure?", "Entered information will be deleted", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Yes", onPress: () => navigation.goBack() }
-    ]);
-  };
-
   const handleSubmit = async () => {
-    // UPDATED VALIDATION: email is now required, residentId is NOT.
     const requiredFields = [
       { key: 'firstName', label: 'First Name' },
       { key: 'lastName', label: 'Last Name' },
       { key: 'dob', label: 'Date of Birth' },
       { key: 'gender', label: 'Gender' },
-      { key: 'email', label: 'Email' },
       { key: 'emergencyContact', label: 'Emergency Contact' },
       { key: 'emergencyPhone', label: 'Emergency Phone Number' },
       { key: 'doctor', label: 'Primary Care Doctor' },
@@ -92,23 +89,36 @@ const ResidentForm = ({ navigation }: any) => {
       return;
     }
 
-    const jsonToSend = JSON.stringify({
+    // Prepare data
+    const payload = {
         ...formData,
-        email: formData.email.toLowerCase().trim(),
-        // Adding trims to important strings
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim()
-    });
+    };
+
+    const jsonToSend = JSON.stringify(payload);
+
+    // --- NEW DEBUGGING LOGS ---
+    console.log("==== API DEBUG START ====");
+    console.log("URL:", 'https://traymate-auth.onrender.com/admin/residents');
+    console.log("PAYLOAD:", jsonToSend);
+    // --------------------------
 
     try {
       const response = await fetch('https://traymate-auth.onrender.com/admin/residents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: jsonToSend,
       });
 
-      console.log("Response Status:", response.status);
       const responseText = await response.text();
+      
+      console.log("HTTP STATUS:", response.status);
+      console.log("SERVER RESPONSE:", responseText);
+      console.log("==== API DEBUG END ====");
 
       if (response.ok) {
         Alert.alert("Success", "Resident Saved.");
@@ -117,8 +127,8 @@ const ResidentForm = ({ navigation }: any) => {
         Alert.alert("Server Error", `Status ${response.status}: ${responseText || "Unknown Error"}`);
       }
     } catch (error: any) {
-      console.error(error);
-      Alert.alert("Network Error", error?.message || "Check your connection.");
+      console.error("FETCH ERROR:", error);
+      Alert.alert("Network Error", error?.message || "Check connection.");
     } 
   };
 
@@ -134,7 +144,7 @@ const ResidentForm = ({ navigation }: any) => {
               <TextInput style={globalStyles.input} value={formData.firstName} onChangeText={(v) => updateField('firstName', v)} placeholder="John" />
             </View>
             <View style={[globalStyles.inputGroup, { flex: 1 }]}>
-              <Text style={globalStyles.label}>Middle Name</Text>
+              <Text style={globalStyles.label}>M.I.</Text>
               <TextInput style={globalStyles.input} value={formData.middleName} onChangeText={(v) => updateField('middleName', v)} placeholder="B." />
             </View>
             <View style={[globalStyles.inputGroup, { flex: 2 }]}>
@@ -159,22 +169,17 @@ const ResidentForm = ({ navigation }: any) => {
                 />
               )}
             </View>
+
             <View style={globalStyles.inputGroup}>      
               <Text style={getLabelStyle('gender')}>Gender*</Text>
-              <TextInput style={globalStyles.input} value={formData.gender} onChangeText={(v) => updateField('gender', v)} placeholder="Gender" />
-            </View>
-            <View style={globalStyles.inputGroup}>
-              <Text style={globalStyles.label}>Resident ID</Text>
-              <TextInput style={globalStyles.input} value={formData.residentId} onChangeText={(v) => updateField('residentId', v)} placeholder="Optional" />
+              <TouchableOpacity style={globalStyles.input} onPress={() => setShowGenderModal(true)}>
+                <Text style={{ marginTop: 5, color: formData.gender ? '#000' : '#C7C7CD' }}>{formData.gender || "Select..."}</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
           <View style={globalStyles.row}>
-            <View style={globalStyles.inputGroup}>
-              <Text style={getLabelStyle('email')}>Email*</Text>
-              <TextInput style={globalStyles.input} value={formData.email} onChangeText={(v) => updateField('email', v)} keyboardType="email-address" />
-            </View>
-            <View style={globalStyles.inputGroup}>
+            <View style={globalStyles.inputGroupFull}>
               <Text style={globalStyles.label}>Phone</Text>
               <TextInput style={globalStyles.input} value={formData.phone} onChangeText={(v) => updateField('phone', v)} keyboardType="phone-pad" />
             </View>
@@ -193,11 +198,11 @@ const ResidentForm = ({ navigation }: any) => {
 
           <View style={globalStyles.row}>
             <View style={globalStyles.inputGroup}>
-              <Text style={getLabelStyle('doctor')}>Primary Care Doctor*</Text>
+              <Text style={getLabelStyle('doctor')}>Doctor*</Text>
               <TextInput style={globalStyles.input} value={formData.doctor} onChangeText={(v) => updateField('doctor', v)} />
             </View>
             <View style={globalStyles.inputGroup}>
-              <Text style={getLabelStyle('doctorPhone')}>Doctor's Phone*</Text>
+              <Text style={getLabelStyle('doctorPhone')}>Doctor Phone*</Text>
               <TextInput style={globalStyles.input} value={formData.doctorPhone} onChangeText={(v) => updateField('doctorPhone', v)} />
             </View>
           </View>
@@ -220,16 +225,42 @@ const ResidentForm = ({ navigation }: any) => {
         </ScrollView>
 
         <View style={globalStyles.footer}>
-          <TouchableOpacity style={globalStyles.backButton} onPress={handleBackPress}>
+          <TouchableOpacity style={globalStyles.backButton} onPress={() => navigation.goBack()}>
             <Text style={globalStyles.backButtonText}>Back</Text>
           </TouchableOpacity>
           <TouchableOpacity style={globalStyles.submitButton} onPress={handleSubmit}>
             <Text style={globalStyles.submitButtonText}>Submit Resident</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal visible={showGenderModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select Gender</Text>
+              {['Male', 'Female', 'Other'].map((item) => (
+                <TouchableOpacity key={item} style={styles.option} onPress={() => selectGender(item)}>
+                  <Text style={styles.optionText}>{item}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowGenderModal(false)}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '80%', backgroundColor: 'white', borderRadius: 10, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  option: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  optionText: { fontSize: 16, textAlign: 'center' },
+  cancelButton: { marginTop: 10, paddingVertical: 10 },
+  cancelText: { color: 'red', textAlign: 'center', fontWeight: 'bold' }
+});
 
 export default ResidentForm;
