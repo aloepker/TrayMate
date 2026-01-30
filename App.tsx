@@ -16,6 +16,7 @@ import AddMealOptionsScreen from './src/screens/addMealOptionsScreen';
 import EditResidentListScreen from './src/screens/editResidentListScreen';
 import ResidentInfoEditScreen from './src/screens/residentInfoEditScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
+import SettingsScreen from './src/screens/SettingsScreens';
 
 const Stack = createStackNavigator();
 
@@ -24,7 +25,12 @@ export default function App() {
   return (
     <CartProvider>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="Home">
+        <Stack.Navigator 
+          initialRouteName="Home"
+          screenOptions={{
+            headerShown: false, // Hide default header for all screens
+          }}
+        >
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="AddResident" component={AddResidentScreen} />
           <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
@@ -34,6 +40,7 @@ export default function App() {
           <Stack.Screen name="EditResidentList" component={EditResidentListScreen} />
           <Stack.Screen name="ResidentInfoEdit" component={ResidentInfoEditScreen} />
           <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>
