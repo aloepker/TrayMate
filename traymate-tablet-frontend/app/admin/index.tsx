@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 
+import AddResidentModal from "../../components/AddResidentModal";
+
 import {
   Caregiver,
   Resident,
@@ -48,6 +50,10 @@ export default function AdminDashboard() {
   const [ksPassword, setKsPassword] = useState("");
   const [savingKitchen, setSavingKitchen] = useState(false);
 
+  // ---- Add Resident Modal State ----
+  const [showAddResident, setShowAddResident] = useState(false);
+  
+  // Fetch caregivers, residents, and kitchen staff when dashboard loads
   useEffect(() => {
     let cancelled = false;
 
@@ -77,12 +83,24 @@ export default function AdminDashboard() {
     };
   }, []);
 
+  // Re-fetch residents after adding or updating assignments
+  const refreshResidents = async () => {
+    try {
+      const rs = await getResidents();
+      setResidents(rs);
+    } catch (e: any) {
+      Alert.alert("Failed to refresh residents", e.message);
+    }
+  };
+
+  // Calculate dashboard statistics (total / assigned / unassigned)
   const stats = useMemo(() => {
     const total = residents.length;
     const assigned = residents.filter((r) => r.caregiverId).length;
     return { total, assigned, unassigned: total - assigned };
   }, [residents]);
 
+  // Track how many residents each caregiver has
   const caregiverPatientCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const c of caregivers) map[c.id] = 0;
@@ -92,6 +110,7 @@ export default function AdminDashboard() {
     return map;
   }, [caregivers, residents]);
 
+  // Assign or unassign a resident to a caregiver
   const onAssign = async (residentId: string, caregiverId: string) => {
     try {
       const updated = await assignResident(
@@ -278,7 +297,7 @@ export default function AdminDashboard() {
 
             <Pressable
               style={styles.outlineBtn}
-              onPress={() => console.log("Resident modal handled by teammate")}
+              onPress={() => setShowAddResident(true)}
             >
               <Text style={styles.outlineBtnText}>＋ Add Resident</Text>
             </Pressable>
@@ -309,6 +328,20 @@ export default function AdminDashboard() {
           </SectionCard>
         </ScrollView>
       )}
+
+      {/* -------------------- Add Resident Modal (NEW) -------------------- 
+        - Only visible when admin clicks "Add Resident"
+        - On success, refreshes resident list and closes modal
+      */}
+
+      <AddResidentModal
+        visible={showAddResident}
+        onClose={() => setShowAddResident(false)}
+        onSuccess={async () => {
+          await refreshResidents();
+          setShowAddResident(false);
+        }}
+      />
 
       {/* -------------------- Add Caregiver Modal -------------------- */}
       <Modal visible={showAddCaregiver} transparent animationType="fade">
