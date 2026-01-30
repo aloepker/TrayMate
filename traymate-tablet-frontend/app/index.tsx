@@ -239,7 +239,8 @@ export default function Login() {
         //   break;
 
         default:
-          setError("Unknown role");
+          router.replace("/(tabs)");
+          // setError("Unknown role");
       }
 
     } catch (err: any) {
