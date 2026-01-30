@@ -9,7 +9,6 @@
  * - Closing modal on success
  */
 
-
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -47,19 +46,21 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     medicalConditions: "",
     foodAllergies: "",
     medications: "",
-    room: "",
+    room: "", // <-- NEW (required)  room number 
   });
 
   // Tracks which required fields are missing
   const [errors, setErrors] = useState<string[]>([]);
   const [showGenderModal, setShowGenderModal] = useState(false);
 
+  // REQUIRED FIELDS (added room)
   const requiredKeys = useMemo(
     () => [
       "firstName",
       "lastName",
       "dob",
       "gender",
+      "room",
       "emergencyContact",
       "emergencyPhone",
       "doctor",
@@ -99,6 +100,25 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     onClose();
   };
 
+  const resetForm = () => {
+    setForm({
+      firstName: "",
+      middleName: "",
+      lastName: "",
+      dob: "",
+      gender: "",
+      phone: "",
+      room: "",
+      emergencyContact: "",
+      emergencyPhone: "",
+      doctor: "",
+      doctorPhone: "",
+      medicalConditions: "",
+      foodAllergies: "",
+      medications: "",
+    });
+  };
+
   const submit = async () => {
     // required field validation
     const missing = requiredKeys.filter((k) => !String((form as any)[k]).trim());
@@ -116,7 +136,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       return;
     }
 
-    // Optional: Validate it’s a real date (not 2026-99-99)
+    // Validate it’s a real date (not 2026-99-99)
     const [yyyy, mm, dd] = form.dob.split("-");
     const y = Number(yyyy),
       m = Number(mm),
@@ -137,7 +157,9 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       const payload = {
         ...form,
         firstName: form.firstName.trim(),
+        middleName: form.middleName.trim(),
         lastName: form.lastName.trim(),
+        room: form.room.trim(), // <-- send room
         // dob already in backend format YYYY-MM-DD
       };
 
@@ -157,24 +179,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       Alert.alert("Success", "Resident added.");
       await onSuccess();
 
-      // Clear fields after success
-      setForm({
-        firstName: "",
-        middleName: "",
-        lastName: "",
-        dob: "",
-        gender: "",
-        phone: "",
-        emergencyContact: "",
-        emergencyPhone: "",
-        doctor: "",
-        doctorPhone: "",
-        medicalConditions: "",
-        foodAllergies: "",
-        medications: "",
-        room: "",
-      });
-
+      resetForm();
       closeAndClear();
     } catch (e: any) {
       Alert.alert("Network Error", e?.message || "Request failed.");
@@ -249,6 +254,16 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                   </Pressable>
                 </View>
               </View>
+
+              {/* Room (NEW) */}
+              <Text style={labelStyle("room")}>Room*</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={form.room}
+                onChangeText={(v) => update("room", v)}
+                placeholder="e.g., 101A"
+                autoCapitalize="characters"
+              />
 
               {/* Phone */}
               <Text style={styles.modalLabel}>Phone</Text>
