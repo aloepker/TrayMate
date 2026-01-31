@@ -47,7 +47,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     medicalConditions: "",
     foodAllergies: "",
     medications: "",
-    room: "",
+    roomNumber: "",
   });
 
   // Tracks which required fields are missing
@@ -156,7 +156,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
         medicalConditions: "",
         foodAllergies: "",
         medications: "",
-        room: "",
+        roomNumber: "",
       });
 
       closeAndClear();
