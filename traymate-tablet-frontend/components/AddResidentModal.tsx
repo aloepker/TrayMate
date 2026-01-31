@@ -9,7 +9,6 @@
  * - Closing modal on success
  */
 
-
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,7 +36,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     firstName: "",
     middleName: "",
     lastName: "",
-    dob: "", // MM/DD/YYYY
+    dob: "", // YYYY-MM-DD (backend format)
     gender: "",
     phone: "",
     emergencyContact: "",
@@ -54,12 +53,14 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
   const [errors, setErrors] = useState<string[]>([]);
   const [showGenderModal, setShowGenderModal] = useState(false);
 
+  // REQUIRED FIELDS (added room)
   const requiredKeys = useMemo(
     () => [
       "firstName",
       "lastName",
       "dob",
       "gender",
+      "roomNumber",
       "emergencyContact",
       "emergencyPhone",
       "doctor",
@@ -74,23 +75,22 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     errors.includes(key) && { color: "#B91C1C" },
   ];
 
-
   const update = (key: keyof typeof form, value: string) => {
     setForm((p) => ({ ...p, [key]: value }));
     if (errors.includes(key)) setErrors((p) => p.filter((x) => x !== key));
   };
 
-   // Formats date input as MM/DD/YYYY while typing
+  // Formats date input as YYYY-MM-DD while typing
   const formatDob = (raw: string) => {
-    // keep digits only, max 8 digits (MMDDYYYY)
+    // keep digits only, max 8 digits (YYYYMMDD)
     const digits = raw.replace(/\D/g, "").slice(0, 8);
-    const mm = digits.slice(0, 2);
-    const dd = digits.slice(2, 4);
-    const yyyy = digits.slice(4, 8);
+    const yyyy = digits.slice(0, 4);
+    const mm = digits.slice(4, 6);
+    const dd = digits.slice(6, 8);
 
-    let out = mm;
-    if (dd.length) out += `/${dd}`;
-    if (yyyy.length) out += `/${yyyy}`;
+    let out = yyyy;
+    if (mm.length) out += `-${mm}`;
+    if (dd.length) out += `-${dd}`;
     return out;
   };
 
@@ -100,7 +100,27 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     onClose();
   };
 
+  const resetForm = () => {
+    setForm({
+      firstName: "",
+      middleName: "",
+      lastName: "",
+      dob: "",
+      gender: "",
+      phone: "",
+      roomNumber: "",
+      emergencyContact: "",
+      emergencyPhone: "",
+      doctor: "",
+      doctorPhone: "",
+      medicalConditions: "",
+      foodAllergies: "",
+      medications: "",
+    });
+  };
+
   const submit = async () => {
+    // required field validation
     const missing = requiredKeys.filter((k) => !String((form as any)[k]).trim());
     if (missing.length) {
       setErrors(missing);
@@ -108,11 +128,26 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       return;
     }
 
-    // Validate DOB format
-    const dobOk = /^\d{2}\/\d{2}\/\d{4}$/.test(form.dob);
+    // Validate DOB format (YYYY-MM-DD)
+    const dobOk = /^\d{4}-\d{2}-\d{2}$/.test(form.dob);
     if (!dobOk) {
       setErrors((p) => Array.from(new Set([...p, "dob"])));
-      Alert.alert("Invalid Date", "Date of Birth must be in MM/DD/YYYY format.");
+      Alert.alert("Invalid Date", "Date of Birth must be in YYYY-MM-DD format.");
+      return;
+    }
+
+    // Validate it’s a real date (not 2026-99-99)
+    const [yyyy, mm, dd] = form.dob.split("-");
+    const y = Number(yyyy),
+      m = Number(mm),
+      d = Number(dd);
+    const dt = new Date(`${form.dob}T00:00:00`);
+    const validRealDate =
+      dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
+
+    if (!validRealDate) {
+      setErrors((p) => Array.from(new Set([...p, "dob"])));
+      Alert.alert("Invalid Date", "Please enter a real date (YYYY-MM-DD).");
       return;
     }
 
@@ -122,7 +157,10 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       const payload = {
         ...form,
         firstName: form.firstName.trim(),
+        middleName: form.middleName.trim(),
         lastName: form.lastName.trim(),
+        room: form.roomNumber.trim(), // <-- send room
+        // dob already in backend format YYYY-MM-DD
       };
 
       const res = await fetch("https://traymate-auth.onrender.com/admin/residents", {
@@ -218,7 +256,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.dob}
                     onChangeText={(v) => update("dob", formatDob(v))}
-                    placeholder="MM/DD/YYYY"
+                    placeholder="YYYY-MM-DD"
                     keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
                     maxLength={10}
                   />
@@ -233,6 +271,16 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                   </Pressable>
                 </View>
               </View>
+
+              {/* Room (NEW) */}
+              <Text style={labelStyle("roomNumber")}>Room*</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={form.roomNumber}
+                onChangeText={(v) => update("roomNumber", v)}
+                placeholder="e.g., 101A"
+                autoCapitalize="characters"
+              />
 
               {/* Phone */}
               <Text style={styles.modalLabel}>Phone</Text>
