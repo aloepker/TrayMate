@@ -172,6 +172,8 @@
 //   },
 // });
 
+import { setAuth } from "../services/storage";
+
 import React, { useState } from "react";
 import {
   View,
@@ -192,7 +194,8 @@ export default function Login() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
 
-  const [email, setEmail] = useState("caregiver@traymate.com");
+  //const [email, setEmail] = useState("caregiver@traymate.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -219,11 +222,14 @@ export default function Login() {
         throw new Error(data.message || "Invalid email or password");
       }
 
-      console.log("Login success:", data);
-
       // Later: store JWT/session here (SecureStore)
       //router.replace("/(tabs)");
       console.log("Login success:", data);
+      // await SecureStore.setItemAsync("auth_token", data.token);
+      // await SecureStore.setItemAsync("user_role", data.role);
+      
+      await setAuth(data.token, data.role);
+
 
       switch (data.role) {
         case "ROLE_ADMIN":

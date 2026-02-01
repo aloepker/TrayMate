@@ -1,7 +1,27 @@
 // services/api.ts
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8080";
+import { setAuth, getAuthToken } from "@/services/storage";
+
+const BASE_URL = "https://traymate-auth.onrender.com";
+
+// async function getAuthHeaders() {
+//   const token = await SecureStore.getItemAsync("auth_token");
+
+//   return {
+//     "Content-Type": "application/json",
+//     Accept: "application/json",
+//     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+//   };
+// }
+async function getAuthHeaders() {
+  const token = await getAuthToken();
+
+  return {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 /**
  * Generic request helper:
@@ -9,11 +29,14 @@ const API_BASE_URL =
  * - Parses JSON safely
  * - Throws human-readable errors
  */
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const authHeaders = await getAuthHeaders();
+
+  const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...authHeaders,
       ...(options.headers || {}),
     },
   });
@@ -54,6 +77,7 @@ export type Resident = {
 
 /* --------------------------- Caregivers -------------------------- */
 // Adjust routes if your backend uses /api/caregivers etc.
+
 export function getCaregivers() {
   return request<Caregiver[]>("/caregivers");
 }
@@ -63,9 +87,12 @@ export function createCaregiver(payload: {
   email: string;
   password: string;
 }) {
-  return request<Caregiver>("/caregivers", {
+  return request("/auth/register", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      role: "ROLE_CAREGIVER",
+    }),
   });
 }
 
@@ -79,11 +106,15 @@ export function createKitchenStaff(payload: {
   email: string;
   password: string;
 }) {
-  return request<KitchenStaff>("/kitchen-staff", {
+  return request("/auth/register", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      role: "ROLE_KITCHEN",
+    }),
   });
 }
+
 
 /* ---------------------------- Residents -------------------------- */
 export function getResidents() {
