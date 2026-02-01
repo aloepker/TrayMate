@@ -8,6 +8,7 @@
  * - Submitting resident data to backend
  * - Closing modal on success
  */
+import { getAuthToken } from "@/services/storage"; //to get tokens
 
 import React, { useMemo, useState } from "react";
 import {
@@ -163,11 +164,24 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
         // dob already in backend format YYYY-MM-DD
       };
 
+      // const res = await fetch("https://traymate-auth.onrender.com/admin/residents", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json", Accept: "application/json" },
+      //   body: JSON.stringify(payload),
+      // });
+
+      const token = await getAuthToken();
+
       const res = await fetch("https://traymate-auth.onrender.com/admin/residents", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(payload),
       });
+
 
       const text = await res.text();
 
