@@ -90,7 +90,9 @@ export function createCaregiver(payload: {
   return request("/auth/register", {
     method: "POST",
     body: JSON.stringify({
-      ...payload,
+      fullName: payload.name, 
+      email: payload.email,
+      password: payload.password,
       role: "ROLE_CAREGIVER",
     }),
   });
@@ -109,7 +111,9 @@ export function createKitchenStaff(payload: {
   return request("/auth/register", {
     method: "POST",
     body: JSON.stringify({
-      ...payload,
+      fullName: payload.name, 
+      email: payload.email,
+      password: payload.password,
       role: "ROLE_KITCHEN",
     }),
   });
