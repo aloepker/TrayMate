@@ -38,6 +38,7 @@ public class SecurityConfig {
 
                 // admin-only
                 .requestMatchers("/auth/register").hasAuthority("ROLE_ADMIN")
+                .requestMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
 
                 // everything else secured
                 .anyRequest().authenticated()

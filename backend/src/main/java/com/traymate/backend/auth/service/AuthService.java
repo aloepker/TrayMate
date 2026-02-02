@@ -69,7 +69,10 @@ public class AuthService {
 
         //generate a JWT token after successful authentication and return the tokens
         String token = jwtService.generateToken(new HashMap<>(), user.getEmail());
-        return AuthResponse.builder().token(token).build();
+        return AuthResponse.builder()
+                .token(token)
+                .role(user.getRole())   
+                .build();
     }
 
 }
