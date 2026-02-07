@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -196,11 +197,16 @@ export default function AdminDashboard() {
           </View>
         </View>
 
-        <Pressable style={styles.logoutBtn} onPress={() => console.log("Logout")}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
-      </View>
+    <Pressable    
+       style={styles.logoutBtn} 
+       onPress={() => {
+         router.replace("/"); 
+         }} 
+     > 
+         <Text style={styles.logoutText}>Logout</Text>        
+    </Pressable> 
 
+    </View>
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator />
@@ -535,15 +541,33 @@ const styles = StyleSheet.create({
   brandTitle: { fontSize: 18, fontWeight: "900", color: "#1C1C1C" },
   brandSub: { fontSize: 12, color: "#6F6F6F", marginTop: 1 },
 
+
   logoutBtn: {
-    borderWidth: 1,
-    borderColor: "#A7A07F",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  logoutText: { fontWeight: "800", color: "#3C3C3C" },
+  height: 44,               //consistent button height
+  minWidth: 110,            //keeps shape nice
+  borderWidth: 1,
+  borderColor: "#A7A07F",
+  backgroundColor: "#FFFFFF",
+  paddingHorizontal: 18,
+  paddingVertical: 0,       //remove vertical padding
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+  alignSelf: "center",      
+},
+
+logoutText: {
+  fontWeight: "800",
+  color: "#3C3C3C",
+  fontSize: 14,
+  lineHeight: 14,           //match font size to stop vertical drift
+  textAlign: "center",
+
+  
+  includeFontPadding: false,
+  textAlignVertical: "center",
+},
+
 
   loadingWrap: { padding: 24 },
   loadingText: {
