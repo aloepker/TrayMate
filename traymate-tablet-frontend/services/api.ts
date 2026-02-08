@@ -214,7 +214,7 @@ export function createKitchenStaff(payload: {
       fullName: payload.name,
       email: payload.email,
       password: payload.password,
-      role: "ROLE_KITCHEN",
+      role: "ROLE_KITCHEN_STAFF",
     }),
   });
 }
