@@ -61,7 +61,7 @@ export default function AdminDashboard() {
     (async () => {
       try {
         setLoading(true);
-        const [cg, rs, ks] = await Promise.all([
+        const [cg, rs, ks] = await Promise.all([ 
           getCaregivers(),
           getResidents(),
           getKitchenStaff(),
@@ -93,6 +93,25 @@ export default function AdminDashboard() {
       Alert.alert("Failed to refresh residents", e.message);
     }
   };
+
+  const refreshCaregivers = async () => {
+  try {
+    const cg = await getCaregivers();
+    setCaregivers(cg);
+  } catch (e: any) {
+    Alert.alert("Failed to refresh caregivers", e.message);
+  }
+};
+
+const refreshKitchen = async () => {
+  try {
+    const ks = await getKitchenStaff();
+    setKitchenStaff(ks);
+  } catch (e: any) {
+    Alert.alert("Failed to refresh kitchen staff", e.message);
+  }
+};
+
 
   // Calculate dashboard statistics (total / assigned / unassigned)
   const stats = useMemo(() => {
@@ -142,7 +161,8 @@ export default function AdminDashboard() {
         password: cgPassword,
       });
 
-      setCaregivers((prev) => [created, ...prev]);
+     // setCaregivers((prev) => [created, ...prev]);
+     await refreshCaregivers();
 
       // Clear sensitive fields + close
       setCgName("");
@@ -171,7 +191,8 @@ export default function AdminDashboard() {
         password: ksPassword,
       });
 
-      setKitchenStaff((prev) => [created, ...prev]);
+      //setKitchenStaff((prev) => [created, ...prev]);
+      await refreshKitchen();
 
       // Clear sensitive fields + close
       setKsName("");
@@ -247,14 +268,18 @@ export default function AdminDashboard() {
           {/* Caregivers */}
           <SectionCard title="Available Caregivers">
             <View style={styles.grid}>
-              {caregivers.map((c) => (
+
+
+              {caregivers.map((c, idx) => (
                 <MiniCard
-                  key={c.id}
-                  name={c.name}
-                  email={c.email}
-                  footer={`${caregiverPatientCounts[c.id] ?? 0} patient(s)`}
-                />
-              ))}
+                   key={c.id || c.email || `cg-${idx}`}
+                   name={c.name}
+                   email={c.email}
+                   footer={`${caregiverPatientCounts[c.id] ?? 0} patient(s)`}
+              />
+   ))}
+              
+
               {!caregivers.length ? (
                 <Text style={styles.emptyText}>No caregivers found.</Text>
               ) : null}
@@ -274,8 +299,9 @@ export default function AdminDashboard() {
               <Text style={styles.emptyText}>No residents found.</Text>
             ) : null}
 
-            {residents.map((r) => (
-              <View key={r.id} style={styles.assignRow}>
+            {residents.map((r, idx) => (
+             <View key={r.id || `res-${idx}`} style={styles.assignRow}>
+
                 <View style={{ flex: 1 }}>
                   <Text style={styles.personName}>{r.name}</Text>
                   <Text style={styles.personMeta}>{r.room}</Text>
@@ -293,9 +319,15 @@ export default function AdminDashboard() {
                     style={styles.picker}
                   >
                     <Picker.Item label="Select caregiver" value="none" />
-                    {caregivers.map((c) => (
-                      <Picker.Item key={c.id} label={c.name} value={c.id} />
-                    ))}
+
+                  {caregivers.map((c, idx) => (
+                    <Picker.Item
+                      key={c.id || c.email || `cg-opt-${idx}`}
+                      label={c.name}
+                     value={c.id}
+                    />
+  ))}
+
                   </Picker>
                 </View>
               </View>
@@ -312,14 +344,16 @@ export default function AdminDashboard() {
           {/* Kitchen Staff */}
           <SectionCard title="Kitchen Staff">
             <View style={styles.grid}>
-              {kitchenStaff.map((k) => (
-                <MiniCard
-                  key={k.id}
+
+              {kitchenStaff.map((k, idx) => (
+               <MiniCard
+                  key={k.id || k.email || `ks-${idx}`}
                   name={k.name}
                   email={k.email}
-                  footer={`Kitchen Staff`}
+                 footer="Kitchen Staff"
                 />
-              ))}
+     ))}
+
               {!kitchenStaff.length ? (
                 <Text style={styles.emptyText}>No kitchen staff found.</Text>
               ) : null}
