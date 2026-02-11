@@ -1,3 +1,4 @@
+// app/admin/index.tsx
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -14,6 +15,7 @@ import {
   TextInput,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import { Feather } from "@expo/vector-icons";
 
 import AddResidentModal from "../../components/AddResidentModal";
 
@@ -53,7 +55,15 @@ export default function AdminDashboard() {
 
   // ---- Add Resident Modal State ----
   const [showAddResident, setShowAddResident] = useState(false);
-  
+
+  // ---- Edit Resident Modal State ----
+  const [showEditResident, setShowEditResident] = useState(false);
+  const [editingResident, setEditingResident] = useState<Resident | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRoom, setEditRoom] = useState("");
+  const [editDietary, setEditDietary] = useState(""); // comma-separated
+  const [editMedicalNeeds, setEditMedicalNeeds] = useState(""); // UI-only for now
+
   // Fetch caregivers, residents, and kitchen staff when dashboard loads
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +71,7 @@ export default function AdminDashboard() {
     (async () => {
       try {
         setLoading(true);
-        const [cg, rs, ks] = await Promise.all([ 
+        const [cg, rs, ks] = await Promise.all([
           getCaregivers(),
           getResidents(),
           getKitchenStaff(),
@@ -95,23 +105,22 @@ export default function AdminDashboard() {
   };
 
   const refreshCaregivers = async () => {
-  try {
-    const cg = await getCaregivers();
-    setCaregivers(cg);
-  } catch (e: any) {
-    Alert.alert("Failed to refresh caregivers", e.message);
-  }
-};
+    try {
+      const cg = await getCaregivers();
+      setCaregivers(cg);
+    } catch (e: any) {
+      Alert.alert("Failed to refresh caregivers", e.message);
+    }
+  };
 
-const refreshKitchen = async () => {
-  try {
-    const ks = await getKitchenStaff();
-    setKitchenStaff(ks);
-  } catch (e: any) {
-    Alert.alert("Failed to refresh kitchen staff", e.message);
-  }
-};
-
+  const refreshKitchen = async () => {
+    try {
+      const ks = await getKitchenStaff();
+      setKitchenStaff(ks);
+    } catch (e: any) {
+      Alert.alert("Failed to refresh kitchen staff", e.message);
+    }
+  };
 
   // Calculate dashboard statistics (total / assigned / unassigned)
   const stats = useMemo(() => {
@@ -146,6 +155,101 @@ const refreshKitchen = async () => {
     }
   };
 
+  // ------------------ UI-only delete/edit handlers (backend not ready) ------------------
+
+  const onDeleteCaregiverUIOnly = (id: string) => {
+    Alert.alert(
+      "Delete caregiver",
+      "Backend delete endpoint isn’t ready yet. For now this will only remove it from the UI.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setCaregivers((prev) => prev.filter((c) => c.id !== id));
+          },
+        },
+      ]
+    );
+  };
+
+  const onDeleteKitchenUIOnly = (id: string) => {
+    Alert.alert(
+      "Delete kitchen staff",
+      "Backend delete endpoint isn’t ready yet. For now this will only remove it from the UI.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setKitchenStaff((prev) => prev.filter((k) => k.id !== id));
+          },
+        },
+      ]
+    );
+  };
+
+  const onDeleteResidentUIOnly = (id: string) => {
+    Alert.alert(
+      "Delete resident",
+      "Backend delete endpoint isn’t ready yet. For now this will only remove it from the UI.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setResidents((prev) => prev.filter((r) => r.id !== id));
+          },
+        },
+      ]
+    );
+  };
+
+  const openEditResident = (r: Resident) => {
+    setEditingResident(r);
+    setEditName(r.name ?? "");
+    setEditRoom(r.room ?? "");
+    setEditDietary((r.dietaryRestrictions ?? []).join(", "));
+    setEditMedicalNeeds(""); // UI-only for now
+    setShowEditResident(true);
+  };
+
+  const submitEditResidentUIOnly = async () => {
+    if (!editingResident) return;
+
+    const nextDietary = editDietary
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // UI-only update:
+    setResidents((prev) =>
+      prev.map((r) =>
+        r.id === editingResident.id
+          ? {
+              ...r,
+              name: editName.trim(),
+              room: editRoom.trim(),
+              dietaryRestrictions: nextDietary,
+            }
+          : r
+      )
+    );
+
+    Alert.alert(
+      "Updated (UI only)",
+      "Backend update endpoint isn’t ready yet — this update is only in the UI for now."
+    );
+
+    setShowEditResident(false);
+    setEditingResident(null);
+  };
+
+  // ------------------ Create caregiver/kitchen ------------------
+
   const submitCaregiver = async () => {
     if (!cgName.trim() || !cgEmail.trim() || !cgPassword) {
       Alert.alert("Missing info", "Please enter name, email, and password.");
@@ -155,16 +259,14 @@ const refreshKitchen = async () => {
     try {
       setSavingCaregiver(true);
 
-      const created = await createCaregiver({
+      await createCaregiver({
         name: cgName.trim(),
         email: cgEmail.trim(),
         password: cgPassword,
       });
 
-     // setCaregivers((prev) => [created, ...prev]);
-     await refreshCaregivers();
+      await refreshCaregivers();
 
-      // Clear sensitive fields + close
       setCgName("");
       setCgEmail("");
       setCgPassword("");
@@ -185,16 +287,14 @@ const refreshKitchen = async () => {
     try {
       setSavingKitchen(true);
 
-      const created = await createKitchenStaff({
+      await createKitchenStaff({
         name: ksName.trim(),
         email: ksEmail.trim(),
         password: ksPassword,
       });
 
-      //setKitchenStaff((prev) => [created, ...prev]);
       await refreshKitchen();
 
-      // Clear sensitive fields + close
       setKsName("");
       setKsEmail("");
       setKsPassword("");
@@ -218,16 +318,16 @@ const refreshKitchen = async () => {
           </View>
         </View>
 
-    <Pressable    
-       style={styles.logoutBtn} 
-       onPress={() => {
-         router.replace("/"); 
-         }} 
-     > 
-         <Text style={styles.logoutText}>Logout</Text>        
-    </Pressable> 
+        <Pressable
+          style={styles.logoutBtn}
+          onPress={() => {
+            router.replace("/");
+          }}
+        >
+          <Text style={styles.logoutText}>Logout</Text>
+        </Pressable>
+      </View>
 
-    </View>
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator />
@@ -268,18 +368,15 @@ const refreshKitchen = async () => {
           {/* Caregivers */}
           <SectionCard title="Available Caregivers">
             <View style={styles.grid}>
-
-
               {caregivers.map((c, idx) => (
                 <MiniCard
-                   key={c.id || c.email || `cg-${idx}`}
-                   name={c.name}
-                   email={c.email}
-                   footer={`${caregiverPatientCounts[c.id] ?? 0} patient(s)`}
-              />
-   ))}
-              
-
+                  key={c.id || c.email || `cg-${idx}`}
+                  name={c.name}
+                  email={c.email}
+                  footer={`${caregiverPatientCounts[c.id] ?? 0} patient(s)`}
+                  onDelete={() => onDeleteCaregiverUIOnly(c.id)}
+                />
+              ))}
               {!caregivers.length ? (
                 <Text style={styles.emptyText}>No caregivers found.</Text>
               ) : null}
@@ -289,7 +386,10 @@ const refreshKitchen = async () => {
               style={styles.outlineBtn}
               onPress={() => setShowAddCaregiver(true)}
             >
-              <Text style={styles.outlineBtnText}>＋ Add Caregiver</Text>
+              <View style={styles.btnRow}>
+                <Feather name="user-plus" size={16} color="#4A4A4A" />
+                <Text style={styles.outlineBtnText}>Add Caregiver</Text>
+              </View>
             </Pressable>
           </SectionCard>
 
@@ -300,35 +400,58 @@ const refreshKitchen = async () => {
             ) : null}
 
             {residents.map((r, idx) => (
-             <View key={r.id || `res-${idx}`} style={styles.assignRow}>
-
+              <View key={r.id || `res-${idx}`} style={styles.assignRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.personName}>{r.name}</Text>
-                  <Text style={styles.personMeta}>{r.room}</Text>
-                  <Text style={styles.restrictions}>
-                    {r.dietaryRestrictions?.length
-                      ? r.dietaryRestrictions.join(" • ")
-                      : "No restrictions"}
-                  </Text>
+                  <Text style={styles.personMeta}>Room {r.room}</Text>
+
+                  <View style={styles.chipRow}>
+                    {(r.dietaryRestrictions ?? []).length ? (
+                      r.dietaryRestrictions.map((tag, i) => (
+                        <View key={`${r.id}-tag-${i}`} style={styles.chip}>
+                          <Text style={styles.chipText}>{tag}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.restrictionsMuted}>No restrictions</Text>
+                    )}
+                  </View>
                 </View>
 
-                <View style={styles.pickerWrap}>
-                  <Picker
-                    selectedValue={r.caregiverId ?? "none"}
-                    onValueChange={(val) => onAssign(r.id, String(val))}
-                    style={styles.picker}
+                {/* Right side actions (match screenshot: dropdown + pencil + trash) */}
+                <View style={styles.rightActions}>
+                  <View style={styles.pickerWrap}>
+                    <Picker
+                      selectedValue={r.caregiverId ?? "none"}
+                      onValueChange={(val) => onAssign(r.id, String(val))}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Select caregiver" value="none" />
+                      {caregivers.map((c, cIdx) => (
+                        <Picker.Item
+                          key={c.id || c.email || `cg-opt-${cIdx}`}
+                          label={c.name}
+                          value={c.id}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={() => openEditResident(r)}
+                    hitSlop={10}
                   >
-                    <Picker.Item label="Select caregiver" value="none" />
+                    <Feather name="edit-2" size={18} color="#6D6B3B" />
+                  </Pressable>
 
-                  {caregivers.map((c, idx) => (
-                    <Picker.Item
-                      key={c.id || c.email || `cg-opt-${idx}`}
-                      label={c.name}
-                     value={c.id}
-                    />
-  ))}
-
-                  </Picker>
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={() => onDeleteResidentUIOnly(r.id)}
+                    hitSlop={10}
+                  >
+                    <Feather name="trash-2" size={18} color="#6D6B3B" />
+                  </Pressable>
                 </View>
               </View>
             ))}
@@ -337,23 +460,25 @@ const refreshKitchen = async () => {
               style={styles.outlineBtn}
               onPress={() => setShowAddResident(true)}
             >
-              <Text style={styles.outlineBtnText}>＋ Add Resident</Text>
+              <View style={styles.btnRow}>
+                <Feather name="user-plus" size={16} color="#4A4A4A" />
+                <Text style={styles.outlineBtnText}>Add Resident</Text>
+              </View>
             </Pressable>
           </SectionCard>
 
           {/* Kitchen Staff */}
           <SectionCard title="Kitchen Staff">
             <View style={styles.grid}>
-
               {kitchenStaff.map((k, idx) => (
-               <MiniCard
+                <MiniCard
                   key={k.id || k.email || `ks-${idx}`}
                   name={k.name}
                   email={k.email}
-                 footer="Kitchen Staff"
+                  footer={k.shift ? `Shift: ${k.shift}` : "Kitchen Staff"}
+                  onDelete={() => onDeleteKitchenUIOnly(k.id)}
                 />
-     ))}
-
+              ))}
               {!kitchenStaff.length ? (
                 <Text style={styles.emptyText}>No kitchen staff found.</Text>
               ) : null}
@@ -363,17 +488,16 @@ const refreshKitchen = async () => {
               style={styles.outlineBtn}
               onPress={() => setShowAddKitchen(true)}
             >
-              <Text style={styles.outlineBtnText}>＋ Add Kitchen Staff</Text>
+              <View style={styles.btnRow}>
+                <Feather name="user-plus" size={16} color="#4A4A4A" />
+                <Text style={styles.outlineBtnText}>Add Kitchen Staff</Text>
+              </View>
             </Pressable>
           </SectionCard>
         </ScrollView>
       )}
 
-      {/* -------------------- Add Resident Modal (NEW) -------------------- 
-        - Only visible when admin clicks "Add Resident"
-        - On success, refreshes resident list and closes modal
-      */}
-
+      {/* Add Resident Modal */}
       <AddResidentModal
         visible={showAddResident}
         onClose={() => setShowAddResident(false)}
@@ -383,7 +507,76 @@ const refreshKitchen = async () => {
         }}
       />
 
-      {/* -------------------- Add Caregiver Modal -------------------- */}
+      {/* Edit Resident Modal (matches screenshot: X top-right, Update button, Cancel under it) */}
+      <Modal visible={showEditResident} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxWidth: 520 }]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Edit Resident</Text>
+              <Pressable
+                onPress={() => {
+                  setShowEditResident(false);
+                  setEditingResident(null);
+                }}
+                hitSlop={10}
+              >
+                <Feather name="x" size={22} color="#111827" />
+              </Pressable>
+            </View>
+
+            <Text style={styles.modalLabel}>Name</Text>
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Enter resident name"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Room</Text>
+            <TextInput
+              value={editRoom}
+              onChangeText={setEditRoom}
+              placeholder="Enter room number"
+              style={styles.modalInput}
+              autoCapitalize="characters"
+            />
+
+            <Text style={styles.modalLabel}>Dietary Restrictions</Text>
+            <TextInput
+              value={editDietary}
+              onChangeText={setEditDietary}
+              placeholder="Enter dietary restrictions (comma-separated)"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Medical Needs</Text>
+            <TextInput
+              value={editMedicalNeeds}
+              onChangeText={setEditMedicalNeeds}
+              placeholder="Enter medical needs (comma-separated)"
+              style={styles.modalInput}
+            />
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitEditResidentUIOnly}
+            >
+              <Text style={styles.modalPrimaryText}>Update Resident</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setShowEditResident(false);
+                setEditingResident(null);
+              }}
+            >
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Caregiver Modal */}
       <Modal visible={showAddCaregiver} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -439,7 +632,7 @@ const refreshKitchen = async () => {
         </View>
       </Modal>
 
-      {/* ------------------ Add Kitchen Staff Modal ------------------ */}
+      {/* Add Kitchen Staff Modal */}
       <Modal visible={showAddKitchen} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -543,13 +736,21 @@ function MiniCard({
   name,
   email,
   footer,
+  onDelete,
 }: {
   name: string;
   email: string;
   footer: string;
+  onDelete?: () => void;
 }) {
   return (
     <View style={styles.miniCard}>
+      {onDelete ? (
+        <Pressable style={styles.cardTrash} onPress={onDelete} hitSlop={10}>
+          <Feather name="trash-2" size={16} color="#6D6B3B" />
+        </Pressable>
+      ) : null}
+
       <Text style={styles.miniName}>{name}</Text>
       <Text style={styles.miniEmail}>{email}</Text>
       <Text style={styles.miniFooter}>{footer}</Text>
@@ -575,33 +776,27 @@ const styles = StyleSheet.create({
   brandTitle: { fontSize: 18, fontWeight: "900", color: "#1C1C1C" },
   brandSub: { fontSize: 12, color: "#6F6F6F", marginTop: 1 },
 
-
   logoutBtn: {
-  height: 44,               //consistent button height
-  minWidth: 110,            //keeps shape nice
-  borderWidth: 1,
-  borderColor: "#A7A07F",
-  backgroundColor: "#FFFFFF",
-  paddingHorizontal: 18,
-  paddingVertical: 0,       //remove vertical padding
-  borderRadius: 12,
-  alignItems: "center",
-  justifyContent: "center",
-  alignSelf: "center",      
-},
-
-logoutText: {
-  fontWeight: "800",
-  color: "#3C3C3C",
-  fontSize: 14,
-  lineHeight: 14,           //match font size to stop vertical drift
-  textAlign: "center",
-
-  
-  includeFontPadding: false,
-  textAlignVertical: "center",
-},
-
+    height: 44,
+    minWidth: 110,
+    borderWidth: 1,
+    borderColor: "#A7A07F",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+  },
+  logoutText: {
+    fontWeight: "800",
+    color: "#3C3C3C",
+    fontSize: 14,
+    lineHeight: 14,
+    textAlign: "center",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
 
   loadingWrap: { padding: 24 },
   loadingText: {
@@ -672,12 +867,24 @@ logoutText: {
   sectionTitle: { fontSize: 18, fontWeight: "900", color: "#1A1A1A" },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
+
   miniCard: {
     flexGrow: 1,
     flexBasis: 220,
     backgroundColor: "#F8F8F8",
     borderRadius: 14,
     padding: 14,
+    position: "relative",
+  },
+  cardTrash: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   miniName: { fontSize: 14, fontWeight: "900", color: "#1A1A1A" },
   miniEmail: { marginTop: 4, fontSize: 12, color: "#6A6A6A" },
@@ -698,6 +905,7 @@ logoutText: {
     paddingVertical: 10,
     borderRadius: 10,
   },
+  btnRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   outlineBtnText: { fontWeight: "900", color: "#4A4A4A" },
 
   emptyText: {
@@ -718,15 +926,25 @@ logoutText: {
   },
   personName: { fontSize: 14, fontWeight: "900", color: "#1A1A1A" },
   personMeta: { marginTop: 4, fontSize: 12, color: "#6A6A6A" },
-  restrictions: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#7A7A7A",
-    fontWeight: "700",
+
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  chip: {
+    backgroundColor: "#F7E7B5",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipText: { fontSize: 12, fontWeight: "800", color: "#7A4B00" },
+  restrictionsMuted: { fontSize: 12, color: "#7A7A7A", fontWeight: "700" },
+
+  rightActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
 
   pickerWrap: {
-    width: 240,
+    width: 220,
     backgroundColor: "#FFFFFF",
     borderRadius: 10,
     borderWidth: 1,
@@ -734,6 +952,14 @@ logoutText: {
     overflow: "hidden",
   },
   picker: { height: 44, width: "100%" },
+
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // ---------- Modal Styles ----------
   modalBackdrop: {
@@ -749,6 +975,12 @@ logoutText: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 18,
+  },
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
   modalTitle: { fontSize: 18, fontWeight: "900", marginBottom: 10 },
   modalLabel: {
