@@ -1,4 +1,7 @@
-import React, { useState, useCallback } from "react";
+// KitchenMealPrepList.tsx
+// Full screen showing how many meals need to be prepared
+
+import React, { useState } from "react";
 import {
   FlatList,
   SafeAreaView,
@@ -12,93 +15,155 @@ import {
 import { globalStyles } from "../styles/styles";
 
 // ---------- Types ----------
-type Resident = {
+type MealPrepItem = {
   id: string;
-  firstName: string;
-  lastName: string;
-  dob: string;
-  foodAllergies: string;
-  roomNumber: string;
+  mealName: string;
+  mealPeriod: string;
+  quantityNeeded: number;
+  dietaryNotes?: string;
+  prepared?: boolean;
 };
 
-const MOCK_RESIDENTS: Resident[] = [
+// ---------- Practice Data (Mock DB Data) ----------
+const MOCK_MEAL_PREP: MealPrepItem[] = [
   {
     id: "1",
-    firstName: "Alice",
-    lastName: "Johnson",
-    dob: "1942-05-12",
-    foodAllergies: "Peanuts, Shellfish",
-    roomNumber: "204-A",
+    mealName: "Scrambled Eggs & Toast",
+    mealPeriod: "Breakfast",
+    quantityNeeded: 32,
+    dietaryNotes: "5 Gluten Free Toast",
   },
   {
     id: "2",
-    firstName: "Robert",
-    lastName: "Smith",
-    dob: "1938-11-20",
-    foodAllergies: "None",
-    roomNumber: "112-B",
+    mealName: "Oatmeal with Fruit",
+    mealPeriod: "Breakfast",
+    quantityNeeded: 21,
+    dietaryNotes: "4 Sugar Free",
+  },
+  {
+    id: "3",
+    mealName: "Turkey Sandwich",
+    mealPeriod: "Lunch",
+    quantityNeeded: 26,
+    dietaryNotes: "6 Low Sodium",
+  },
+  {
+    id: "4",
+    mealName: "Grilled Chicken Salad",
+    mealPeriod: "Lunch",
+    quantityNeeded: 18,
+    dietaryNotes: "3 Dairy Free Dressing",
+  },
+  {
+    id: "5",
+    mealName: "Vegetable Stir Fry",
+    mealPeriod: "Dinner",
+    quantityNeeded: 24,
+    dietaryNotes: "All Vegan",
+  },
+  {
+    id: "6",
+    mealName: "Beef Meatloaf",
+    mealPeriod: "Dinner",
+    quantityNeeded: 17,
+    dietaryNotes: "2 Pureed",
+  },
+  {
+    id: "7",
+    mealName: "Baked Salmon",
+    mealPeriod: "Dinner",
+    quantityNeeded: 14,
+    dietaryNotes: "Low Sodium",
+  },
+  {
+    id: "8",
+    mealName: "Mashed Potatoes",
+    mealPeriod: "Dinner",
+    quantityNeeded: 40,
+    dietaryNotes: "5 Dairy Free",
   },
 ];
 
-const ViewResidentList = ({ navigation }: any) => {
-  const [residents, setResidents] = useState<Resident[]>(MOCK_RESIDENTS);
+const KitchenMealPrepList = () => {
+  const [mealPrep, setMealPrep] = useState<MealPrepItem[]>(MOCK_MEAL_PREP);
 
-  const handleDelete = (id: string, name: string) => {
-    Alert.alert("Delete Resident", `Permanently remove ${name}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => {} },
-    ]);
+  const togglePrepared = (id: string) => {
+    setMealPrep((prev) =>
+      prev.map((meal) =>
+        meal.id === id ? { ...meal, prepared: !meal.prepared } : meal
+      )
+    );
   };
 
-  const renderResident = ({ item }: { item: Resident }) => (
-    <View style={styles.card}>
+  const confirmMarkPrepared = (id: string, name: string) => {
+    Alert.alert(
+      "Update Prep Status",
+      `Mark "${name}" as prepared?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: () => togglePrepared(id),
+        },
+      ]
+    );
+  };
+
+  const renderMeal = ({ item }: { item: MealPrepItem }) => (
+    <View
+      style={[
+        styles.card,
+        item.prepared && { backgroundColor: "#ECFDF5" },
+      ]}
+    >
       <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.firstName} {item.lastName}</Text>
+        <Text style={styles.cardTitle}>{item.mealName}</Text>
         <View style={styles.periodPill}>
-          <Text style={styles.periodPillText}>{item.roomNumber}</Text>
+          <Text style={styles.periodPillText}>{item.mealPeriod}</Text>
         </View>
       </View>
 
       <View style={styles.infoRow}>
-        <Text style={styles.infoValue}>DOB: {item.dob}</Text>
-        <Text style={[styles.infoValue, item.foodAllergies !== 'None' && { color: '#B91C1C', fontWeight: '700' }]}>
-          Allergies: {item.foodAllergies}
+        <Text style={styles.quantityText}>
+          Quantity Needed: {item.quantityNeeded}
         </Text>
+
+        {item.dietaryNotes && (
+          <Text style={styles.infoValue}>
+            Notes: {item.dietaryNotes}
+          </Text>
+        )}
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={[styles.actionButton, styles.assignBtn]}>
-          <Text style={styles.actionBtnText}>Assign Device</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionButton, styles.editBtn]}>
-          <Text style={styles.actionBtnText}>Edit Info</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.deleteBtn]}
-          onPress={() => handleDelete(item.id, item.firstName)}
-        >
-          <Text style={styles.actionBtnText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={[
+          styles.completeBtn,
+          item.prepared && { backgroundColor: "#6B7280" },
+        ]}
+        onPress={() => confirmMarkPrepared(item.id, item.mealName)}
+      >
+        <Text style={styles.actionBtnText}>
+          {item.prepared ? "Prepared ✓" : "Mark as Prepared"}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
   return (
     <SafeAreaView style={[globalStyles.container, styles.safeArea]}>
       <StatusBar barStyle="dark-content" />
-      
+
       <View style={styles.header}>
-        <Text style={styles.title}>Resident Directory</Text>
-        <Text style={styles.subtitle}>Manage resident profiles and device assignments.</Text>
+        <Text style={styles.title}>Kitchen Prep Board</Text>
+        <Text style={styles.subtitle}>
+          Meal quantities required for upcoming service periods.
+        </Text>
       </View>
 
       <FlatList
-        data={residents}
+        data={mealPrep}
         keyExtractor={(item) => item.id}
-        renderItem={renderResident}
+        renderItem={renderMeal}
         contentContainerStyle={styles.listContent}
         style={styles.fullWidthList}
       />
@@ -106,11 +171,12 @@ const ViewResidentList = ({ navigation }: any) => {
   );
 };
 
+// ---------- Styles ----------
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    width: '100%',
-    alignItems: 'stretch', // Crucial for tablet landscape
+    width: "100%",
+    alignItems: "stretch",
   },
   header: {
     paddingTop: 12,
@@ -128,7 +194,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   fullWidthList: {
-    width: '100%',
+    width: "100%",
   },
   listContent: {
     paddingBottom: 24,
@@ -139,7 +205,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     backgroundColor: "#FFFFFF",
-    // MealOptions Shadow Style
     shadowColor: "#1F2937",
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -160,7 +225,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: "#E5E7EB", // Matching the meal period pill
+    backgroundColor: "#E5E7EB",
   },
   periodPillText: {
     fontSize: 12,
@@ -168,39 +233,24 @@ const styles = StyleSheet.create({
     color: "#374151",
   },
   infoRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    gap: 20,
+    marginTop: 10,
+    gap: 6,
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
   },
   infoValue: {
     fontSize: 14,
     color: "#4B5563",
   },
-  buttonRow: {
-    flexDirection: "row",
-    marginTop: 16,
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
+  completeBtn: {
+    marginTop: 14,
+    backgroundColor: "#10b981",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
-    justifyContent: "center",
-  },
-  // Color Palette Updates
-  assignBtn: {
-    backgroundColor: "#1F2937", // Dark Slate (Matches TabActive)
-  },
-  editBtn: {
-    backgroundColor: "#10b981", // Emerald Green (Matches Add to Cart)
-    shadowColor: "#10b981",
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  deleteBtn: {
-    backgroundColor: "#E7DED2", // Tan (Matches TabInactive)
   },
   actionBtnText: {
     fontSize: 14,
@@ -209,37 +259,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ViewResidentList;
-
-
-
-
-
-
-
-
-
-
-/*import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-//this is the call for the global styling file
-import { globalStyles } from '../styles/styles';
-
-// The 'navigation' prop is automatically passed by the Stack Navigator in App.tsx
-const EditResidentList = ({ navigation }: any) => {
-  return (
-    <View style={globalStyles.container}>
-      <Text style={globalStyles.title}>Back</Text>
-      
-      <TouchableOpacity 
-        style={globalStyles.button}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={globalStyles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
-
-
-export default EditResidentList;*/
+export default KitchenMealPrepList;
