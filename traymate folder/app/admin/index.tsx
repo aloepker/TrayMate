@@ -140,6 +140,7 @@ export default function AdminDashboard() {
   }, [caregivers, residents]);
 
   // Assign or unassign a resident to a caregiver
+  /*
   const onAssign = async (residentId: string, caregiverId: string) => {
     try {
       const updated = await assignResident(
@@ -154,6 +155,25 @@ export default function AdminDashboard() {
       Alert.alert("Assignment failed", e.message);
     }
   };
+  */
+const onAssign = async (residentId: string, caregiverId: string) => {
+  const nextCaregiverId = caregiverId === "none" ? null : caregiverId;
+
+  try {
+    await assignResident(residentId, nextCaregiverId);
+
+    // ✅ only update the caregiverId, keep name/room/dietaryRestrictions intact
+    setResidents((prev) =>
+      prev.map((r) =>
+        r.id === residentId ? { ...r, caregiverId: nextCaregiverId } : r
+      )
+    );
+  } catch (e: any) {
+    Alert.alert("Assignment failed", e.message);
+  }
+};
+
+
 
   // ------------------ UI-only delete/edit handlers (backend not ready) ------------------
 
@@ -418,7 +438,7 @@ export default function AdminDashboard() {
                   </View>
                 </View>
 
-                {/* Right side actions (match screenshot: dropdown + pencil + trash) */}
+                {/* Right side actions ( dropdown + pencil + trash) */}
                 <View style={styles.rightActions}>
                   <View style={styles.pickerWrap}>
                     <Picker

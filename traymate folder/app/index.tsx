@@ -172,6 +172,7 @@
 //   },
 // });
 
+
 import { setAuth } from "../services/storage";
 
 import React, { useState } from "react";
@@ -312,10 +313,6 @@ export default function Login() {
           </LinearGradient>
         </Pressable>
 
-
-
-
-
       </View>
     </View>
   );
@@ -419,13 +416,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  /* 
-
-  forgot: {
-    marginTop: 18,
-    fontSize: 14,
-    color: "#717644",
-    fontWeight: "600",
-  },
-  */
 });
