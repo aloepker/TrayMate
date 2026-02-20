@@ -867,7 +867,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 10, 
+    cursor: "pointer", 
   },
+
+
   miniName: { fontSize: 14, fontWeight: "900", color: "#1A1A1A" },
   miniEmail: { marginTop: 4, fontSize: 12, color: "#6A6A6A" },
   miniFooter: {
