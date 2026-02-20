@@ -389,3 +389,27 @@ const styles = StyleSheet.create({
 });
 
 export default UpcomingMealsScreen;
+
+// import { useEffect, useState } from "react";
+// import { Platform } from "react-native";
+
+// const API_BASE =
+//   Platform.OS === "android"
+//     ? "http://10.0.2.2:8000"
+//     : "http://localhost:8000";
+
+// const [meals, setMeals] = useState([]);
+
+// useEffect(() => {
+//   const loadMeals = async () => {
+//     try {
+//       const res = await fetch(`${API_BASE}/meals`);
+//       const data = await res.json();
+//       setMeals(data);
+//     } catch (e) {
+//       console.log("Failed to load meals:", e);
+//     }
+//   };
+
+//   loadMeals();
+// }, []);
