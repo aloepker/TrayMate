@@ -276,3 +276,22 @@ export async function assignResident(
 
   return mapResident(updated);
 }
+
+/**
+ * Delete entity (resident or user)
+ *
+ * Backend endpoint:
+ * DELETE /admin/delete/{type}/{id}
+ *
+ * type:
+ *   - "resident" for residents
+ *   - "user" for caregiver + kitchen staff
+ */
+export async function deleteEntity(
+  type: "resident" | "user",
+  id: string
+): Promise<void> {
+  await request<void>(`/admin/delete/${type}/${id}`, {
+    method: "DELETE",
+  });
+}

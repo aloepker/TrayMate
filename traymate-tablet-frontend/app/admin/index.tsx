@@ -29,6 +29,7 @@ import {
   assignResident,
   createCaregiver,
   createKitchenStaff,
+  deleteEntity,
 } from "../../services/api";
 
 const grandmaLogo = require("../../assets/images/grandma.png");
@@ -140,29 +141,13 @@ export default function AdminDashboard() {
   }, [caregivers, residents]);
 
   // Assign or unassign a resident to a caregiver
-  /*
-  const onAssign = async (residentId: string, caregiverId: string) => {
-    try {
-      const updated = await assignResident(
-        residentId,
-        caregiverId === "none" ? null : caregiverId
-      );
-
-      setResidents((prev) =>
-        prev.map((r) => (r.id === updated.id ? updated : r))
-      );
-    } catch (e: any) {
-      Alert.alert("Assignment failed", e.message);
-    }
-  };
-  */
 const onAssign = async (residentId: string, caregiverId: string) => {
   const nextCaregiverId = caregiverId === "none" ? null : caregiverId;
 
   try {
     await assignResident(residentId, nextCaregiverId);
 
-    // ✅ only update the caregiverId, keep name/room/dietaryRestrictions intact
+    // only update the caregiverId, keep name/room/dietaryRestrictions intact
     setResidents((prev) =>
       prev.map((r) =>
         r.id === residentId ? { ...r, caregiverId: nextCaregiverId } : r
@@ -175,58 +160,35 @@ const onAssign = async (residentId: string, caregiverId: string) => {
 
 
 
-  // ------------------ UI-only delete/edit handlers (backend not ready) ------------------
+  // ------------------ UI-only delete/edit handlers (backend ready) ------------------
 
-  const onDeleteCaregiverUIOnly = (id: string) => {
-    Alert.alert(
-      "Delete caregiver",
-      "Backend delete endpoint isn’t ready yet. For now this will only remove it from the UI.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setCaregivers((prev) => prev.filter((c) => c.id !== id));
-          },
-        },
-      ]
-    );
-  };
+const onDeleteResident = async (id: string) => {
+  try {
+    await deleteEntity("resident", id);
+    setResidents((prev) => prev.filter((r) => r.id !== id));
+  } catch (e: any) {
+    Alert.alert("Delete failed", e.message);
+  }
+};
 
-  const onDeleteKitchenUIOnly = (id: string) => {
-    Alert.alert(
-      "Delete kitchen staff",
-      "Backend delete endpoint isn’t ready yet. For now this will only remove it from the UI.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setKitchenStaff((prev) => prev.filter((k) => k.id !== id));
-          },
-        },
-      ]
-    );
-  };
+const onDeleteCaregiver = async (id: string) => {
+  try {
+    await deleteEntity("user", id);
+    setCaregivers((prev) => prev.filter((c) => c.id !== id));
+  } catch (e: any) {
+    Alert.alert("Delete failed", e.message);
+  }
+};
 
-  const onDeleteResidentUIOnly = (id: string) => {
-    Alert.alert(
-      "Delete resident",
-      "Backend delete endpoint isn’t ready yet. For now this will only remove it from the UI.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setResidents((prev) => prev.filter((r) => r.id !== id));
-          },
-        },
-      ]
-    );
-  };
+const onDeleteKitchen = async (id: string) => {
+  try {
+    await deleteEntity("user", id);
+    setKitchenStaff((prev) => prev.filter((k) => k.id !== id));
+  } catch (e: any) {
+    Alert.alert("Delete failed", e.message);
+  }
+};
+
 
   const openEditResident = (r: Resident) => {
     setEditingResident(r);
@@ -394,7 +356,7 @@ const onAssign = async (residentId: string, caregiverId: string) => {
                   name={c.name}
                   email={c.email}
                   footer={`${caregiverPatientCounts[c.id] ?? 0} patient(s)`}
-                  onDelete={() => onDeleteCaregiverUIOnly(c.id)}
+                  onDelete={() => onDeleteCaregiver(c.id)}
                 />
               ))}
               {!caregivers.length ? (
@@ -467,7 +429,7 @@ const onAssign = async (residentId: string, caregiverId: string) => {
 
                   <Pressable
                     style={styles.iconBtn}
-                    onPress={() => onDeleteResidentUIOnly(r.id)}
+                    onPress={() => onDeleteResident(r.id)}
                     hitSlop={10}
                   >
                     <Feather name="trash-2" size={18} color="#6D6B3B" />
@@ -496,7 +458,7 @@ const onAssign = async (residentId: string, caregiverId: string) => {
                   name={k.name}
                   email={k.email}
                   footer={k.shift ? `Shift: ${k.shift}` : "Kitchen Staff"}
-                  onDelete={() => onDeleteKitchenUIOnly(k.id)}
+                  onDelete={() => onDeleteKitchen(k.id)}
                 />
               ))}
               {!kitchenStaff.length ? (
