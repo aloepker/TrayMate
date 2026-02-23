@@ -25,8 +25,8 @@ const HomeScreen = ({ navigation }: any) => {
 
       {/* Second Row: 4 Buttons */}
       <View style={globalStyles.buttonRow}>
-        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('AddMealOptions')}>
-          <Text style={globalStyles.buttonText}>Add Meals</Text>
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('kitchenViewMealHistory')}>
+          <Text style={globalStyles.buttonText}>View Meal History</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('EditResidentList')}>

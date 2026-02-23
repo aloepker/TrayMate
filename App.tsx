@@ -12,7 +12,7 @@ import AddResidentScreen from './src/screens/addNewResidentScreen';
 import BrowseMealOptionsScreen from './src/screens/browseMealOptionsScreen';
 import CartScreen from './src/screens/CartScreen';
 import LoginScreen from './src/screens/loginScreen';
-import AddMealOptionsScreen from './src/screens/addMealOptionsScreen';
+import kitchenViewMealHistoryScreen from './src/screens/kitchenViewMealHistoryScreen';
 import EditResidentListScreen from './src/screens/editResidentListScreen';
 import ResidentInfoEditScreen from './src/screens/residentInfoEditScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
@@ -37,7 +37,7 @@ export default function App() {
           <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
           <Stack.Screen name="Cart" component={CartScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="AddMealOptions" component={AddMealOptionsScreen} />
+          <Stack.Screen name="kitchenViewMealHistory" component={kitchenViewMealHistoryScreen} />
           <Stack.Screen name="EditResidentList" component={EditResidentListScreen} />
           <Stack.Screen name="ResidentInfoEdit" component={ResidentInfoEditScreen} />
           <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
