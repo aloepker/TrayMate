@@ -12,6 +12,78 @@
  */
 
 // ==================== TYPES ====================
+import { Platform } from "react-native";
+
+const API_BASE_URL =
+  Platform.OS === "android" ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000";
+
+function splitCommaList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseNutrition(nutri_info: string, nutri_amounts: string): Nutrition {
+  // Example:
+  // nutri_info = "Calories, Total Fat, Cholesterol, Carbohydrate, Fiber, Sugar, Sodium, Protein"
+  // nutri_amounts = "372, 11g, 64mg, 61g, 3.1g, 17g, 240mg, 10g"
+
+  const keys = splitCommaList(nutri_info).map((k) => k.toLowerCase());
+  const vals = splitCommaList(nutri_amounts);
+
+  const map = new Map<string, string>();
+  keys.forEach((k, i) => map.set(k, vals[i] ?? ""));
+
+  // build Nutrition with safe defaults
+  return {
+    calories: Number(map.get("calories") ?? 0) || 0,
+    totalFat: map.get("total fat") ?? "",
+    saturatedFat: map.get("saturated fat") || undefined,
+    transFat: map.get("trans fat") || undefined,
+    cholesterol: map.get("cholesterol") ?? "",
+    carbohydrate: map.get("carbohydrate") ?? map.get("carbogydrate") ?? "",
+    fiber: map.get("fiber") ?? "",
+    sugar: map.get("sugar") ?? "",
+    sodium: map.get("sodium") ?? "",
+    protein: map.get("protein") ?? "",
+  };
+}
+
+function normalizeMealPeriod(value: string): Meal["mealPeriod"] {
+  const v = value.trim();
+  if (v.includes("Breakfast")) return "Breakfast";
+  if (v.includes("Lunch")) return "Lunch";
+  if (v.includes("Dinner")) return "Dinner";
+  return "All Day";
+}
+
+// Converts one API row into your app's Meal interface
+function apiMealToMeal(api: any): Meal {
+  return {
+    id: api.id,
+    name: api.name,
+    ingredients: splitCommaList(api.ingredients),
+    nutrition: parseNutrition(api.nutri_info ?? "", api.nutri_amounts ?? ""),
+    description: api.description ?? "",
+    imageUrl: api.image_url ?? "",
+    mealType: api.mealtype ?? "",
+    mealPeriod: normalizeMealPeriod(api.mealPeriod ?? "All Day"),
+    timeRange: api.time_range ?? "",
+    allergenInfo: splitCommaList(api.allergen_info),
+    tags: splitCommaList(api.tags),
+    isAvailable: Boolean(api.isAvailable),
+    isSeasonal: Boolean(api.isSeasonal),
+  };
+}
+
+async function fetchMealsFromApi(): Promise<Meal[]> {
+  const res = await fetch(`${API_BASE_URL}/meals`);
+  if (!res.ok) throw new Error(`Failed to fetch meals: HTTP ${res.status}`);
+  const data = await res.json();
+  return data.map(apiMealToMeal);
+}
 
 export interface Nutrition {
   calories: number;
@@ -109,14 +181,14 @@ export interface Recommendation {
 //     name: "Banana-Chocolate Pancakes",
 //     ingredients: ["Flour", "Sugar", "Baking Powder", "Cinnamon", "Milk", "Banana", "Egg", "Vanilla", "Chocolate Chips"],
 //     nutrition: {
-//       calories: 372,
-//       totalFat: "11g",
-//       cholesterol: "64mg",
-//       carbohydrate: "61g",
-//       fiber: "3.1g",
-//       sugar: "17g",
-//       sodium: "240mg",
-//       protein: "10g"
+      // calories: 372,
+      // totalFat: "11g",
+      // cholesterol: "64mg",
+      // carbohydrate: "61g",
+      // fiber: "3.1g",
+      // sugar: "17g",
+      // sodium: "240mg",
+      // protein: "10g"
 //     },
 //     description: "Pancakes topped with fresh sliced bananas and chocolate chips, served with scrambled eggs and your choice of bacon or sausage.",
 //     imageUrl: "",
@@ -133,16 +205,16 @@ export interface Recommendation {
 //     name: "Broccoli-Cheddar Quiche",
 //     ingredients: ["AP Flour", "Sugar", "Salt", "Eggs", "White Vinegar", "Water", "Butter", "Garlic", "Heavy Cream", "Cheese", "Pepper", "Broccoli"],
 //     nutrition: {
-//       calories: 746,
-//       totalFat: "58g",
-//       saturatedFat: "34g",
-//       transFat: "1.1g",
-//       cholesterol: "411mg",
-//       carbohydrate: "37g",
-//       fiber: "1.2g",
-//       sugar: "3.2g",
-//       sodium: "680mg",
-//       protein: "22g"
+      // calories: 746,
+      // totalFat: "58g",
+      // saturatedFat: "34g",
+      // transFat: "1.1g",
+      // cholesterol: "411mg",
+      // carbohydrate: "37g",
+      // fiber: "1.2g",
+      // sugar: "3.2g",
+      // sodium: "680mg",
+      // protein: "22g"
 //     },
 //     description: "Diced broccoli with cheddar and parmesan cheese in a traditional quiche - served with fresh fruit.",
 //     imageUrl: "",
@@ -159,14 +231,14 @@ export interface Recommendation {
 //     name: "Caesar Salad with Chicken",
 //     ingredients: ["Croutons", "Chicken", "Parmesan Cheese", "Caesar Dressing", "Romaine Lettuce"],
 //     nutrition: {
-//       calories: 250,
-//       totalFat: "18g",
-//       cholesterol: "66mg",
-//       carbohydrate: "2g",
-//       fiber: "1g",
-//       sugar: "1g",
-//       sodium: "405mg",
-//       protein: "20g"
+      // calories: 250,
+      // totalFat: "18g",
+      // cholesterol: "66mg",
+      // carbohydrate: "2g",
+      // fiber: "1g",
+      // sugar: "1g",
+      // sodium: "405mg",
+      // protein: "20g"
 //     },
 //     description: "Fresh romaine, caesar dressing, shaved parmesan, and herb croutons. Add chicken or salmon if desired.",
 //     imageUrl: "",
@@ -207,15 +279,15 @@ export interface Recommendation {
 //     name: "Chicken Bruschetta",
 //     ingredients: ["Olive Oil", "Chicken", "Oregano", "Garlic", "Salt", "Pepper", "Tomatoes", "Shallot", "Basil", "Parmesan", "Balsamic Glaze"],
 //     nutrition: {
-//       calories: 266,
-//       totalFat: "13g",
-//       saturatedFat: "2.1g",
-//       cholesterol: "83mg",
-//       carbohydrate: "9g",
-//       fiber: "2.6g",
-//       sugar: "3.7g",
-//       sodium: "582mg",
-//       protein: "28g"
+      // calories: 266,
+      // totalFat: "13g",
+      // saturatedFat: "2.1g",
+      // cholesterol: "83mg",
+      // carbohydrate: "9g",
+      // fiber: "2.6g",
+      // sugar: "3.7g",
+      // sodium: "582mg",
+      // protein: "28g"
 //     },
 //     description: "A baked chicken breast topped with fresh tomatoes, garlic, and basil - served with herbed corn and a baked potato.",
 //     imageUrl: "",
@@ -480,77 +552,137 @@ const RESIDENTS_DATABASE: Resident[] = [
 let ORDERS_DATABASE: Order[] = [];
 
 // ==================== MEAL SERVICE ====================
-
 export const MealService = {
-  /**
-   * Get all meals
-   */
-  getAllMeals: (): Meal[] => {
-    return MEALS_DATABASE.filter(m => m.isAvailable);
+  getAllMeals: async (): Promise<Meal[]> => {
+    const meals = await fetchMealsFromApi();
+    return meals.filter((m) => m.isAvailable);
   },
 
-  /**
-   * Get meal by ID
-   */
-  getMealById: (id: number): Meal | undefined => {
-    return MEALS_DATABASE.find(m => m.id === id);
+  getMealById: async (id: number): Promise<Meal | undefined> => {
+    const meals = await fetchMealsFromApi();
+    return meals.find((m) => m.id === id);
   },
 
-  /**
-   * Get meals by period (Breakfast, Lunch, Dinner)
-   */
-  getMealsByPeriod: (period: 'Breakfast' | 'Lunch' | 'Dinner' | null): Meal[] => {
-    if (!period) return MEALS_DATABASE.filter(m => m.isAvailable);
-    
-    return MEALS_DATABASE.filter(m => {
+  getMealsByPeriod: async (
+    period: Meal["mealPeriod"] | null
+  ): Promise<Meal[]> => {
+    const meals = await fetchMealsFromApi();
+    if (!period) return meals.filter((m) => m.isAvailable);
+
+    return meals.filter((m) => {
       if (!m.isAvailable) return false;
-      if (m.mealPeriod === 'All Day') return true;
+      if (m.mealPeriod === "All Day") return true;
       return m.mealPeriod === period;
     });
   },
 
-  /**
-   * Search meals by name or description
-   */
-  searchMeals: (query: string): Meal[] => {
+  searchMeals: async (query: string): Promise<Meal[]> => {
+    const meals = await fetchMealsFromApi();
     const lowerQuery = query.toLowerCase();
-    return MEALS_DATABASE.filter(m => 
-      m.isAvailable && (
-        m.name.toLowerCase().includes(lowerQuery) ||
-        m.description.toLowerCase().includes(lowerQuery) ||
-        m.ingredients.some(i => i.toLowerCase().includes(lowerQuery)) ||
-        m.tags.some(t => t.toLowerCase().includes(lowerQuery))
-      )
+
+    return meals.filter(
+      (m) =>
+        m.isAvailable &&
+        (m.name.toLowerCase().includes(lowerQuery) ||
+          m.description.toLowerCase().includes(lowerQuery) ||
+          m.ingredients.some((i) => i.toLowerCase().includes(lowerQuery)) ||
+          m.tags.some((t) => t.toLowerCase().includes(lowerQuery)))
     );
   },
 
-  /**
-   * Get meals by tag
-   */
-  getMealsByTag: (tag: string): Meal[] => {
-    return MEALS_DATABASE.filter(m => 
-      m.isAvailable && m.tags.some(t => t.toLowerCase() === tag.toLowerCase())
+  getMealsByTag: async (tag: string): Promise<Meal[]> => {
+    const meals = await fetchMealsFromApi();
+    return meals.filter(
+      (m) =>
+        m.isAvailable &&
+        m.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
     );
   },
 
-  /**
-   * Get meals grouped by period
-   */
-  getMealsGroupedByPeriod: () => {
-    return {
-      breakfast: MealService.getMealsByPeriod('Breakfast'),
-      lunch: MealService.getMealsByPeriod('Lunch'),
-      dinner: MealService.getMealsByPeriod('Dinner'),
-    };
+  getMealsGroupedByPeriod: async () => {
+    const [breakfast, lunch, dinner] = await Promise.all([
+      MealService.getMealsByPeriod("Breakfast"),
+      MealService.getMealsByPeriod("Lunch"),
+      MealService.getMealsByPeriod("Dinner"),
+    ]);
+    return { breakfast, lunch, dinner };
   },
 
-  /**
-   * Get seasonal meals
-   */
-  getSeasonalMeals: (): Meal[] => {
-    return MEALS_DATABASE.filter(m => m.isAvailable && m.isSeasonal);
-  }
+  getSeasonalMeals: async (): Promise<Meal[]> => {
+    const meals = await fetchMealsFromApi();
+    return meals.filter((m) => m.isAvailable && m.isSeasonal);
+  },
 };
+// export const MealService = {
+//   /**
+//    * Get all meals
+//    */
+//   getAllMeals: (): Meal[] => {
+//     return MEALS_DATABASE.filter(m => m.isAvailable);
+//   },
+
+//   /**
+//    * Get meal by ID
+//    */
+//   getMealById: (id: number): Meal | undefined => {
+//     return MEALS_DATABASE.find(m => m.id === id);
+//   },
+
+//   /**
+//    * Get meals by period (Breakfast, Lunch, Dinner)
+//    */
+//   getMealsByPeriod: (period: 'Breakfast' | 'Lunch' | 'Dinner' | null): Meal[] => {
+//     if (!period) return MEALS_DATABASE.filter(m => m.isAvailable);
+    
+//     return MEALS_DATABASE.filter(m => {
+//       if (!m.isAvailable) return false;
+//       if (m.mealPeriod === 'All Day') return true;
+//       return m.mealPeriod === period;
+//     });
+//   },
+
+//   /**
+//    * Search meals by name or description
+//    */
+//   searchMeals: (query: string): Meal[] => {
+//     const lowerQuery = query.toLowerCase();
+//     return MEALS_DATABASE.filter(m => 
+//       m.isAvailable && (
+//         m.name.toLowerCase().includes(lowerQuery) ||
+//         m.description.toLowerCase().includes(lowerQuery) ||
+//         m.ingredients.some(i => i.toLowerCase().includes(lowerQuery)) ||
+//         m.tags.some(t => t.toLowerCase().includes(lowerQuery))
+//       )
+//     );
+//   },
+
+//   /**
+//    * Get meals by tag
+//    */
+//   getMealsByTag: (tag: string): Meal[] => {
+//     return MEALS_DATABASE.filter(m => 
+//       m.isAvailable && m.tags.some(t => t.toLowerCase() === tag.toLowerCase())
+//     );
+//   },
+
+//   /**
+//    * Get meals grouped by period
+//    */
+//   getMealsGroupedByPeriod: () => {
+//     return {
+//       breakfast: MealService.getMealsByPeriod('Breakfast'),
+//       lunch: MealService.getMealsByPeriod('Lunch'),
+//       dinner: MealService.getMealsByPeriod('Dinner'),
+//     };
+//   },
+
+//   /**
+//    * Get seasonal meals
+//    */
+//   getSeasonalMeals: (): Meal[] => {
+//     return MEALS_DATABASE.filter(m => m.isAvailable && m.isSeasonal);
+//   }
+// };
 
 // ==================== RESIDENT SERVICE ====================
 
@@ -612,17 +744,19 @@ export const ResidentService = {
     return true;
   },
 
-  /**
-   * Get favorite meals for resident
-   */
-  getFavoriteMeals: (residentId: string): Meal[] => {
-    const resident = ResidentService.getResidentById(residentId);
-    if (!resident) return [];
-    
-    return resident.favoriteMealIds
-      .map(id => MealService.getMealById(id))
-      .filter((m): m is Meal => m !== undefined);
-  }
+  // /**
+  //  * Get favorite meals for resident
+  //  */
+  getFavoriteMeals: async (residentId: string): Promise<Meal[]> => {
+  const resident = ResidentService.getResidentById(residentId);
+  if (!resident) return [];
+
+  const meals = await Promise.all(
+    resident.favoriteMealIds.map((id) => MealService.getMealById(id))
+  );
+
+  return meals.filter((m): m is Meal => m !== undefined);
+}
 };
 
 // ==================== RECOMMENDATION SERVICE ====================
@@ -631,102 +765,98 @@ export const RecommendationService = {
   /**
    * Get personalized meal recommendations for a resident
    */
-  getRecommendations: (
-    residentId: string, 
-    period?: 'Breakfast' | 'Lunch' | 'Dinner' | null,
-    limit: number = 3
-  ): Recommendation[] => {
-    const resident = ResidentService.getResidentById(residentId);
-    if (!resident) return [];
 
-    let meals = MealService.getMealsByPeriod(period || null);
-    
-    // Filter out unsafe meals
-    meals = meals.filter(m => ResidentService.isMealSafeForResident(m, resident));
+  getRecommendations: async (
+  residentId: string,
+  period?: "Breakfast" | "Lunch" | "Dinner" | null,
+  limit: number = 3
+): Promise<Recommendation[]> => {
+  const resident = ResidentService.getResidentById(residentId);
+  if (!resident) return [];
 
-    // Filter out meals with disliked ingredients
-    meals = meals.filter(m => {
-      const mealIngredients = m.ingredients.map(i => i.toLowerCase());
-      return !resident.dislikedIngredients.some(disliked => 
-        mealIngredients.some(ing => ing.includes(disliked.toLowerCase()))
+  let meals = await MealService.getMealsByPeriod(period || null);
+
+  // Filter out unsafe meals
+  meals = meals.filter((m) => ResidentService.isMealSafeForResident(m, resident));
+
+  // Filter out meals with disliked ingredients
+  meals = meals.filter((m) => {
+    const mealIngredients = m.ingredients.map((i) => i.toLowerCase());
+    return !resident.dislikedIngredients.some((disliked) =>
+      mealIngredients.some((ing) => ing.includes(disliked.toLowerCase()))
+    );
+  });
+
+  const scored = meals.map((meal) => {
+    let score = 50;
+    const reasons: string[] = [];
+
+    if (resident.favoriteMealIds.includes(meal.id)) {
+      score += 30;
+      reasons.push("One of your favorites");
+    }
+
+    const sodium = parseInt(meal.nutrition.sodium.replace(/[^\d]/g, "") || "0");
+    const protein = parseInt(meal.nutrition.protein.replace(/[^\d]/g, "") || "0");
+
+    if (sodium <= resident.nutritionGoals.maxSodium / 3) {
+      score += 15;
+      reasons.push("Low sodium");
+    }
+
+    if (protein >= resident.nutritionGoals.minProtein / 3) {
+      score += 10;
+      reasons.push("High protein");
+    }
+
+    if (meal.tags.some((t) => t.toLowerCase().includes("heart healthy"))) {
+      const hasHeartRestriction = resident.dietaryRestrictions.some((r) =>
+        r.name.toLowerCase().includes("heart")
       );
-    });
-
-    // Score each meal
-    const scored = meals.map(meal => {
-      let score = 50;
-      const reasons: string[] = [];
-
-      // Bonus for favorites
-      if (resident.favoriteMealIds.includes(meal.id)) {
-        score += 30;
-        reasons.push("One of your favorites");
+      if (hasHeartRestriction) {
+        score += 20;
+        reasons.push("Heart healthy");
       }
+    }
 
-      // Score based on nutrition goals
-      const sodium = parseInt(meal.nutrition.sodium.replace(/[^\d]/g, '') || '0');
-      const protein = parseInt(meal.nutrition.protein.replace(/[^\d]/g, '') || '0');
+    if (meal.isSeasonal) {
+      score += 5;
+      reasons.push("Seasonal special");
+    }
 
-      // Low sodium bonus
-      if (sodium <= resident.nutritionGoals.maxSodium / 3) {
-        score += 15;
-        reasons.push("Low sodium");
-      }
+    return {
+      meal,
+      score,
+      reason: reasons[0] || "Good nutritional balance",
+      allReasons: reasons.length > 0 ? reasons : ["Good nutritional balance"],
+    };
+  });
 
-      // High protein bonus
-      if (protein >= resident.nutritionGoals.minProtein / 3) {
-        score += 10;
-        reasons.push("High protein");
-      }
-
-      // Heart healthy tags
-      if (meal.tags.some(t => t.toLowerCase().includes('heart healthy'))) {
-        const hasHeartRestriction = resident.dietaryRestrictions
-          .some(r => r.name.toLowerCase().includes('heart'));
-        if (hasHeartRestriction) {
-          score += 20;
-          reasons.push("Heart healthy");
-        }
-      }
-
-      // Seasonal bonus
-      if (meal.isSeasonal) {
-        score += 5;
-        reasons.push("Seasonal special");
-      }
-
-      return {
-        meal,
-        score,
-        reason: reasons[0] || "Good nutritional balance",
-        allReasons: reasons.length > 0 ? reasons : ["Good nutritional balance"]
-      };
-    });
-
-    // Sort by score and return top recommendations
-    return scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-  },
+  return scored.sort((a, b) => b.score - a.score).slice(0, limit);
+},
 
   /**
    * Get the top recommendation for AI banner
    */
-  getTopRecommendation: (residentId: string, period?: 'Breakfast' | 'Lunch' | 'Dinner' | null) => {
-    const recommendations = RecommendationService.getRecommendations(residentId, period, 1);
-    if (recommendations.length === 0) return null;
 
-    const resident = ResidentService.getResidentById(residentId);
-    const rec = recommendations[0];
-    
-    const restrictions = resident?.dietaryRestrictions.map(r => r.name) || [];
+  getTopRecommendation: async (
+  residentId: string,
+  period?: "Breakfast" | "Lunch" | "Dinner" | null
+) => {
+  const recommendations = await RecommendationService.getRecommendations(residentId, period, 1);
+  if (recommendations.length === 0) return null;
 
-    return {
-      meal_name: rec.meal.name,
-      reason: `Based on their dietary restrictions (${restrictions.join(', ')}), we suggest the`,
-      dietary_restrictions: restrictions
-    };
-  }
+  const resident = ResidentService.getResidentById(residentId);
+  const rec = recommendations[0];
+
+  const restrictions = resident?.dietaryRestrictions.map((r) => r.name) || [];
+
+  return {
+    meal_name: rec.meal.name,
+    reason: `Based on their dietary restrictions (${restrictions.join(", ")}), we suggest the`,
+    dietary_restrictions: restrictions,
+  };
+},
 };
 
 // ==================== ORDER SERVICE ====================
@@ -735,55 +865,61 @@ export const OrderService = {
   /**
    * Create a new order
    */
-  createOrder: (
+  createOrder: async (
     residentId: string,
     items: { mealId: number; quantity: number; specialInstructions?: string }[],
-    mealPeriod: 'Breakfast' | 'Lunch' | 'Dinner',
+    mealPeriod: "Breakfast" | "Lunch" | "Dinner",
     scheduledDate: Date
-  ): Order | null => {
+  ): Promise<Order | null> => {
     const resident = ResidentService.getResidentById(residentId);
     if (!resident) return null;
 
-    const orderItems = items
-      .map<OrderItem | null>((item) => {
-        const meal = MealService.getMealById(item.mealId);
-        if (!meal) return null;
-        return {
-          meal,
-          quantity: item.quantity,
-          specialInstructions: item.specialInstructions,
-        };
-      })
-      .filter((item): item is OrderItem => item !== null);
+  const maybeOrderItems = await Promise.all(
+    items.map(async (item) => {
+      const meal = await MealService.getMealById(item.mealId);
+      if (!meal) return null;
 
-    if (orderItems.length === 0) return null;
+      return {
+        meal,
+        quantity: item.quantity,
+        specialInstructions: item.specialInstructions,
+      } as OrderItem;
+    })
+  );
 
-    // Calculate total nutrition
-    const totalNutrition = orderItems.reduce((acc, item) => {
+  const orderItems = maybeOrderItems.filter((item): item is OrderItem => item !== null);
+  if (orderItems.length === 0) return null;
+
+  const totalNutrition = orderItems.reduce(
+    (acc, item) => {
       const calories = item.meal.nutrition.calories * item.quantity;
-      const sodium = parseInt(item.meal.nutrition.sodium.replace(/[^\d]/g, '') || '0') * item.quantity;
-      const protein = parseInt(item.meal.nutrition.protein.replace(/[^\d]/g, '') || '0') * item.quantity;
-      
+      const sodium =
+        parseInt(item.meal.nutrition.sodium.replace(/[^\d]/g, "") || "0") * item.quantity;
+      const protein =
+        parseInt(item.meal.nutrition.protein.replace(/[^\d]/g, "") || "0") * item.quantity;
+
       return {
         calories: acc.calories + calories,
         sodium: acc.sodium + sodium,
-        protein: acc.protein + protein
+        protein: acc.protein + protein,
       };
-    }, { calories: 0, sodium: 0, protein: 0 });
+    },
+    { calories: 0, sodium: 0, protein: 0 }
+  );
 
-    const order: Order = {
-      id: `order_${Date.now()}`,
-      residentId,
-      items: orderItems,
-      mealPeriod,
-      scheduledDate,
-      status: 'pending',
-      totalNutrition,
-      createdAt: new Date()
-    };
+  const order: Order = {
+    id: `order_${Date.now()}`,
+    residentId,
+    items: orderItems,
+    mealPeriod,
+    scheduledDate,
+    status: "pending",
+    totalNutrition,
+    createdAt: new Date(),
+  };
 
-    ORDERS_DATABASE.push(order);
-    return order;
+  ORDERS_DATABASE.push(order);
+  return order;
   },
 
   /**
@@ -837,62 +973,81 @@ export const AIChatService = {
   /**
    * Generate AI response based on user message
    */
-  generateResponse: (
+  generateResponse: async (
     userMessage: string,
     residentId: string,
     currentMeals: Meal[]
-  ): string => {
+  ): Promise<string> => {
     const resident = ResidentService.getResidentById(residentId);
     if (!resident) return "I couldn't find the resident information. Please try again.";
 
     const lowerMessage = userMessage.toLowerCase();
-    
+
     // Menu questions
-    if (lowerMessage.includes('menu') || lowerMessage.includes('today') || lowerMessage.includes('available')) {
-      const menuItems = currentMeals.map(m => `• ${m.name} (${m.mealPeriod})`).join('\n');
+    if (
+      lowerMessage.includes("menu") ||
+      lowerMessage.includes("today") ||
+      lowerMessage.includes("available")
+    ) {
+      const menuItems = currentMeals
+        .map((m) => `• ${m.name} (${m.mealPeriod})`)
+        .join("\n");
+
       return `Here's what's available today:\n\n${menuItems}\n\nWould you like me to recommend something based on ${resident.firstName}'s dietary needs?`;
     }
-    
+
     // Recommendation questions
-    if (lowerMessage.includes('recommend') || lowerMessage.includes('suggest')) {
-      const recommendations = RecommendationService.getRecommendations(residentId, null, 2);
+    if (lowerMessage.includes("recommend") || lowerMessage.includes("suggest")) {
+      const recommendations = await RecommendationService.getRecommendations(residentId, null, 2);
+
       if (recommendations.length === 0) {
         return `I don't have any recommendations available at the moment.`;
       }
-      
-      const restrictions = resident.dietaryRestrictions.map(r => r.name).join(', ');
+
+      const restrictions = resident.dietaryRestrictions.map((r) => r.name).join(", ");
       const topRec = recommendations[0];
-      
-      return `Based on ${resident.firstName}'s dietary restrictions (${restrictions}), I recommend the **${topRec.meal.name}**.\n\n${topRec.allReasons.join(', ')} - which aligns perfectly with their needs.\n\nWould you like to add it to their order?`;
+
+      return `Based on ${resident.firstName}'s dietary restrictions (${restrictions}), I recommend the **${topRec.meal.name}**.\n\n${topRec.allReasons.join(
+        ", "
+      )} - which aligns perfectly with their needs.\n\nWould you like to add it to their order?`;
     }
-    
+
     // Dietary restriction questions
-    if (lowerMessage.includes('dietary') || lowerMessage.includes('restriction') || lowerMessage.includes('allerg')) {
+    if (
+      lowerMessage.includes("dietary") ||
+      lowerMessage.includes("restriction") ||
+      lowerMessage.includes("allerg")
+    ) {
       const restrictions = resident.dietaryRestrictions
-        .map(r => `• ${r.name} (${r.type}, ${r.severity})`)
-        .join('\n');
-      
+        .map((r) => `• ${r.name} (${r.type}, ${r.severity})`)
+        .join("\n");
+
       return `${resident.firstName}'s current dietary restrictions are:\n\n${restrictions}\n\nAll meal recommendations take these into account. Would you like to update these restrictions?`;
     }
-    
+
     // Order questions
-    if (lowerMessage.includes('order') || lowerMessage.includes('place')) {
-      const recommendations = RecommendationService.getRecommendations(residentId, null, 2);
-      const recNames = recommendations.map(r => r.meal.name).join(' or ');
-      
+    if (lowerMessage.includes("order") || lowerMessage.includes("place")) {
+      const recommendations = await RecommendationService.getRecommendations(residentId, null, 2);
+      const recNames = recommendations.map((r) => r.meal.name).join(" or ");
+
       return `I can help you place an order! Which meal would you like to order for ${resident.firstName}?\n\nBased on their dietary needs, I'd suggest the ${recNames}.`;
     }
-    
+
     // Nutrition questions
-    if (lowerMessage.includes('calorie') || lowerMessage.includes('nutrition') || lowerMessage.includes('sodium') || lowerMessage.includes('protein')) {
+    if (
+      lowerMessage.includes("calorie") ||
+      lowerMessage.includes("nutrition") ||
+      lowerMessage.includes("sodium") ||
+      lowerMessage.includes("protein")
+    ) {
       const goals = resident.nutritionGoals;
-      
+
       return `${resident.firstName}'s nutrition goals are:\n\n• Daily Calories: ${goals.dailyCalories} kcal\n• Max Sodium: ${goals.maxSodium}mg\n• Min Protein: ${goals.minProtein}g\n• Max Cholesterol: ${goals.maxCholesterol}mg\n\nWould you like to see which meals best fit these goals?`;
     }
-    
+
     // Default response
     return `I'd be happy to help with that! I can assist you with:\n\n• Viewing today's menu\n• Meal recommendations for ${resident.firstName}\n• Dietary restrictions\n• Placing orders\n• Nutritional information\n\nWhat would you like to know?`;
-  }
+  },
 };
 
 // ==================== EXPORT DEFAULT ====================

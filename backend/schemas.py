@@ -29,8 +29,6 @@ class MealOut(BaseModel):
     id: int
     name: str
     ingredients: str
-    nutri_info: str
-    nutri_amounts: str
     description: str
     image_url: str
     mealtype: str
@@ -40,3 +38,4 @@ class MealOut(BaseModel):
     tags: str
     isAvailable: bool
     isSeasonal: bool
+    nutrition: str
