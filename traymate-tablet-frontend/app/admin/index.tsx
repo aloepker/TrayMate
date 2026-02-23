@@ -18,6 +18,8 @@ import { Picker } from "@react-native-picker/picker";
 import { Feather } from "@expo/vector-icons";
 
 import AddResidentModal from "../../components/AddResidentModal";
+import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
+
 
 import {
   Caregiver,
@@ -63,7 +65,17 @@ export default function AdminDashboard() {
   const [editName, setEditName] = useState("");
   const [editRoom, setEditRoom] = useState("");
   const [editDietary, setEditDietary] = useState(""); // comma-separated
-  const [editMedicalNeeds, setEditMedicalNeeds] = useState(""); // UI-only for now
+  const [editMedicalNeeds, setEditMedicalNeeds] = useState(""); 
+
+    // ---- Confirm Delete Modal State ----
+  type DeleteKind = "resident" | "caregiver" | "kitchen";
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{
+    kind: DeleteKind;
+    id: string;
+  } | null>(null);
 
   // Fetch caregivers, residents, and kitchen staff when dashboard loads
   useEffect(() => {
@@ -160,34 +172,55 @@ const onAssign = async (residentId: string, caregiverId: string) => {
 
 
 
-  // ------------------ UI-only delete/edit handlers (backend ready) ------------------
+  // ------------------ Delete confirmation flow ------------------
 
-const onDeleteResident = async (id: string) => {
-  try {
-    await deleteEntity("resident", id);
-    setResidents((prev) => prev.filter((r) => r.id !== id));
-  } catch (e: any) {
-    Alert.alert("Delete failed", e.message);
-  }
-};
+  const askDeleteResident = (id: string) => {
+    setPendingDelete({ kind: "resident", id });
+    setConfirmDeleteOpen(true);
+  };
 
-const onDeleteCaregiver = async (id: string) => {
-  try {
-    await deleteEntity("user", id);
-    setCaregivers((prev) => prev.filter((c) => c.id !== id));
-  } catch (e: any) {
-    Alert.alert("Delete failed", e.message);
-  }
-};
+  const askDeleteCaregiver = (id: string) => {
+    setPendingDelete({ kind: "caregiver", id });
+    setConfirmDeleteOpen(true);
+  };
 
-const onDeleteKitchen = async (id: string) => {
-  try {
-    await deleteEntity("user", id);
-    setKitchenStaff((prev) => prev.filter((k) => k.id !== id));
-  } catch (e: any) {
-    Alert.alert("Delete failed", e.message);
-  }
-};
+  const askDeleteKitchen = (id: string) => {
+    setPendingDelete({ kind: "kitchen", id });
+    setConfirmDeleteOpen(true);
+  };
+
+  const closeConfirmDelete = () => {
+    setConfirmDeleteOpen(false);
+    setPendingDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+
+    try {
+      setDeleteLoading(true);
+
+      if (pendingDelete.kind === "resident") {
+        await deleteEntity("resident", pendingDelete.id);
+        setResidents((prev) => prev.filter((r) => r.id !== pendingDelete.id));
+      } else {
+        // caregiver + kitchen staff are both "user" on backend
+        await deleteEntity("user", pendingDelete.id);
+
+        if (pendingDelete.kind === "caregiver") {
+          setCaregivers((prev) => prev.filter((c) => c.id !== pendingDelete.id));
+        } else {
+          setKitchenStaff((prev) => prev.filter((k) => k.id !== pendingDelete.id));
+        }
+      }
+
+      closeConfirmDelete();
+    } catch (e: any) {
+      Alert.alert("Delete failed", e.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
 
   const openEditResident = (r: Resident) => {
@@ -356,7 +389,7 @@ const onDeleteKitchen = async (id: string) => {
                   name={c.name}
                   email={c.email}
                   footer={`${caregiverPatientCounts[c.id] ?? 0} patient(s)`}
-                  onDelete={() => onDeleteCaregiver(c.id)}
+                  onDelete={() => askDeleteCaregiver(c.id)}
                 />
               ))}
               {!caregivers.length ? (
@@ -429,7 +462,7 @@ const onDeleteKitchen = async (id: string) => {
 
                   <Pressable
                     style={styles.iconBtn}
-                    onPress={() => onDeleteResident(r.id)}
+                    onPress={() => askDeleteResident(r.id)}
                     hitSlop={10}
                   >
                     <Feather name="trash-2" size={18} color="#6D6B3B" />
@@ -458,7 +491,7 @@ const onDeleteKitchen = async (id: string) => {
                   name={k.name}
                   email={k.email}
                   footer={k.shift ? `Shift: ${k.shift}` : "Kitchen Staff"}
-                  onDelete={() => onDeleteKitchen(k.id)}
+                  onDelete={() => askDeleteKitchen(k.id)}
                 />
               ))}
               {!kitchenStaff.length ? (
@@ -487,6 +520,15 @@ const onDeleteKitchen = async (id: string) => {
           await refreshResidents();
           setShowAddResident(false);
         }}
+      />
+
+       {/* Confirm Delete Modal */}
+      <ConfirmDeleteModal
+        visible={confirmDeleteOpen}
+        kind={pendingDelete?.kind ?? null}
+        loading={deleteLoading}
+        onCancel={closeConfirmDelete}
+        onConfirm={confirmDelete}
       />
 
       {/* Edit Resident Modal (matches screenshot: X top-right, Update button, Cancel under it) */}
