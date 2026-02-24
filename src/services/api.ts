@@ -253,6 +253,37 @@ export async function createResident(payload: {
   return mapResident(created);
 }
 
+
+/**
+ * Update resident (EDIT)
+ * Endpoint: PUT /admin/residents/{id}
+ * Backend expects:
+ *  - fullName
+ *  - roomNumber
+ *  - foodAllergies
+ */
+export async function updateResident(
+  id: string,
+  payload: {
+    name: string;
+    room: string;
+    dietaryRestrictions: string[];
+  }
+): Promise<Resident> {
+  const updated = await request<ResidentApi>(`/admin/residents/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      fullName: payload.name,
+      roomNumber: payload.room,
+      foodAllergies: payload.dietaryRestrictions,
+    }),
+  });
+
+  return mapResident(updated);
+}
+
+
+
 /**
  * Assign resident to caregiver
  * Endpoint used: /admin/residents/:id/assign
@@ -275,4 +306,23 @@ export async function assignResident(
   );
 
   return mapResident(updated);
+}
+
+/**
+ * Delete entity (resident or user)
+ *
+ * Backend endpoint:
+ * DELETE /admin/delete/{type}/{id}
+ *
+ * type:
+ *   - "resident" for residents
+ *   - "user" for caregiver + kitchen staff
+ */
+export async function deleteEntity(
+  type: "resident" | "user",
+  id: string
+): Promise<void> {
+  await request<void>(`/admin/delete/${type}/${id}`, {
+    method: "DELETE",
+  });
 }
