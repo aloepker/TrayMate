@@ -66,6 +66,9 @@ yarn-error.log
 # testing
 /coverage
 
+# Gemini API key - do not commit
+src/config/geminiConfig.ts
+
 # Yarn
 .yarn/*
 !.yarn/patches

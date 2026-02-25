@@ -17,6 +17,7 @@ import EditResidentListScreen from './src/screens/editResidentListScreen';
 import ResidentInfoEditScreen from './src/screens/residentInfoEditScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
+import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 
 const Stack = createStackNavigator();
 
@@ -41,6 +42,7 @@ export default function App() {
           <Stack.Screen name="ResidentInfoEdit" component={ResidentInfoEditScreen} />
           <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>

@@ -239,7 +239,7 @@ function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
 
           {/* Upcoming Meals Card */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionCard}
             onPress={() => navigation.navigate('UpcomingMeals')}
           >
@@ -249,6 +249,21 @@ function SettingsScreen({ navigation }: any) {
             <View style={styles.actionContent}>
               <Text style={styles.actionTitle}>Upcoming Meals</Text>
               <Text style={styles.actionDescription}>View confirmed and pending meals</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
+          {/* AI Meal Assistant Card */}
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('AIMealAssistant')}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#E8DCC8' }]}>
+              <Text style={styles.iconText}>AI</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>AI Meal Assistant</Text>
+              <Text style={styles.actionDescription}>Get personalized meal suggestions</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>

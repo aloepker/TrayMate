@@ -12,11 +12,11 @@ import { globalStyles } from '../styles/styles';
 
 const CartScreen = ({ navigation }: any) => {
   // Use the cart context
-  const { cart: cartItems, removeFromCart, clearCart, getTotalNutrition } = useCart();
+  const { cart: cartItems, removeFromCart, placeOrder, getTotalNutrition } = useCart();
 
   const confirmOrder = () => {
-    // Clear cart after confirming
-    clearCart();
+    // Save order and clear cart
+    placeOrder();
     // Navigate to upcoming meals
     navigation.navigate('UpcomingMeals');
   };
