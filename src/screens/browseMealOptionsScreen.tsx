@@ -21,7 +21,7 @@ import { useCart } from "./context/CartContext";
 // global styling file (from your teammate setup)
 import { globalStyles } from "../styles/styles";
 
-// Local CSV-backed data service (temporary until API is ready)
+// Importing services from the local data layer
 import {
   MealService,
   ResidentService,
@@ -48,7 +48,7 @@ const COLORS = {
 };
 
 // ---------- Types ----------
-type Meal = {
+type BrowseMeal = {
   id: string;
   name: string;
   meal_period: "Breakfast" | "Lunch" | "Dinner";
@@ -85,7 +85,7 @@ const QUICK_QUESTIONS = [
 // ---------- Period Tabs ----------
 type PeriodOption = {
   label: string;
-  value: Meal["meal_period"] | null;
+  value: BrowseMeal["meal_period"] | null;
 };
 
 const PERIODS: PeriodOption[] = [
@@ -106,7 +106,7 @@ const AIAssistantChat = ({
   visible: boolean; 
   onClose: () => void;
   residentName: string;
-  meals: Meal[];
+  meals: BrowseMeal[];
   recommendation: Recommendation | null;
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -329,7 +329,7 @@ const AIAssistantChat = ({
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIODS[0]);
-  const [meals, setMeals] = useState<Meal[]>([]);
+  const [meals, setMeals] = useState<BrowseMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
 
@@ -358,29 +358,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setMenuLoading(true);
     setError("");
 
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         // Pull from localDataService
-        const serviceMeals = MealService.getMealsByPeriod(period);
+        // const serviceMeals = MealService.getMealsByPeriod(period);
+        const serviceMeals = await MealService.getMealsByPeriod(period);
 
         // Map service Meal -> screen Meal shape
-const mapped: Meal[] = serviceMeals.map((m) => ({
-  id: String(m.id),
-  name: m.name,
-  meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod) as Meal["meal_period"],
-          description: m.description,
-          time_range: m.timeRange,
-          kcal: m.nutrition.calories,
-          sodium_mg: parseInt(
-            String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0",
-            10
-          ),
-          protein_g: parseInt(
-            String(m.nutrition.protein).replace(/[^\d]/g, "") || "0",
-            10
-          ),
-          tags: m.tags ?? [],
-        }));
+    const mapped: BrowseMeal[] = serviceMeals.map((m) => ({
+      id: String(m.id),
+      name: m.name,
+      meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod),
+      description: m.description,
+      time_range: m.timeRange,
+      kcal: m.nutrition.calories,
+      sodium_mg: parseInt(String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0", 10),
+      protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
+      tags: m.tags ?? [],
+    }));
 
         setMeals(mapped);
         setMenuLoading(false);
@@ -396,17 +391,18 @@ const mapped: Meal[] = serviceMeals.map((m) => ({
     setRecLoading(true);
     setError("");
 
-    setTimeout(() => {
-      try {
-        const resId = (route?.params?.residentId as string | undefined) || ResidentService.getDefaultResident().id;
-        const rec = RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
-        setRecommendation(rec);
-        setRecLoading(false);
-      } catch (e) {
-        setRecommendation(null);
-        setRecLoading(false);
-      }
+    setTimeout(async () => {
+    try {
+      const resId = (route?.params?.residentId as string | undefined) || ResidentService.getDefaultResident().id;
+      const rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
+      setRecommendation(rec);
+      setRecLoading(false);
+    } catch (e) {
+      setRecommendation(null);
+      setRecLoading(false);
+    }
     }, 200);
+
   }, [route?.params?.residentId, selectedPeriod.value]);
 
   useEffect(() => {
@@ -441,7 +437,7 @@ const mapped: Meal[] = serviceMeals.map((m) => ({
     return { bg: '#F3F4F6', text: '#374151' };
   };
 
-const renderMeal = ({ item }: { item: Meal }) => (
+const renderMeal = ({ item }: { item: BrowseMeal }) => (
   <TouchableOpacity 
     style={styles.card}
     activeOpacity={0.7}
