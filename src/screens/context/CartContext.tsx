@@ -12,6 +12,15 @@ type Meal = {
   tags?: string[];
 };
 
+// Order type — a confirmed group of meals
+export type Order = {
+  id: string;
+  items: Meal[];
+  status: 'confirmed' | 'preparing' | 'ready' | 'completed';
+  placedAt: Date;
+  totalNutrition: { calories: number; sodium: number; protein: number };
+};
+
 // What the context provides
 type CartContextType = {
   cart: Meal[];
@@ -20,6 +29,10 @@ type CartContextType = {
   clearCart: () => void;
   getCartCount: () => number;
   getTotalNutrition: () => { calories: number; sodium: number; protein: number };
+  // Orders
+  orders: Order[];
+  placeOrder: () => Order | null;
+  updateOrderStatus: (orderId: string, status: Order['status']) => void;
 };
 
 // Create the context
@@ -28,6 +41,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 // Provider component - wrap your app with this
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [cart, setCart] = useState<Meal[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const addToCart = (meal: Meal) => {
     setCart((prev) => [...prev, meal]);
@@ -60,15 +74,41 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
+  const placeOrder = (): Order | null => {
+    if (cart.length === 0) return null;
+
+    const totals = getTotalNutrition();
+    const newOrder: Order = {
+      id: `order_${Date.now()}`,
+      items: [...cart],
+      status: 'confirmed',
+      placedAt: new Date(),
+      totalNutrition: totals,
+    };
+
+    setOrders((prev) => [newOrder, ...prev]);
+    setCart([]);
+    return newOrder;
+  };
+
+  const updateOrderStatus = (orderId: string, status: Order['status']) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+    );
+  };
+
   return (
-    <CartContext.Provider 
-      value={{ 
-        cart, 
-        addToCart, 
-        removeFromCart, 
-        clearCart, 
+    <CartContext.Provider
+      value={{
+        cart,
+        addToCart,
+        removeFromCart,
+        clearCart,
         getCartCount,
-        getTotalNutrition 
+        getTotalNutrition,
+        orders,
+        placeOrder,
+        updateOrderStatus,
       }}
     >
       {children}

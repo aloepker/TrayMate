@@ -26,10 +26,131 @@ import {
   MealService,
   ResidentService,
   RecommendationService,
+  Meal as ServiceMeal,
 } from "../services/localDataService";
+
+import { geminiChat } from "../services/geminiService";
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Meal placeholder image colors based on meal type
+const MEAL_PLACEHOLDER_COLORS: Record<string, { bg: string; accent: string; emoji: string }> = {
+  'Banana-Chocolate Pancakes': { bg: '#FEF3C7', accent: '#92400E', emoji: '🥞' },
+  'Broccoli-Cheddar Quiche': { bg: '#DCFCE7', accent: '#166534', emoji: '🥧' },
+  'Caesar Salad with Chicken': { bg: '#D1FAE5', accent: '#065F46', emoji: '🥗' },
+  'Citrus Butter Salmon': { bg: '#DBEAFE', accent: '#1E40AF', emoji: '🐟' },
+  'Chicken Bruschetta': { bg: '#FEE2E2', accent: '#991B1B', emoji: '🍗' },
+  'Breakfast Banana Split': { bg: '#FCE7F3', accent: '#9D174D', emoji: '🍌' },
+  'Herb Baked Chicken': { bg: '#FEF3C7', accent: '#78350F', emoji: '🍗' },
+  'Garden Vegetable Medley': { bg: '#DCFCE7', accent: '#14532D', emoji: '🥦' },
+  'Strawberry Belgian Waffle': { bg: '#FCE7F3', accent: '#831843', emoji: '🧇' },
+  'Spring Menu Special': { bg: '#E0E7FF', accent: '#3730A3', emoji: '🌸' },
+  'Grilled Salmon Fillet': { bg: '#CFFAFE', accent: '#155E75', emoji: '🐟' },
+  'Oatmeal Bowl': { bg: '#FEF3C7', accent: '#78350F', emoji: '🥣' },
+};
+
+const getMealPlaceholder = (mealName: string) => {
+  return MEAL_PLACEHOLDER_COLORS[mealName] || { bg: '#F3F4F6', accent: '#6B7280', emoji: '🍽' };
+};
+
+// ---------- Rich Text Renderer for Chat ----------
+const ChatRichText = ({
+  text,
+  isUser,
+}: {
+  text: string;
+  isUser: boolean;
+}) => {
+  const allMeals = MealService.getAllMeals();
+  const lines = text.split('\n');
+
+  return (
+    <View>
+      {lines.map((line, lineIdx) => {
+        // Check if line has a bold meal name that matches a real meal
+        const mealCardMatch = line.match(
+          /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
+        );
+        const matchedMeal = mealCardMatch
+          ? allMeals.find(
+              m => m.name.toLowerCase() === mealCardMatch[1].toLowerCase().trim(),
+            )
+          : null;
+
+        if (matchedMeal && !isUser) {
+          const ph = getMealPlaceholder(matchedMeal.name);
+          return (
+            <View key={lineIdx} style={chatRichStyles.mealCard}>
+              <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
+                <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
+              </View>
+              <View style={chatRichStyles.mealCardInfo}>
+                <Text style={chatRichStyles.mealCardName}>{matchedMeal.name}</Text>
+                <Text style={chatRichStyles.mealCardMeta}>
+                  {matchedMeal.mealPeriod} · {matchedMeal.timeRange}
+                </Text>
+                <Text style={chatRichStyles.mealCardNutrition}>
+                  {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium
+                </Text>
+              </View>
+            </View>
+          );
+        }
+
+        if (line.trim() === '') {
+          return <View key={lineIdx} style={{ height: 5 }} />;
+        }
+
+        const parts = line.split(/(\*\*[^*]+\*\*)/g);
+        const isBullet = line.trimStart().startsWith('•') || line.trimStart().startsWith('-');
+
+        return (
+          <View key={lineIdx} style={[chatRichStyles.lineRow, isBullet && chatRichStyles.bulletRow]}>
+            {parts.map((part, pi) => {
+              const boldMatch = part.match(/^\*\*(.+)\*\*$/);
+              if (boldMatch) {
+                return (
+                  <Text key={pi} style={[chatRichStyles.text, chatRichStyles.bold, isUser && chatRichStyles.textUser]}>
+                    {boldMatch[1]}
+                  </Text>
+                );
+              }
+              return (
+                <Text key={pi} style={[chatRichStyles.text, isUser && chatRichStyles.textUser]}>
+                  {part}
+                </Text>
+              );
+            })}
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+const chatRichStyles = StyleSheet.create({
+  lineRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 2 },
+  bulletRow: { paddingLeft: 4, marginBottom: 4 },
+  text: { fontSize: 15, lineHeight: 22, color: '#374151' },
+  textUser: { color: '#FFFFFF' },
+  bold: { fontWeight: '700', color: '#111827' },
+  mealCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    marginVertical: 5,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  mealCardImage: { width: 50, justifyContent: 'center', alignItems: 'center' },
+  mealCardEmoji: { fontSize: 24 },
+  mealCardInfo: { flex: 1, padding: 8 },
+  mealCardName: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 1 },
+  mealCardMeta: { fontSize: 11, color: '#6B7280', marginBottom: 1 },
+  mealCardNutrition: { fontSize: 10, color: '#b77f3f', fontWeight: '600' },
+});
 
 // ---------- TrayMate Color Palette (from design slide) ----------
 const COLORS = {
@@ -96,16 +217,18 @@ const PERIODS: PeriodOption[] = [
 ];
 
 // ---------- AI Chat Component ----------
-const AIAssistantChat = ({ 
-  visible, 
-  onClose, 
+const AIAssistantChat = ({
+  visible,
+  onClose,
   residentName,
+  residentId,
   meals,
-  recommendation 
-}: { 
-  visible: boolean; 
+  recommendation
+}: {
+  visible: boolean;
   onClose: () => void;
   residentName: string;
+  residentId: string;
   meals: Meal[];
   recommendation: Recommendation | null;
 }) => {
@@ -113,7 +236,7 @@ const AIAssistantChat = ({
     {
       id: '1',
       role: 'assistant',
-      content: `Hello! I'm your TrayMate AI assistant for ${residentName}. I'm here to help you with meal selections, dietary questions, or any concerns about their food. How can I assist you today?`,
+      content: `Hey! 👋 I'm GrannyGBT, your meal planning assistant for ${residentName}. I've got their dietary needs covered.\n\nWhat can I help with?`,
       timestamp: new Date(),
     }
   ]);
@@ -139,41 +262,31 @@ const AIAssistantChat = ({
     }
   }, [visible]);
 
-  const generateAIResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    if (lowerMessage.includes('menu') || lowerMessage.includes('today')) {
-      const menuItems = meals.map(m => `• ${m.name} (${m.meal_period})`).join('\n');
-      return `Here's what's available today:\n\n${menuItems}\n\nWould you like me to recommend something based on ${residentName}'s dietary needs?`;
+  // Initialize Gemini chat session when modal opens
+  useEffect(() => {
+    if (visible && geminiChat.isConfigured()) {
+      geminiChat.initialize(residentId);
     }
-    
-    if (lowerMessage.includes('recommend') || lowerMessage.includes('suggest')) {
-      if (recommendation) {
-        return `Based on ${residentName}'s dietary restrictions (${recommendation.dietary_restrictions.join(', ')}), I recommend the **${recommendation.meal_name}**. It's low in sodium and heart-healthy, which aligns perfectly with their needs.`;
-      }
-      return `I'd recommend the Herb Baked Chicken - it's low sodium and heart healthy, perfect for ${residentName}'s dietary needs.`;
+  }, [visible, residentId]);
+
+  // Minimal fallback when ALL Gemini models are down
+  const generateFallbackResponse = (userMessage: string): string => {
+    const lower = userMessage.toLowerCase();
+    const allServiceMeals = MealService.getAllMeals();
+    const menuItems = allServiceMeals.map((m: ServiceMeal) => `• **${m.name}** (${m.mealPeriod}, ${m.timeRange})`).join('\n');
+
+    if (lower.includes('menu') || lower.includes('today') || lower.includes('available')) {
+      return `Here's the menu! 📋\n\n${menuItems}\n\nAI is currently offline, but the menu data is still available.`;
     }
-    
-    if (lowerMessage.includes('dietary') || lowerMessage.includes('restriction')) {
-      return `${residentName}'s current dietary restrictions are:\n\n• Low Sodium\n• Heart Healthy\n• No Shellfish\n\nAll meal recommendations take these into account. Would you like to update these restrictions?`;
+    if (lower.includes('recommend') || lower.includes('suggest')) {
+      const recs = RecommendationService.getRecommendations(residentId, null, 3);
+      const recList = recs.map((r, i) => `${i + 1}. **${r.meal.name}** — ${r.allReasons.join(', ')}`).join('\n');
+      return `Top picks for ${residentName}:\n\n${recList}`;
     }
-    
-    if (lowerMessage.includes('order') || lowerMessage.includes('place')) {
-      return `I can help you place an order! Which meal would you like to order for ${residentName}?\n\nFor lunch today, I'd suggest the Herb Baked Chicken or Garden Vegetable Medley based on their dietary needs.`;
-    }
-    
-    if (lowerMessage.includes('allerg')) {
-      return `${residentName} has the following dietary considerations:\n\n• No Shellfish (allergy)\n• Low Sodium (medical)\n• Heart Healthy (preference)\n\nI always filter meal suggestions to avoid any allergens.`;
-    }
-    
-    if (lowerMessage.includes('calorie') || lowerMessage.includes('nutrition')) {
-      return `Here's the nutritional info for today's recommended meals:\n\n• Herb Baked Chicken: 420 cal, 380mg sodium, 45g protein\n• Garden Vegetable Medley: 180 cal, 240mg sodium, 6g protein\n\nBoth are within ${residentName}'s dietary guidelines.`;
-    }
-    
-    return `I'd be happy to help with that! I can assist you with:\n\n• Viewing today's menu\n• Meal recommendations\n• Dietary restrictions\n• Placing orders\n• Nutritional information\n\nWhat would you like to know?`;
+    return `AI is currently offline. 😴\n\nYou can still try:\n• **"menu"** — View today's meals\n• **"recommend"** — See top picks\n\nOr try again in a moment!`;
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputText.trim()) return;
 
     const userMessage: ChatMessage = {
@@ -187,22 +300,83 @@ const AIAssistantChat = ({
     setInputText('');
     setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
+    try {
+      let responseText: string;
+
+      if (geminiChat.isConfigured()) {
+        try {
+          responseText = await geminiChat.sendMessage(userMessage.content);
+        } catch (apiError) {
+          console.warn('Gemini API error:', apiError);
+          responseText = generateFallbackResponse(userMessage.content);
+        }
+      } else {
+        responseText = generateFallbackResponse(userMessage.content);
+      }
+
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: generateAIResponse(userMessage.content),
+        content: responseText,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Something went wrong — please try again! 😅',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 500);
+    }
   };
 
   const handleQuickQuestion = (question: string) => {
     setInputText(question);
-    setTimeout(() => handleSend(), 100);
+    setTimeout(async () => {
+      setInputText('');
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: question,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMessage]);
+      setIsTyping(true);
+      try {
+        let responseText: string;
+        if (geminiChat.isConfigured()) {
+          try {
+            responseText = await geminiChat.sendMessage(question);
+          } catch (apiError) {
+            console.warn('Gemini API error:', apiError);
+            responseText = generateFallbackResponse(question);
+          }
+        } else {
+          responseText = generateFallbackResponse(question);
+        }
+        const aiResponse: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: responseText,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, aiResponse]);
+      } catch {
+        const errorMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Something went wrong — please try again! 😅',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+      } finally {
+        setIsTyping(false);
+      }
+    }, 100);
   };
 
   useEffect(() => {
@@ -229,11 +403,11 @@ const AIAssistantChat = ({
           {/* Header */}
           <View style={chatStyles.header}>
             <View style={chatStyles.headerIcon}>
-              <Text style={chatStyles.headerIconText}>🤖</Text>
+              <Text style={chatStyles.headerIconText}>👵</Text>
             </View>
             <View style={chatStyles.headerText}>
-              <Text style={chatStyles.headerTitle}>TrayMate AI Assistant</Text>
-              <Text style={chatStyles.headerSubtitle}>{residentName}</Text>
+              <Text style={chatStyles.headerTitle}>GrannyGBT</Text>
+              <Text style={chatStyles.headerSubtitle}>Meal advisor for {residentName}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={chatStyles.closeButton}>
               <Text style={chatStyles.closeButtonText}>✕</Text>
@@ -241,36 +415,51 @@ const AIAssistantChat = ({
           </View>
 
           {/* Messages */}
-          <ScrollView 
+          <ScrollView
             ref={scrollViewRef}
             style={chatStyles.messagesContainer}
             contentContainerStyle={chatStyles.messagesContent}
           >
             {messages.map((message) => (
-              <View 
-                key={message.id} 
-                style={[
-                  chatStyles.messageBubble,
-                  message.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble
-                ]}
-              >
-                <Text style={[
-                  chatStyles.messageText,
-                  message.role === 'user' && chatStyles.userMessageText
-                ]}>
-                  {message.content}
-                </Text>
-                <Text style={[
-                  chatStyles.timestamp,
-                  message.role === 'user' && chatStyles.userTimestamp
-                ]}>
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
+              <View key={message.id}>
+                {message.role === 'assistant' && (
+                  <View style={chatStyles.avatarRow}>
+                    <View style={chatStyles.avatarBadge}>
+                      <Text style={chatStyles.avatarEmoji}>👵</Text>
+                    </View>
+                    <Text style={chatStyles.avatarLabel}>GrannyGBT</Text>
+                  </View>
+                )}
+                <View
+                  style={[
+                    chatStyles.messageBubble,
+                    message.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble
+                  ]}
+                >
+                  <ChatRichText
+                    text={message.content}
+                    isUser={message.role === 'user'}
+                  />
+                  <Text style={[
+                    chatStyles.timestamp,
+                    message.role === 'user' && chatStyles.userTimestamp
+                  ]}>
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
               </View>
             ))}
             {isTyping && (
-              <View style={[chatStyles.messageBubble, chatStyles.assistantBubble]}>
-                <Text style={chatStyles.typingText}>Typing...</Text>
+              <View>
+                <View style={chatStyles.avatarRow}>
+                  <View style={chatStyles.avatarBadge}>
+                    <Text style={chatStyles.avatarEmoji}>👵</Text>
+                  </View>
+                  <Text style={chatStyles.avatarLabel}>GrannyGBT</Text>
+                </View>
+                <View style={[chatStyles.messageBubble, chatStyles.assistantBubble]}>
+                  <Text style={chatStyles.typingText}>Thinking...</Text>
+                </View>
               </View>
             )}
           </ScrollView>
@@ -441,49 +630,74 @@ const mapped: Meal[] = serviceMeals.map((m) => ({
     return { bg: '#F3F4F6', text: '#374151' };
   };
 
-const renderMeal = ({ item }: { item: Meal }) => (
-  <TouchableOpacity 
-    style={styles.card}
-    activeOpacity={0.7}
-    onPress={() => addToCart(item as any)}
-  >
-      <Text style={styles.cardTitle}>{item.name}</Text>
-      
-      <View style={styles.timeBadge}>
-        <Text style={styles.timeBadgeText}>
-          {item.meal_period} • {item.time_range}
-        </Text>
-      </View>
-
-      <Text style={styles.cardDescription}>{item.description}</Text>
-
-      {item.tags?.length ? (
-        <View style={styles.tagRow}>
-          {item.tags.map((tag) => {
-            const tagStyle = getTagStyle(tag);
-            return (
-              <View 
-                key={tag} 
-                style={[styles.tag, { backgroundColor: tagStyle.bg }]}
-              >
-                <Text style={[styles.tagText, { color: tagStyle.text }]}>{tag}</Text>
-              </View>
-            );
-          })}
+const renderMeal = ({ item }: { item: Meal }) => {
+    const placeholder = getMealPlaceholder(item.name);
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={() => addToCart(item as any)}
+      >
+        {/* Meal Photo Placeholder */}
+        <View style={[styles.mealImageContainer, { backgroundColor: placeholder.bg }]}>
+          <Text style={styles.mealImageEmoji}>{placeholder.emoji}</Text>
+          <View style={styles.mealImageOverlay}>
+            <Text style={[styles.mealImageLabel, { color: placeholder.accent }]}>
+              {item.meal_period}
+            </Text>
+          </View>
         </View>
-      ) : null}
-    </TouchableOpacity>
-  );
+
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>{item.name}</Text>
+
+          <View style={styles.timeBadge}>
+            <Text style={styles.timeBadgeText}>
+              {item.meal_period} • {item.time_range}
+            </Text>
+          </View>
+
+          <Text style={styles.cardDescription}>{item.description}</Text>
+
+          {/* Nutrition Quick Info */}
+          <View style={styles.nutritionRow}>
+            <Text style={styles.nutritionItem}>🔥 {item.kcal} cal</Text>
+            <Text style={styles.nutritionItem}>🧂 {item.sodium_mg}mg</Text>
+            <Text style={styles.nutritionItem}>💪 {item.protein_g}g</Text>
+          </View>
+
+          {item.tags?.length ? (
+            <View style={styles.tagRow}>
+              {item.tags.map((tag) => {
+                const tagStyle = getTagStyle(tag);
+                return (
+                  <View
+                    key={tag}
+                    style={[styles.tag, { backgroundColor: tagStyle.bg }]}
+                  >
+                    <Text style={[styles.tagText, { color: tagStyle.text }]}>{tag}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const listHeader = (
     <View style={styles.header}>
       {/* Back Button & Title */}
       <View style={styles.titleRow}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()} 
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <View style={styles.backArrow}>
+            <View style={styles.backArrowLine1} />
+            <View style={styles.backArrowLine2} />
+          </View>
         </TouchableOpacity>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Available Menus</Text>
@@ -494,7 +708,7 @@ const renderMeal = ({ item }: { item: Meal }) => (
           style={styles.aiButton}
           onPress={() => setShowAIChat(true)}
         >
-          <Text style={styles.aiButtonText}>🤖</Text>
+          <Text style={styles.aiButtonText}>👵</Text>
         </TouchableOpacity>
       </View>
 
@@ -521,11 +735,11 @@ const renderMeal = ({ item }: { item: Meal }) => (
   const listFooter = (
     <View style={styles.aiRecommendation}>
       <View style={styles.aiRecommendationIcon}>
-        <Text style={styles.aiRecommendationIconText}>AI</Text>
+        <Text style={styles.aiRecommendationIconText}>👵</Text>
       </View>
       <View style={styles.aiRecommendationContent}>
         <Text style={styles.aiRecommendationTitle}>
-          AI Recommendation for {residentName}
+          Top Pick for {residentName}
         </Text>
         {recLoading ? (
           <ActivityIndicator color="#2563EB" size="small" />
@@ -595,6 +809,7 @@ const renderMeal = ({ item }: { item: Meal }) => (
         visible={showAIChat}
         onClose={() => setShowAIChat(false)}
         residentName={residentName}
+        residentId={residentId || ResidentService.getDefaultResident().id}
         meals={meals}
         recommendation={recommendation}
       />
@@ -630,9 +845,30 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: COLORS.surface,
   },
-  backButtonText: {
-    fontSize: 22,
-    color: COLORS.textMid,
+  backArrow: {
+    width: 12,
+    height: 12,
+    marginLeft: 2,
+  },
+  backArrowLine1: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 12,
+    height: 2,
+    backgroundColor: COLORS.textMid,
+    borderRadius: 1,
+    transform: [{ rotate: '-45deg' }, { translateX: -1 }, { translateY: 2 }],
+  },
+  backArrowLine2: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: 12,
+    height: 2,
+    backgroundColor: COLORS.textMid,
+    borderRadius: 1,
+    transform: [{ rotate: '45deg' }, { translateX: -1 }, { translateY: -2 }],
   },
   titleContainer: {
     flex: 1,
@@ -701,7 +937,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
     borderRadius: 18,
-    padding: 18,
     marginTop: 14,
     shadowColor: '#000',
     shadowOpacity: 0.05,
@@ -710,6 +945,32 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: COLORS.support,
+    overflow: 'hidden',
+  },
+  mealImageContainer: {
+    height: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  mealImageEmoji: {
+    fontSize: 56,
+  },
+  mealImageOverlay: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  mealImageLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cardContent: {
+    padding: 16,
   },
   cardTitle: {
     fontSize: 20,
@@ -734,7 +995,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textLight,
     lineHeight: 24,
+    marginBottom: 10,
+  },
+  nutritionRow: {
+    flexDirection: 'row',
+    gap: 14,
     marginBottom: 12,
+  },
+  nutritionItem: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textLight,
   },
   tagRow: {
     flexDirection: 'row',
@@ -772,9 +1043,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   aiRecommendationIconText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: 18,
   },
   aiRecommendationContent: {
     flex: 1,
@@ -921,6 +1190,29 @@ const chatStyles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  avatarBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f6a72d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 5,
+  },
+  avatarEmoji: {
+    fontSize: 12,
+  },
+  avatarLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#b77f3f',
   },
   messagesContainer: {
     flex: 1,
