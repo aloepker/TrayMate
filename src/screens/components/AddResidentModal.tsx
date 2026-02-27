@@ -8,7 +8,8 @@
  * - Submitting resident data to backend
  * - Closing modal on success
  */
-import { getAuthToken } from "@/services/storage"; //to get tokens
+//import { getAuthToken } from "@/services/storage"; //to get tokens
+import { getAuthToken } from "../../services/storage";
 
 import React, { useMemo, useState } from "react";
 import {
