@@ -1,438 +1,306 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Switch,
+  Alert,
+  Dimensions,
+} from 'react-native';
+import { useSettings, Language, TextSize } from './context/SettingsContext';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const PAD = 20;
+const GAP = 12;
+const LANG_W = (SCREEN_WIDTH - PAD * 2 - GAP) / 2;
+
+const LANGUAGES: { code: string; name: Language }[] = [
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'zh', name: '中文' },
+];
+
+const TEXT_SIZES: { key: TextSize; labelKey: 'small' | 'medium' | 'large' | 'extraLarge'; preview: number }[] = [
+  { key: 'small', labelKey: 'small', preview: 13 },
+  { key: 'medium', labelKey: 'medium', preview: 16 },
+  { key: 'large', labelKey: 'large', preview: 20 },
+  { key: 'xlarge', labelKey: 'extraLarge', preview: 24 },
+];
 
 function SettingsScreen({ navigation }: any) {
-  // State for language selection
-  const [selectedLanguage, setSelectedLanguage] = useState('English');
-
-  // State for dietary restrictions
-  const [dietaryRestrictions, setDietaryRestrictions] = useState({
-    lowSodium: true,
-    heartHealthy: true,
-    noShellfish: true,
-    vegetarian: false,
-    glutenFree: false,
-    dairyFree: false,
-    lowCarb: false,
-    highProtein: false,
-  });
-
-  // State for accessibility features
-  const [accessibility, setAccessibility] = useState({
-    highContrastMode: false,
-    largeTouchTargets: true,
-    screenReaderSupport: false,
-  });
-
-  // State for notification preferences
-  const [notifications, setNotifications] = useState({
-    mealReminders: true,
-    orderUpdates: true,
-    menuUpdates: false,
-  });
-
-  const toggleDietaryRestriction = (key: keyof typeof dietaryRestrictions) => {
-    setDietaryRestrictions(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  const toggleAccessibility = (key: keyof typeof accessibility) => {
-    setAccessibility(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  const toggleNotification = (key: keyof typeof notifications) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  const handleBack = () => {
-    navigation.goBack();
-  };
-
-  const languages = [
-    { code: 'en', name: 'English' },
-    { code: 'es', name: 'Español' },
-    { code: 'fr', name: 'Français' },
-    { code: 'zh', name: '中文' },
-  ];
+  const {
+    language: selectedLanguage,
+    setLanguage,
+    t,
+    textSize,
+    setTextSize,
+    scaled,
+    accessibility,
+    toggleAccessibility,
+    notifications,
+    toggleNotification,
+    theme,
+    getTouchTargetSize,
+  } = useSettings();
+  const touchTarget = getTouchTargetSize();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Text style={styles.backText}>← Back</Text>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { minHeight: touchTarget, justifyContent: 'center' }]}
+          accessibilityLabel={accessibility.screenReaderSupport ? t.back : undefined}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.backText, { fontSize: scaled(16), color: theme.accent }]}>{t.back}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={[styles.headerTitle, { fontSize: scaled(24), color: theme.textPrimary }]}>{t.settings}</Text>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Language Section */}
+        {/* ==================== LANGUAGE ==================== */}
         <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.language}</Text>
           <View style={styles.languageGrid}>
-            {languages.map((lang) => (
-              <TouchableOpacity
-                key={lang.code}
-                style={[
-                  styles.languageButton,
-                  selectedLanguage === lang.name && styles.languageButtonActive,
-                ]}
-                onPress={() => setSelectedLanguage(lang.name)}
-              >
-                <Text
-                  style={[
-                    styles.languageText,
-                    selectedLanguage === lang.name && styles.languageTextActive,
-                  ]}
+            {LANGUAGES.map((lang) => {
+              const active = selectedLanguage === lang.name;
+              return (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[styles.languageCard, active && styles.languageCardActive]}
+                  onPress={() => setLanguage(lang.name)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={accessibility.screenReaderSupport ? `${t.language}: ${lang.name}` : undefined}
                 >
-                  {lang.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.languageText,
+                      { fontSize: scaled(17) },
+                      active && styles.languageTextActive,
+                    ]}
+                  >
+                    {lang.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        {/* Accessibility Section */}
+        {/* ==================== TEXT SIZE ==================== */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionIcon}>🔤</Text>
+            <Text style={[styles.sectionTitle, { fontSize: scaled(14) }]}>{t.textSize}</Text>
+          </View>
+          <View style={styles.card}>
+            {/* Preview text */}
+            <Text style={[styles.previewText, { fontSize: scaled(16), color: theme.textPrimary }]}>
+              Aa — {t.textSize}
+            </Text>
+            {/* Size buttons */}
+            <View style={styles.textSizeRow}>
+              {TEXT_SIZES.map((size) => {
+                const active = textSize === size.key;
+                return (
+                  <TouchableOpacity
+                    key={size.key}
+                    style={[styles.textSizeButton, active && styles.textSizeButtonActive]}
+                    onPress={() => setTextSize(size.key)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.textSizePreview,
+                        { fontSize: size.preview },
+                        active && styles.textSizePreviewActive,
+                      ]}
+                    >
+                      A
+                    </Text>
+                    <Text
+                      style={[
+                        styles.textSizeLabel,
+                        active && styles.textSizeLabelActive,
+                      ]}
+                    >
+                      {t[size.labelKey]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* ==================== ACCESSIBILITY ==================== */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionIcon}>👁</Text>
-            <Text style={styles.sectionTitle}>Accessibility</Text>
+            <Text style={[styles.sectionTitle, { fontSize: scaled(14) }]}>{t.accessibility}</Text>
           </View>
           <View style={styles.card}>
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>High Contrast Mode</Text>
-                <Text style={styles.switchDescription}>Increase contrast for better visibility</Text>
-              </View>
-              <Switch
-                value={accessibility.highContrastMode}
-                onValueChange={() => toggleAccessibility('highContrastMode')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={accessibility.highContrastMode ? '#717644' : '#FFFFFF'}
-              />
-            </View>
+            <SettingSwitch
+              label={t.highContrast}
+              description={t.highContrastDesc}
+              value={accessibility.highContrastMode}
+              onToggle={() => toggleAccessibility('highContrastMode')}
+              fontSize={scaled(16)}
+              descFontSize={scaled(13)}
+              minHeight={touchTarget}
+            />
             <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Large Touch Targets</Text>
-                <Text style={styles.switchDescription}>Make buttons and links easier to tap</Text>
-              </View>
-              <Switch
-                value={accessibility.largeTouchTargets}
-                onValueChange={() => toggleAccessibility('largeTouchTargets')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={accessibility.largeTouchTargets ? '#717644' : '#FFFFFF'}
-              />
-            </View>
+            <SettingSwitch
+              label={t.largeTouchTargets}
+              description={t.largeTouchTargetsDesc}
+              value={accessibility.largeTouchTargets}
+              onToggle={() => toggleAccessibility('largeTouchTargets')}
+              fontSize={scaled(16)}
+              descFontSize={scaled(13)}
+              minHeight={touchTarget}
+            />
             <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Screen Reader Support</Text>
-                <Text style={styles.switchDescription}>Enhanced compatibility with screen readers</Text>
-              </View>
-              <Switch
-                value={accessibility.screenReaderSupport}
-                onValueChange={() => toggleAccessibility('screenReaderSupport')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={accessibility.screenReaderSupport ? '#717644' : '#FFFFFF'}
-              />
-            </View>
+            <SettingSwitch
+              label={t.screenReader}
+              description={t.screenReaderDesc}
+              value={accessibility.screenReaderSupport}
+              onToggle={() => toggleAccessibility('screenReaderSupport')}
+              fontSize={scaled(16)}
+              descFontSize={scaled(13)}
+              minHeight={touchTarget}
+            />
           </View>
         </View>
 
-        {/* Dietary Restrictions Section */}
+        {/* ==================== DIETARY (Read-Only) ==================== */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitleStandalone}>Dietary Restrictions</Text>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.dietaryRestrictions}</Text>
           <View style={styles.card}>
             <View style={styles.pillContainer}>
-              {dietaryRestrictions.lowSodium && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>Low Sodium</Text>
-                </View>
-              )}
-              {dietaryRestrictions.heartHealthy && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>Heart Healthy</Text>
-                </View>
-              )}
-              {dietaryRestrictions.noShellfish && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>No Shellfish</Text>
-                </View>
-              )}
-              {dietaryRestrictions.vegetarian && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>Vegetarian</Text>
-                </View>
-              )}
-              {dietaryRestrictions.glutenFree && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>Gluten Free</Text>
-                </View>
-              )}
-              {dietaryRestrictions.dairyFree && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>Dairy Free</Text>
-                </View>
-              )}
-              {dietaryRestrictions.lowCarb && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>Low Carb</Text>
-                </View>
-              )}
-              {dietaryRestrictions.highProtein && (
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>High Protein</Text>
-                </View>
-              )}
+              <View style={styles.activePill}><Text style={[styles.activePillText, { fontSize: scaled(13) }]}>Low Sodium</Text></View>
+              <View style={styles.activePill}><Text style={[styles.activePillText, { fontSize: scaled(13) }]}>Heart Healthy</Text></View>
+              <View style={styles.activePill}><Text style={[styles.activePillText, { fontSize: scaled(13) }]}>No Shellfish</Text></View>
             </View>
-            
-            <TouchableOpacity style={styles.editButton}>
-              <Text style={styles.editButtonText}>Edit Restrictions</Text>
-            </TouchableOpacity>
+            <View style={styles.caregiverNotice}>
+              <Text style={styles.caregiverIcon}>🔒</Text>
+              <Text style={[styles.caregiverText, { fontSize: scaled(13) }]}>
+                {t.managedByCaregiver}
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* Quick Actions Section */}
+        {/* ==================== NOTIFICATIONS ==================== */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitleStandalone}>Quick Actions</Text>
-          
-          {/* Browse Menus Card */}
-          <TouchableOpacity 
-            style={styles.actionCard}
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.notifications}</Text>
+          <View style={styles.card}>
+            <SettingSwitch
+              label={t.mealReminders}
+              description={t.mealRemindersDesc}
+              value={notifications.mealReminders}
+              onToggle={() => toggleNotification('mealReminders')}
+              fontSize={scaled(16)}
+              descFontSize={scaled(13)}
+              minHeight={touchTarget}
+            />
+            <View style={styles.divider} />
+            <SettingSwitch
+              label={t.orderUpdates}
+              description={t.orderUpdatesDesc}
+              value={notifications.orderUpdates}
+              onToggle={() => toggleNotification('orderUpdates')}
+              fontSize={scaled(16)}
+              descFontSize={scaled(13)}
+              minHeight={touchTarget}
+            />
+            <View style={styles.divider} />
+            <SettingSwitch
+              label={t.menuUpdates}
+              description={t.menuUpdatesDesc}
+              value={notifications.menuUpdates}
+              onToggle={() => toggleNotification('menuUpdates')}
+              fontSize={scaled(16)}
+              descFontSize={scaled(13)}
+              minHeight={touchTarget}
+            />
+          </View>
+        </View>
+
+        {/* ==================== QUICK ACTIONS ==================== */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.quickActions}</Text>
+
+          <ActionRow
+            icon="☰" bg="#E8DCC8"
+            title={t.browseMenus} desc={t.browseMenusDesc}
+            fontSize={scaled(16)} descFontSize={scaled(13)}
+            minHeight={touchTarget}
             onPress={() => navigation.navigate('BrowseMealOptions')}
-          >
-            <View style={styles.actionIcon}>
-              <Text style={styles.iconText}>☰</Text>
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Browse Menus</Text>
-              <Text style={styles.actionDescription}>View daily specials and seasonal menus</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          {/* Order History Card */}
-          <TouchableOpacity style={styles.actionCard}>
-            <View style={[styles.actionIcon, styles.actionIconGreen]}>
-              <Text style={styles.iconText}>⟲</Text>
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Order History</Text>
-              <Text style={styles.actionDescription}>View past meal orders</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          {/* Upcoming Meals Card */}
-          <TouchableOpacity
-            style={styles.actionCard}
+          />
+          <ActionRow
+            icon="⟲" bg="#D8E4D0"
+            title={t.orderHistory} desc={t.orderHistoryDesc}
+            fontSize={scaled(16)} descFontSize={scaled(13)}
+            minHeight={touchTarget}
             onPress={() => navigation.navigate('UpcomingMeals')}
-          >
-            <View style={[styles.actionIcon, styles.actionIconOrange]}>
-              <Text style={styles.iconText}>🕐</Text>
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Upcoming Meals</Text>
-              <Text style={styles.actionDescription}>View confirmed and pending meals</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          {/* AI Meal Assistant Card */}
-          <TouchableOpacity
-            style={styles.actionCard}
+          />
+          <ActionRow
+            icon="🕐" bg="#F6D7B8"
+            title={t.upcomingMeals} desc={t.upcomingMealsDesc}
+            fontSize={scaled(16)} descFontSize={scaled(13)}
+            minHeight={touchTarget}
+            onPress={() => navigation.navigate('UpcomingMeals')}
+          />
+          <ActionRow
+            icon="AI" bg="#E8DCC8" isText
+            title={t.aiAssistant} desc={t.aiAssistantDesc}
+            fontSize={scaled(16)} descFontSize={scaled(13)}
+            minHeight={touchTarget}
             onPress={() => navigation.navigate('AIMealAssistant')}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: '#E8DCC8' }]}>
-              <Text style={styles.iconText}>AI</Text>
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>AI Meal Assistant</Text>
-              <Text style={styles.actionDescription}>Get personalized meal suggestions</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
+          />
         </View>
 
-        {/* Dietary Preferences Management */}
+        {/* ==================== ACCOUNT ==================== */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitleStandalone}>Manage Dietary Preferences</Text>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.account}</Text>
           <View style={styles.card}>
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Low Sodium</Text>
-              <Switch
-                value={dietaryRestrictions.lowSodium}
-                onValueChange={() => toggleDietaryRestriction('lowSodium')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.lowSodium ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Heart Healthy</Text>
-              <Switch
-                value={dietaryRestrictions.heartHealthy}
-                onValueChange={() => toggleDietaryRestriction('heartHealthy')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.heartHealthy ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>No Shellfish</Text>
-              <Switch
-                value={dietaryRestrictions.noShellfish}
-                onValueChange={() => toggleDietaryRestriction('noShellfish')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.noShellfish ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Vegetarian</Text>
-              <Switch
-                value={dietaryRestrictions.vegetarian}
-                onValueChange={() => toggleDietaryRestriction('vegetarian')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.vegetarian ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Gluten Free</Text>
-              <Switch
-                value={dietaryRestrictions.glutenFree}
-                onValueChange={() => toggleDietaryRestriction('glutenFree')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.glutenFree ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Dairy Free</Text>
-              <Switch
-                value={dietaryRestrictions.dairyFree}
-                onValueChange={() => toggleDietaryRestriction('dairyFree')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.dairyFree ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Low Carb</Text>
-              <Switch
-                value={dietaryRestrictions.lowCarb}
-                onValueChange={() => toggleDietaryRestriction('lowCarb')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.lowCarb ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>High Protein</Text>
-              <Switch
-                value={dietaryRestrictions.highProtein}
-                onValueChange={() => toggleDietaryRestriction('highProtein')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={dietaryRestrictions.highProtein ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Notification Preferences */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitleStandalone}>Notifications</Text>
-          <View style={styles.card}>
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Meal Reminders</Text>
-                <Text style={styles.switchDescription}>Get notified before meal times</Text>
-              </View>
-              <Switch
-                value={notifications.mealReminders}
-                onValueChange={() => toggleNotification('mealReminders')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={notifications.mealReminders ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Order Updates</Text>
-                <Text style={styles.switchDescription}>Updates on meal confirmations</Text>
-              </View>
-              <Switch
-                value={notifications.orderUpdates}
-                onValueChange={() => toggleNotification('orderUpdates')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={notifications.orderUpdates ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-            <View style={styles.divider} />
-
-            <View style={styles.switchRow}>
-              <View style={styles.switchTextContainer}>
-                <Text style={styles.switchLabel}>Menu Updates</Text>
-                <Text style={styles.switchDescription}>New seasonal items and specials</Text>
-              </View>
-              <Switch
-                value={notifications.menuUpdates}
-                onValueChange={() => toggleNotification('menuUpdates')}
-                trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-                thumbColor={notifications.menuUpdates ? '#717644' : '#FFFFFF'}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Account Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitleStandalone}>Account</Text>
-          <View style={styles.card}>
-            <TouchableOpacity style={styles.accountRow}>
-              <Text style={styles.accountLabel}>Edit Resident Information</Text>
+            <TouchableOpacity
+              style={[styles.accountRow, { minHeight: touchTarget }]}
+              onPress={() => Alert.alert(t.deliveryPrefs, 'Coming soon.')}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.deliveryPrefs}</Text>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
             <View style={styles.divider} />
 
-            <TouchableOpacity style={styles.accountRow}>
-              <Text style={styles.accountLabel}>Delivery Preferences</Text>
+            <TouchableOpacity
+              style={[styles.accountRow, { minHeight: touchTarget }]}
+              onPress={() => Alert.alert(t.supportHelp, 'Contact your facility staff.')}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.supportHelp}</Text>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
             <View style={styles.divider} />
 
-            <TouchableOpacity style={styles.accountRow}>
-              <Text style={styles.accountLabel}>Support & Help</Text>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-            <View style={styles.divider} />
-
-            <TouchableOpacity style={styles.accountRow}>
-              <Text style={[styles.accountLabel, styles.logoutText]}>Log Out</Text>
+            <TouchableOpacity
+              style={[styles.accountRow, { minHeight: touchTarget }]}
+              onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.danger }]}>{t.logOut}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -440,6 +308,78 @@ function SettingsScreen({ navigation }: any) {
     </View>
   );
 }
+
+// ---------- Reusable Switch Row ----------
+
+const SettingSwitch = ({
+  label,
+  description,
+  value,
+  onToggle,
+  fontSize,
+  descFontSize,
+  minHeight,
+}: {
+  label: string;
+  description: string;
+  value: boolean;
+  onToggle: () => void;
+  fontSize: number;
+  descFontSize: number;
+  minHeight: number;
+}) => (
+  <View style={[styles.switchRow, { minHeight }]}>
+    <View style={styles.switchTextContainer}>
+      <Text style={[styles.switchLabel, { fontSize }]}>{label}</Text>
+      <Text style={[styles.switchDescription, { fontSize: descFontSize }]}>{description}</Text>
+    </View>
+    <Switch
+      value={value}
+      onValueChange={onToggle}
+      trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
+      thumbColor={value ? '#717644' : '#FFFFFF'}
+    />
+  </View>
+);
+
+// ---------- Reusable Action Row ----------
+
+const ActionRow = ({
+  icon,
+  bg,
+  title,
+  desc,
+  onPress,
+  fontSize,
+  descFontSize,
+  isText,
+  minHeight,
+}: {
+  icon: string;
+  bg: string;
+  title: string;
+  desc: string;
+  onPress: () => void;
+  fontSize: number;
+  descFontSize: number;
+  isText?: boolean;
+  minHeight: number;
+}) => (
+  <TouchableOpacity style={[styles.actionCard, { minHeight }]} onPress={onPress} activeOpacity={0.7}>
+    <View style={[styles.actionIcon, { backgroundColor: bg }]}>
+      <Text style={[styles.actionIconText, isText && { fontSize: 16, fontWeight: '700' as const }]}>
+        {icon}
+      </Text>
+    </View>
+    <View style={styles.actionContent}>
+      <Text style={[styles.actionTitle, { fontSize }]}>{title}</Text>
+      <Text style={[styles.actionDesc, { fontSize: descFontSize }]}>{desc}</Text>
+    </View>
+    <Text style={styles.chevron}>›</Text>
+  </TouchableOpacity>
+);
+
+// ---------- Styles ----------
 
 const styles = StyleSheet.create({
   container: {
@@ -451,23 +391,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: PAD,
+    paddingBottom: 16,
   },
   backButton: {
-    padding: 8,
+    paddingVertical: 8,
+    paddingRight: 12,
   },
   backText: {
-    fontSize: 16,
     color: '#717644',
     fontWeight: '600',
   },
   headerTitle: {
-    fontSize: 24,
     fontWeight: '700',
     color: '#4A4A4A',
-    flex: 1,
-    textAlign: 'center',
   },
   placeholder: {
     width: 60,
@@ -476,179 +413,215 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: PAD,
+    paddingBottom: 40,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 28,
+  },
+  sectionLabel: {
+    fontWeight: '600',
+    color: '#8A8A8A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sectionIcon: {
-    fontSize: 22,
+    fontSize: 20,
     marginRight: 8,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#4A4A4A',
-  },
-  sectionTitleStandalone: {
-    fontSize: 16,
     fontWeight: '600',
     color: '#8A8A8A',
-    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
+  // Language Grid
   languageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'space-between',
+    rowGap: GAP,
   },
-  languageButton: {
-    flex: 1,
-    minWidth: '47%',
+  languageCard: {
+    width: LANG_W,
     backgroundColor: '#FFFFFF',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: 22,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#E8E4DE',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
-  languageButtonActive: {
+  languageCardActive: {
     backgroundColor: '#2A2A2A',
     borderColor: '#2A2A2A',
   },
   languageText: {
-    fontSize: 17,
     fontWeight: '600',
     color: '#4A4A4A',
   },
   languageTextActive: {
     color: '#FFFFFF',
   },
+  // Text Size
+  previewText: {
+    color: '#4A4A4A',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  textSizeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  textSizeButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#F5F3EF',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  textSizeButtonActive: {
+    backgroundColor: '#E8DCC8',
+    borderColor: '#717644',
+  },
+  textSizePreview: {
+    fontWeight: '700',
+    color: '#8A8A8A',
+    marginBottom: 4,
+  },
+  textSizePreviewActive: {
+    color: '#717644',
+  },
+  textSizeLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8A8A8A',
+  },
+  textSizeLabelActive: {
+    color: '#717644',
+  },
+  // Cards
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 16,
+    padding: 18,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
+  // Dietary Pills (read-only)
   pillContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   activePill: {
     backgroundColor: '#E8DCC8',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
   },
   activePillText: {
-    fontSize: 14,
     fontWeight: '600',
     color: '#717644',
   },
-  editButton: {
-    backgroundColor: '#F5F3EF',
-    paddingVertical: 14,
+  caregiverNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF9F0',
+    padding: 12,
     borderRadius: 12,
-    alignItems: 'center',
+    gap: 8,
   },
-  editButtonText: {
+  caregiverIcon: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#4A4A4A',
+    marginTop: 1,
   },
+  caregiverText: {
+    flex: 1,
+    color: '#8A7A5A',
+    lineHeight: 20,
+  },
+  // Action Cards
   actionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E8DCC8',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
-  actionIconGreen: {
-    backgroundColor: '#D8E4D0',
-  },
-  actionIconOrange: {
-    backgroundColor: '#F6D7B8',
-  },
-  iconText: {
-    fontSize: 24,
+  actionIconText: {
+    fontSize: 22,
     color: '#717644',
   },
   actionContent: {
     flex: 1,
   },
   actionTitle: {
-    fontSize: 17,
     fontWeight: '600',
     color: '#4A4A4A',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  actionDescription: {
-    fontSize: 14,
+  actionDesc: {
     color: '#8A8A8A',
   },
   chevron: {
-    fontSize: 28,
+    fontSize: 26,
     color: '#cbc2b4',
     fontWeight: '300',
   },
+  // Switch Rows
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   switchTextContainer: {
     flex: 1,
     marginRight: 12,
   },
   switchLabel: {
-    fontSize: 16,
     fontWeight: '500',
     color: '#4A4A4A',
   },
   switchDescription: {
-    fontSize: 13,
     color: '#9A9A9A',
     marginTop: 2,
   },
   divider: {
     height: 1,
-    backgroundColor: '#F5F3EF',
-    marginVertical: 8,
+    backgroundColor: '#F0EDE8',
+    marginVertical: 6,
   },
+  // Account
   accountRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -656,12 +629,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   accountLabel: {
-    fontSize: 16,
     fontWeight: '500',
     color: '#4A4A4A',
-  },
-  logoutText: {
-    color: '#d27028',
   },
 });
 

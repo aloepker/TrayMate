@@ -5,9 +5,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useCart } from './context/CartContext';
 import type { Order } from './context/CartContext';
+import { useSettings } from './context/SettingsContext';
+import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 
 // Emoji placeholders for meals (same as browse screen)
 const MEAL_EMOJIS: Record<string, string> = {
@@ -25,45 +28,47 @@ const MEAL_EMOJIS: Record<string, string> = {
   'Oatmeal Bowl': '🥣',
 };
 
-const STATUS_CONFIG: Record<
-  Order['status'],
-  { label: string; color: string; bg: string; icon: string; progress: number }
-> = {
-  confirmed: {
-    label: 'Confirmed',
-    color: '#1d4ed8',
-    bg: '#dbeafe',
-    icon: '✓',
-    progress: 0.25,
-  },
-  preparing: {
-    label: 'Preparing',
-    color: '#b45309',
-    bg: '#fef3c7',
-    icon: '🍳',
-    progress: 0.5,
-  },
-  ready: {
-    label: 'Ready',
-    color: '#15803d',
-    bg: '#dcfce7',
-    icon: '✓',
-    progress: 0.75,
-  },
-  completed: {
-    label: 'Completed',
-    color: '#166534',
-    bg: '#bbf7d0',
-    icon: '✓',
-    progress: 1.0,
-  },
-};
-
-const STATUS_STEPS = ['Confirmed', 'Preparing', 'Ready', 'Completed'] as const;
-
 function UpcomingMealsScreen({ navigation }: any) {
   const { orders, updateOrderStatus } = useCart();
+  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const statusConfig: Record<
+    Order['status'],
+    { label: string; color: string; bg: string; icon: string; progress: number }
+  > = {
+    confirmed: {
+      label: t.confirmed,
+      color: '#1d4ed8',
+      bg: '#dbeafe',
+      icon: '✓',
+      progress: 0.25,
+    },
+    preparing: {
+      label: t.preparing,
+      color: '#b45309',
+      bg: '#fef3c7',
+      icon: '🍳',
+      progress: 0.5,
+    },
+    ready: {
+      label: t.ready,
+      color: '#15803d',
+      bg: '#dcfce7',
+      icon: '✓',
+      progress: 0.75,
+    },
+    completed: {
+      label: t.completed,
+      color: '#166534',
+      bg: '#bbf7d0',
+      icon: '✓',
+      progress: 1.0,
+    },
+  };
+
+  const statusSteps = [t.confirmed, t.preparing, t.ready, t.completed];
 
   const toggleExpand = (id: string) => {
     setExpandedId((curr) => (curr === id ? null : id));
@@ -87,10 +92,10 @@ function UpcomingMealsScreen({ navigation }: any) {
   const formatDate = (date: Date) => {
     const d = new Date(date);
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === today.toDateString()) return t.today;
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
-    if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    if (d.toDateString() === tomorrow.toDateString()) return t.tomorrow;
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
@@ -104,7 +109,11 @@ function UpcomingMealsScreen({ navigation }: any) {
     ];
     const currentIndex = statusOrder.indexOf(order.status);
     if (currentIndex < statusOrder.length - 1) {
-      updateOrderStatus(order.id, statusOrder[currentIndex + 1]);
+      const nextStatus = statusOrder[currentIndex + 1];
+      updateOrderStatus(order.id, nextStatus);
+      if (notifications.orderUpdates) {
+        Alert.alert(t.orderUpdates, `${t.upcomingMeals}: ${statusConfig[nextStatus].label}`);
+      }
     }
   };
 
@@ -112,17 +121,17 @@ function UpcomingMealsScreen({ navigation }: any) {
   const completedOrders = orders.filter((o) => o.status === 'completed');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={[styles.backButton, { minHeight: touchTarget, minWidth: touchTarget }]}>
           <View style={styles.backArrow}>
             <View style={styles.backArrowLine1} />
             <View style={styles.backArrowLine2} />
           </View>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Upcoming Meals</Text>
+        <Text style={[styles.headerTitle, { fontSize: scaled(24) }]}>{t.upcomingMeals}</Text>
         <TouchableOpacity
-          style={styles.settingsButton}
+          style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
           onPress={handleSettings}
         >
           <Text style={styles.settingsIcon}>⚙</Text>
@@ -137,26 +146,31 @@ function UpcomingMealsScreen({ navigation }: any) {
         {orders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>No upcoming meals</Text>
-            <Text style={styles.emptyText}>
-              Order meals from the browse menu to see them here
+            <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
+            <Text style={[styles.emptyText, { fontSize: scaled(15), lineHeight: scaled(22) }]}>
+              {t.noUpcomingDesc}
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
               onPress={() => navigation.navigate('BrowseMealOptions')}
             >
-              <Text style={styles.browseButtonText}>Browse Menu</Text>
+              <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
+            {notifications.mealReminders && activeOrders.length > 0 && (
+              <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <Text style={{ color: '#92400E', fontWeight: '600', fontSize: scaled(13) }}>{t.mealReminders}: {t.mealRemindersDesc}</Text>
+              </View>
+            )}
             {/* Active Orders */}
             {activeOrders.length > 0 && (
               <>
-                <Text style={styles.sectionHeader}>Active Orders</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(16) }]}>{t.activeOrdersLabel}</Text>
                 {activeOrders.map((order) => {
                   const expanded = expandedId === order.id;
-                  const statusInfo = STATUS_CONFIG[order.status];
+                  const statusInfo = statusConfig[order.status];
 
                   return (
                     <TouchableOpacity
@@ -179,12 +193,11 @@ function UpcomingMealsScreen({ navigation }: any) {
                           />
                         </View>
                         <View style={styles.progressSteps}>
-                          {STATUS_STEPS.map((step, i) => {
-                            const stepProgress = (i + 1) / STATUS_STEPS.length;
+                          {statusSteps.map((step, i) => {
+                            const stepProgress = (i + 1) / statusSteps.length;
                             const isActive =
                               statusInfo.progress >= stepProgress;
-                            const isCurrent =
-                              step.toLowerCase() === order.status;
+                            const isCurrent = step === statusInfo.label;
                             return (
                               <View key={step} style={styles.progressStep}>
                                 <View
@@ -206,6 +219,7 @@ function UpcomingMealsScreen({ navigation }: any) {
                                 <Text
                                   style={[
                                     styles.progressStepLabel,
+                                    { fontSize: scaled(10) },
                                     isCurrent && {
                                       color: statusInfo.color,
                                       fontWeight: '700',
@@ -223,7 +237,7 @@ function UpcomingMealsScreen({ navigation }: any) {
                       {/* Order header */}
                       <View style={styles.mealHeader}>
                         <View style={styles.mealInfo}>
-                          <Text style={styles.orderLabel}>
+                          <Text style={[styles.orderLabel, { fontSize: scaled(14) }]}>
                             {formatDate(order.placedAt)} ·{' '}
                             {formatTime(order.placedAt)}
                           </Text>
@@ -236,6 +250,7 @@ function UpcomingMealsScreen({ navigation }: any) {
                             <Text
                               style={[
                                 styles.statusText,
+                                { fontSize: scaled(12) },
                                 { color: statusInfo.color },
                               ]}
                             >
@@ -243,7 +258,7 @@ function UpcomingMealsScreen({ navigation }: any) {
                             </Text>
                           </View>
                         </View>
-                        <Text style={styles.chevron}>
+                        <Text style={[styles.chevron, { fontSize: scaled(24) }]}>
                           {expanded ? '‹' : '›'}
                         </Text>
                       </View>
@@ -255,12 +270,14 @@ function UpcomingMealsScreen({ navigation }: any) {
                             {MEAL_EMOJIS[item.name] || '🍽'}
                           </Text>
                           <View style={styles.mealRowInfo}>
-                            <Text style={styles.mealName}>{item.name}</Text>
-                            <Text style={styles.mealPeriod}>
-                              {item.meal_period}
+                            <Text style={[styles.mealName, { fontSize: scaled(16) }]}>
+                              {translateMealName(item.name, language)}
+                            </Text>
+                            <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
+                              {translateMealPeriod(item.meal_period, language)}
                             </Text>
                           </View>
-                          <Text style={styles.mealCal}>{item.kcal} cal</Text>
+                          <Text style={[styles.mealCal, { fontSize: scaled(14) }]}>{item.kcal} {t.calories}</Text>
                         </View>
                       ))}
 
@@ -271,32 +288,32 @@ function UpcomingMealsScreen({ navigation }: any) {
 
                           {/* Nutrition summary */}
                           <View style={styles.nutritionSection}>
-                            <Text style={styles.nutritionTitle}>
-                              Order Nutrition
+                            <Text style={[styles.nutritionTitle, { fontSize: scaled(13) }]}>
+                              {t.orderNutrition}
                             </Text>
                             <View style={styles.nutritionGrid}>
                               <View style={styles.nutritionItem}>
-                                <Text style={styles.nutritionValue}>
+                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>
                                   {order.totalNutrition.calories}
                                 </Text>
-                                <Text style={styles.nutritionLabel}>
-                                  calories
+                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>
+                                  {t.calories}
                                 </Text>
                               </View>
                               <View style={styles.nutritionItem}>
-                                <Text style={styles.nutritionValue}>
+                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>
                                   {order.totalNutrition.sodium}mg
                                 </Text>
-                                <Text style={styles.nutritionLabel}>
-                                  sodium
+                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>
+                                  {t.sodium}
                                 </Text>
                               </View>
                               <View style={styles.nutritionItem}>
-                                <Text style={styles.nutritionValue}>
+                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>
                                   {order.totalNutrition.protein}g
                                 </Text>
-                                <Text style={styles.nutritionLabel}>
-                                  protein
+                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>
+                                  {t.protein}
                                 </Text>
                               </View>
                             </View>
@@ -311,12 +328,12 @@ function UpcomingMealsScreen({ navigation }: any) {
                               ]}
                               onPress={() => advanceStatus(order)}
                             >
-                              <Text style={styles.advanceButtonText}>
+                              <Text style={[styles.advanceButtonText, { fontSize: scaled(15) }]}>
                                 {order.status === 'confirmed'
-                                  ? 'Start Preparing'
+                                  ? t.startPreparing
                                   : order.status === 'preparing'
-                                    ? 'Mark as Ready'
-                                    : 'Mark as Completed'}
+                                    ? t.markReady
+                                    : t.markCompleted}
                               </Text>
                             </TouchableOpacity>
                           )}
@@ -331,16 +348,16 @@ function UpcomingMealsScreen({ navigation }: any) {
             {/* Completed Orders */}
             {completedOrders.length > 0 && (
               <>
-                <Text style={styles.sectionHeader}>Completed</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(16) }]}>{t.completed}</Text>
                 {completedOrders.map((order) => (
                   <View key={order.id} style={styles.completedCard}>
                     <View style={styles.completedHeader}>
                       <View style={styles.completedBadge}>
-                        <Text style={styles.completedBadgeText}>
-                          ✓ Completed
+                        <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>
+                          ✓ {t.completed}
                         </Text>
                       </View>
-                      <Text style={styles.completedTime}>
+                      <Text style={[styles.completedTime, { fontSize: scaled(13) }]}>
                         {formatDate(order.placedAt)}
                       </Text>
                     </View>
@@ -352,8 +369,8 @@ function UpcomingMealsScreen({ navigation }: any) {
                         <Text style={styles.mealEmoji}>
                           {MEAL_EMOJIS[item.name] || '🍽'}
                         </Text>
-                        <Text style={styles.completedMealName}>
-                          {item.name}
+                        <Text style={[styles.completedMealName, { fontSize: scaled(15) }]}>
+                          {translateMealName(item.name, language)}
                         </Text>
                       </View>
                     ))}
@@ -361,8 +378,8 @@ function UpcomingMealsScreen({ navigation }: any) {
                     <View style={styles.completionBar}>
                       <View style={styles.completionFill} />
                     </View>
-                    <Text style={styles.completionText}>
-                      Meal completed
+                    <Text style={[styles.completionText, { fontSize: scaled(13) }]}>
+                      {t.mealCompleted}
                     </Text>
                   </View>
                 ))}

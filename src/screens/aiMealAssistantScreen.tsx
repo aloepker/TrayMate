@@ -17,7 +17,13 @@ import {
   RecommendationService,
   Meal as ServiceMeal,
 } from '../services/localDataService';
+import {
+  translateMealName,
+  translateMealPeriod,
+  translateMealTimeRange,
+} from '../services/mealLocalization';
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
+import { useSettings } from './context/SettingsContext';
 
 // ---------- TrayMate Color Palette ----------
 const COLORS = {
@@ -61,13 +67,16 @@ const RichText = ({
   text,
   isUser,
   allMeals,
+  scaled,
+  language,
 }: {
   text: string;
   isUser: boolean;
   allMeals: ServiceMeal[];
+  scaled: (base: number) => number;
+  language: 'English' | 'Español' | 'Français' | '中文';
 }) => {
   const lines = text.split('\n');
-  const mealNames = allMeals.map(m => m.name);
 
   return (
     <View>
@@ -76,10 +85,12 @@ const RichText = ({
         const mealCardMatch = line.match(
           /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
         );
+        const requestedMealName = mealCardMatch?.[1].toLowerCase().trim();
         const matchedMeal = mealCardMatch
           ? allMeals.find(
               m =>
-                m.name.toLowerCase() === mealCardMatch[1].toLowerCase().trim(),
+                m.name.toLowerCase() === requestedMealName ||
+                translateMealName(m.name, language).toLowerCase() === requestedMealName,
             )
           : null;
 
@@ -91,11 +102,13 @@ const RichText = ({
                 <Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>
               </View>
               <View style={richStyles.mealCardInfo}>
-                <Text style={richStyles.mealCardName}>{matchedMeal.name}</Text>
-                <Text style={richStyles.mealCardMeta}>
-                  {matchedMeal.mealPeriod} · {matchedMeal.timeRange}
+                <Text style={[richStyles.mealCardName, { fontSize: scaled(15) }]}>
+                  {translateMealName(matchedMeal.name, language)}
                 </Text>
-                <Text style={richStyles.mealCardNutrition}>
+                <Text style={[richStyles.mealCardMeta, { fontSize: scaled(12) }]}>
+                  {translateMealPeriod(matchedMeal.mealPeriod, language)} · {translateMealTimeRange(matchedMeal.timeRange, language)}
+                </Text>
+                <Text style={[richStyles.mealCardNutrition, { fontSize: scaled(11) }]}>
                   {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium · {matchedMeal.nutrition.protein} protein
                 </Text>
               </View>
@@ -128,6 +141,7 @@ const RichText = ({
                     key={pi}
                     style={[
                       richStyles.text,
+                      { fontSize: scaled(15), lineHeight: scaled(22) },
                       richStyles.bold,
                       isUser && richStyles.textUser,
                     ]}
@@ -139,7 +153,7 @@ const RichText = ({
               return (
                 <Text
                   key={pi}
-                  style={[richStyles.text, isUser && richStyles.textUser]}
+                  style={[richStyles.text, { fontSize: scaled(15), lineHeight: scaled(22) }, isUser && richStyles.textUser]}
                 >
                   {part}
                 </Text>
@@ -221,15 +235,10 @@ type ChatMessage = {
   timestamp: Date;
 };
 
-const QUICK_QUESTIONS = [
-  "What's on the menu today?",
-  'Recommend a meal',
-  'View dietary restrictions',
-  'What meals are low sodium?',
-];
-
 // ---------- Main Screen ----------
 const AIMealAssistantScreen = ({ navigation, route }: any) => {
+  const { t, scaled, language, getTouchTargetSize, theme } = useSettings();
+  const touchTarget = getTouchTargetSize();
   const residentId =
     (route?.params?.residentId as string | undefined) ||
     ResidentService.getDefaultResident().id;
@@ -243,6 +252,12 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const QUICK_QUESTIONS = [
+    t.whatsOnMenuToday,
+    t.recommendAMeal,
+    t.viewDietaryRestrictionsPrompt,
+    t.whatMealsLowSodium,
+  ];
 
   // Initialize chat service on mount
   useEffect(() => {
@@ -250,18 +265,18 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
     chatServiceRef.current = service;
 
     if (service.isConfigured()) {
-      service.initialize(residentId);
+      service.initialize(residentId, language);
     }
 
     setMessages([
       {
         id: '1',
         role: 'assistant',
-        content: `Hey! 👋 I'm GrannyGBT, your meal planning assistant. I've got ${residentName}'s dietary profile loaded up — allergies, nutrition goals, the works.\n\nWhat can I help you with?`,
+        content: t.grannyWelcome.replace('{name}', residentName),
         timestamp: new Date(),
       },
     ]);
-  }, [residentId, residentName]);
+  }, [residentId, residentName, language, t.grannyWelcome]);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -273,17 +288,27 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   // Minimal fallback for when ALL Gemini models are down
   const generateFallbackResponse = (userMessage: string): string => {
     const lower = userMessage.toLowerCase();
-    const menuItems = allMeals.map((m: ServiceMeal) => `• **${m.name}** (${m.mealPeriod}, ${m.timeRange})`).join('\n');
+    const menuItems = allMeals
+      .map(
+        (m: ServiceMeal) =>
+          `• **${translateMealName(m.name, language)}** (${translateMealPeriod(m.mealPeriod, language)}, ${translateMealTimeRange(m.timeRange, language)})`,
+      )
+      .join('\n');
 
-    if (lower.includes('menu') || lower.includes('today') || lower.includes('available')) {
-      return `Here's the menu! 📋\n\n${menuItems}\n\nAI is currently offline, but the menu data is still available.`;
+    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes(t.whatsOnMenuToday.toLowerCase());
+    const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
+
+    if (isMenuQuery) {
+      return `${t.heresTheMenu} 📋\n\n${menuItems}\n\n${t.aiOfflineMenuAvailable}`;
     }
-    if (lower.includes('recommend') || lower.includes('suggest')) {
+    if (isRecommendQuery) {
       const recs = RecommendationService.getRecommendations(residentId, null, 3);
-      const recList = recs.map((r, i) => `${i + 1}. **${r.meal.name}** — ${r.allReasons.join(', ')}`).join('\n');
-      return `Top picks for ${residentName}:\n\n${recList}`;
+      const recList = recs
+        .map((r, i) => `${i + 1}. **${translateMealName(r.meal.name, language)}** — ${r.allReasons.join(', ')}`)
+        .join('\n');
+      return `${t.topPicksFor} ${residentName}:\n\n${recList}`;
     }
-    return `AI is currently offline. 😴\n\nYou can still try:\n• **"menu"** — View today's meals\n• **"recommend"** — See top picks\n\nOr try again in a moment!`;
+    return `${t.aiCurrentlyOffline} 😴\n\n${t.youCanStillTry}\n• **"menu"** — ${t.viewTodaysMeals}\n• **"recommend"** — ${t.seeTopPicks}\n\n${t.tryAgainMoment}`;
   };
 
   const sendMessage = async (text: string) => {
@@ -330,7 +355,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Something went wrong — please try again! 😅',
+        content: t.somethingWentWrong,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -348,14 +373,14 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <StatusBar barStyle="light-content" />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={[styles.backButton, { minHeight: touchTarget, minWidth: touchTarget }]}
         >
           <View style={styles.backArrow}>
             <View style={styles.backArrowLine1} />
@@ -364,14 +389,14 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>GrannyGBT</Text>
+            <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.grannyGBT}</Text>
             <View style={[styles.aiBadge, aiMode === 'ai' ? styles.aiBadgeOn : aiMode === 'offline' ? styles.aiBadgeOff : styles.aiBadgeConnecting]}>
-              <Text style={styles.aiBadgeText}>
+              <Text style={[styles.aiBadgeText, { fontSize: scaled(11) }]}>
                 {aiMode === 'ai' ? '✨ AI' : aiMode === 'offline' ? '💤 Offline' : '⏳'}
               </Text>
             </View>
           </View>
-          <Text style={styles.headerSubtitle}>Meal advisor for {residentName}</Text>
+          <Text style={[styles.headerSubtitle, { fontSize: scaled(14) }]}>{t.mealAdvisorFor} {residentName}</Text>
         </View>
         <View style={styles.headerIconContainer}>
           <Text style={styles.headerIcon}>👵</Text>
@@ -392,7 +417,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
                 <View style={styles.assistantAvatar}>
                   <Text style={styles.assistantAvatarText}>👵</Text>
                 </View>
-                <Text style={styles.assistantLabel}>GrannyGBT</Text>
+                <Text style={[styles.assistantLabel, { fontSize: scaled(12) }]}>{t.grannyGBT}</Text>
               </View>
             )}
             <View
@@ -403,14 +428,17 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
                   : styles.assistantBubble,
               ]}
             >
-              <RichText
-                text={message.content}
-                isUser={message.role === 'user'}
-                allMeals={allMeals}
-              />
+                <RichText
+                  text={message.content}
+                  isUser={message.role === 'user'}
+                  allMeals={allMeals}
+                  scaled={scaled}
+                  language={language}
+                />
               <Text
                 style={[
                   styles.timestamp,
+                  { fontSize: scaled(11) },
                   message.role === 'user' && styles.userTimestamp,
                 ]}
               >
@@ -428,10 +456,10 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
               <View style={styles.assistantAvatar}>
                 <Text style={styles.assistantAvatarText}>👵</Text>
               </View>
-              <Text style={styles.assistantLabel}>GrannyGBT</Text>
+              <Text style={[styles.assistantLabel, { fontSize: scaled(12) }]}>{t.grannyGBT}</Text>
             </View>
             <View style={[styles.messageBubble, styles.assistantBubble]}>
-              <Text style={styles.typingText}>Thinking...</Text>
+              <Text style={[styles.typingText, { fontSize: scaled(14) }]}>{t.thinking}</Text>
             </View>
           </View>
         )}
@@ -439,16 +467,16 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
 
       {/* Quick Questions */}
       <View style={styles.quickQuestionsContainer}>
-        <Text style={styles.quickQuestionsLabel}>Quick questions:</Text>
+        <Text style={[styles.quickQuestionsLabel, { fontSize: scaled(13) }]}>{t.quickQuestionsLabel}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.quickQuestionsRow}>
             {QUICK_QUESTIONS.map((question, index) => (
               <TouchableOpacity
                 key={index}
-                style={styles.quickQuestionButton}
+                style={[styles.quickQuestionButton, { minHeight: touchTarget }]}
                 onPress={() => handleQuickQuestion(question)}
               >
-                <Text style={styles.quickQuestionText}>{question}</Text>
+                <Text style={[styles.quickQuestionText, { fontSize: scaled(14) }]}>{question}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -461,10 +489,10 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
       >
         <View style={styles.inputContainer}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { fontSize: scaled(16) }]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask about meals..."
+            placeholder={t.askAboutMeals}
             placeholderTextColor={COLORS.textLight}
             multiline
             maxLength={500}
@@ -473,12 +501,13 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
           <TouchableOpacity
             style={[
               styles.sendButton,
+              { minHeight: touchTarget, minWidth: touchTarget },
               !inputText.trim() && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
             disabled={!inputText.trim()}
           >
-            <Text style={styles.sendButtonText}>➤</Text>
+            <Text style={[styles.sendButtonText, { fontSize: scaled(20) }]}>➤</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -567,7 +596,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   headerSubtitle: {
-    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
     marginTop: 2,
   },
@@ -609,7 +637,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   assistantLabel: {
-    fontSize: 12,
     fontWeight: '700',
     color: COLORS.support,
   },
@@ -637,7 +664,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   timestamp: {
-    fontSize: 11,
     color: COLORS.textLight,
     marginTop: 8,
   },
@@ -646,7 +672,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   typingText: {
-    fontSize: 14,
     color: COLORS.support,
     fontStyle: 'italic',
   },
@@ -658,7 +683,6 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.borderLight,
   },
   quickQuestionsLabel: {
-    fontSize: 13,
     fontWeight: '700',
     color: COLORS.support,
     marginBottom: 10,
@@ -676,7 +700,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.borderLight,
   },
   quickQuestionText: {
-    fontSize: 14,
     color: COLORS.textMid,
     fontWeight: '500',
   },
@@ -695,7 +718,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 16,
     color: COLORS.textDark,
     maxHeight: 140,
   },
@@ -711,7 +733,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#D1D5DB',
   },
   sendButtonText: {
-    fontSize: 20,
     color: COLORS.white,
   },
 });
