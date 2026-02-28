@@ -25,7 +25,7 @@ type GeminiMessage = {
 /**
  * Builds the full system prompt with resident + meal context
  */
-function buildSystemPrompt(residentId: string): string {
+function buildSystemPrompt(residentId: string, language: string = 'English'): string {
   const resident = ResidentService.getResidentById(residentId);
   if (!resident) {
     return 'You are GrannyGBT, a warm and loving grandmotherly meal planning assistant. No resident data is available.';
@@ -98,7 +98,9 @@ RESPONSE GUIDELINES:
 - Use bullet points for lists.
 - If asked about a meal not in the database, say you can only recommend from the currently available meals.
 - If asked a general nutrition or diet question, answer helpfully but tie it back to available meals.
-- Keep responses concise — no more than 3-4 short paragraphs.`;
+- Keep responses concise — no more than 3-4 short paragraphs.
+
+LANGUAGE: You MUST respond in ${language}. All your responses — greetings, recommendations, warnings, everything — must be in ${language}. Meal names can stay in English but all descriptions and conversation must be in ${language}.`;
 }
 
 /**
@@ -182,8 +184,8 @@ export class GeminiChatService {
   /**
    * Initialize (or re-initialize) a chat session for the given resident.
    */
-  initialize(residentId: string): void {
-    this.systemPrompt = buildSystemPrompt(residentId);
+  initialize(residentId: string, language: string = 'English'): void {
+    this.systemPrompt = buildSystemPrompt(residentId, language);
     this.history = [];
     this.currentModel = GEMINI_CONFIG.models[0];
   }
@@ -257,8 +259,8 @@ export class GeminiChatService {
   /**
    * Reset the chat session for a (possibly different) resident.
    */
-  reset(residentId: string): void {
-    this.initialize(residentId);
+  reset(residentId: string, language: string = 'English'): void {
+    this.initialize(residentId, language);
   }
 }
 
