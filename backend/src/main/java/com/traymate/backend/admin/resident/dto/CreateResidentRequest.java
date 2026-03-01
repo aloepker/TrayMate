@@ -17,6 +17,8 @@ public class CreateResidentRequest {
 
     private Gender gender;
 
+    //private String residentId;
+    //private String email;
     private String phone;
 
     private String emergencyContact;

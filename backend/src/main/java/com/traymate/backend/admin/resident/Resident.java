@@ -5,6 +5,52 @@ import lombok.*;
 
 import java.time.LocalDate;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.traymate.backend.auth.model.User;
+
+// @Entity
+// @Table(name = "residents")
+// @Getter
+// @Setter
+// @Builder
+// @NoArgsConstructor
+// @AllArgsConstructor
+// public class Resident {
+
+//     @Id
+//     @GeneratedValue(strategy = GenerationType.IDENTITY)
+//     private Long id;
+
+//     private String firstName;
+//     private String middleName;
+//     private String lastName;
+
+//     private LocalDate dob;
+//     private String gender;
+
+//     @Column(unique = true)
+//     private String residentId;
+
+//     @Column(unique = true)
+//     private String email;
+
+//     private String phone;
+
+//     private String emergencyContact;
+//     private String emergencyPhone;
+
+//     private String doctor;
+//     private String doctorPhone;
+
+//     @Column(length = 1000)
+//     private String medicalConditions;
+
+//     @Column(length = 1000)
+//     private String foodAllergies;
+
+//     @Column(length = 1000)
+//     private String medications;
+// }
 
 @Entity
 @Table(name = "residents")
@@ -73,4 +119,11 @@ public class Resident {
 
     @Column(name = "room_number")
     private String roomNumber;
+
+    //to assign caregivers to residents
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "caregiver_id")
+    @JsonIgnore // optional but recommended
+    private User caregiver;
+
 }
