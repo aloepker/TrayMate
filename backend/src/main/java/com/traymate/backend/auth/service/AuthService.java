@@ -11,6 +11,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.Map;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
 
 /**
  * handles authentication-related logic such as
@@ -34,6 +39,25 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest req) {
 
+        // Normalize email
+        String email = req.getEmail().toLowerCase().trim();
+
+        // Enforce @traymate.com domain
+        if (!email.endsWith("@traymate.com")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Email must end with @traymate.com"
+            );
+        }
+
+        // Enforce unique email
+        if (repo.existsByEmail(email)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Email already exists"
+            );
+        }
+
         //build a new User entity from the request data
         User user = User.builder()
                 .fullName(req.getFullName())
@@ -46,8 +70,15 @@ public class AuthService {
         repo.save(user);
 
         //generate a JWT token using the user's email and return the tokens
-        String token = jwtService.generateToken(new HashMap<>(), user.getEmail());
+        // String token = jwtService.generateToken(new HashMap<>(), user.getEmail());
+        // return AuthResponse.builder().token(token).build();
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", user.getRole());
+
+        String token = jwtService.generateToken(claims, user.getEmail());
         return AuthResponse.builder().token(token).build();
+
     }
 
     /**
@@ -67,8 +98,18 @@ public class AuthService {
             throw new AuthException("Invalid email or password");
         }
 
+        // Map<String, Object> claims = new HashMap<>();
+        // claims.put("role", user.getRole()); //add roles in the token
+
         //generate a JWT token after successful authentication and return the tokens
-        String token = jwtService.generateToken(new HashMap<>(), user.getEmail());
+        //String token = jwtService.generateToken(new HashMap<>(), user.getEmail());
+        //return AuthResponse.builder().token(token).build();
+
+        String token = jwtService.generateToken(
+                new HashMap<>(),
+                user.getEmail()
+        );
+
         return AuthResponse.builder()
                 .token(token)
                 .role(user.getRole())   

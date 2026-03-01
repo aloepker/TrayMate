@@ -10,6 +10,10 @@ import java.security.Key;
 import java.util.Date;
 import java.util.Map;
 
+//import io.jsonwebtoken.Claims;
+import java.util.function.Function;
+
+
 //service responsible for creating and validating JWT tokens
 @Service
 public class JwtTokenService {
@@ -45,15 +49,22 @@ public class JwtTokenService {
 
     //extracts the email (subject) from the JWT token
     public String extractEmail(String token) {
-        return extractAllClaims(token).getSubject();
+        //return extractAllClaims(token).getSubject();
+        return extractClaim(token, Claims::getSubject);
     }
 
     //parses and validates the JWT token and returns all claims
-    private Claims extractAllClaims(String token) {
+    public Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
     }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
 }
