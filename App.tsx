@@ -25,7 +25,7 @@ export default function App() {
     <CartProvider>
       <NavigationContainer>
         <Stack.Navigator 
-          initialRouteName="Home"
+          initialRouteName="Login"
           screenOptions={{
             headerShown: false, // Hide default header for all screens
           }}
