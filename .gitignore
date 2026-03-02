@@ -66,6 +66,14 @@ yarn-error.log
 # testing
 /coverage
 
+# Environment variables (contains API keys)
+.env
+.env.local
+.env.production
+
+# Gemini API key - do not commit
+src/config/geminiConfig.ts
+
 # Yarn
 .yarn/*
 !.yarn/patches
