@@ -12,7 +12,7 @@
  * - Resident-aware system prompt with full meal database
  */
 
-import { GEMINI_CONFIG } from '../config/geminiConfig';
+import { GEMINI_CONFIG } from '../config/geminiConfig.example';
 import { MealService, ResidentService } from './localDataService';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
