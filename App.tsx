@@ -15,6 +15,7 @@ import LoginScreen from './src/screens/loginScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
+import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
 
 const Stack = createStackNavigator();
 
@@ -37,6 +38,7 @@ export default function App() {
           <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
+          <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>
