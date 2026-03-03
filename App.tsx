@@ -10,13 +10,13 @@ import { CartProvider } from './src/screens/context/CartContext';
 import HomeScreen from './src/screens/homeScreen';
 import AddResidentScreen from './src/screens/addNewResidentScreen';
 import BrowseMealOptionsScreen from './src/screens/browseMealOptionsScreen';
-import CartScreen from './src/screens/CartScreen';
 import LoginScreen from './src/screens/loginScreen';
 import AddMealOptionsScreen from './src/screens/addMealOptionsScreen';
 import EditResidentListScreen from './src/screens/editResidentListScreen';
 import ResidentInfoEditScreen from './src/screens/residentInfoEditScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
+import KitchenDashboardScreen from './src/screens/KitchenDashboard';
 
 const Stack = createStackNavigator();
 
@@ -34,13 +34,13 @@ export default function App() {
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="AddResident" component={AddResidentScreen} />
           <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
-          <Stack.Screen name="Cart" component={CartScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="AddMealOptions" component={AddMealOptionsScreen} />
           <Stack.Screen name="EditResidentList" component={EditResidentListScreen} />
           <Stack.Screen name="ResidentInfoEdit" component={ResidentInfoEditScreen} />
           <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>

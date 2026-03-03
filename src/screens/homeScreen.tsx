@@ -40,6 +40,10 @@ const HomeScreen = ({ navigation }: any) => {
         <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('UpcomingMeals')}>
           <Text style={globalStyles.buttonText}>Upcoming</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={globalStyles.homeButtons} onPress={() => navigation.navigate('KitchenDashboard')}>
+          <Text style={globalStyles.buttonText}>Kitchen Dashboard</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
