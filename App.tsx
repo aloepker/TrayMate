@@ -19,12 +19,15 @@ import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
 import AdminDashboard from './src/screens/admin/adminDashboardScreen';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
+import { SettingsProvider } from './src/screens/context/SettingsContext'; 
+
 
 const Stack = createStackNavigator();
 
 // Adding them to the navigation stack
 export default function App() {
   return (
+  <SettingsProvider>  
     <CartProvider>
       <NavigationContainer>
         <Stack.Navigator 
@@ -48,5 +51,6 @@ export default function App() {
         </Stack.Navigator>
       </NavigationContainer>
     </CartProvider>
+  </SettingsProvider>
   );
 }
