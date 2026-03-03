@@ -23,25 +23,25 @@ const Stack = createStackNavigator();
 export default function App() {
   return (
     <SettingsProvider>
-    <CartProvider>
-      <NavigationContainer>
-        <Stack.Navigator 
-          initialRouteName="Login"
-          screenOptions={{
-            headerShown: false, // Hide default header for all screens
-          }}
-        >
-          <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
-          <Stack.Screen name="Cart" component={CartScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-          <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
-          <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </CartProvider>
+      <CartProvider>
+        <NavigationContainer>
+          <Stack.Navigator
+            initialRouteName="Login"
+            screenOptions={{
+              headerShown: false, // Hide default header for all screens
+            }}
+          >
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
+            <Stack.Screen name="Cart" component={CartScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="UpcomingMeals" component={UpcomingMealsScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
+            <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </CartProvider>
     </SettingsProvider>
   );
 }

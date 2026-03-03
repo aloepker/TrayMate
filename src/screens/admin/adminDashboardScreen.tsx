@@ -439,24 +439,37 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     >
                       <Picker.Item label="Select caregiver" value="none" />
                       {caregivers.map((c, cIdx) => (
-                        <Picker.Item 
-                          key={c.id || c.email || `cg-opt-${cIdx}`} 
-                          label={c.name} 
-                          value={c.id} 
+                        <Picker.Item
+                          key={c.id || c.email || `cg-opt-${cIdx}`}
+                          label={c.name}
+                          value={c.id}
                         />
                       ))}
                     </Picker>
                   </View>
-                  <Pressable 
-                    style={styles.iconBtn} 
-                    onPress={() => openEditResident(r)} 
+                  <Pressable
+                    style={styles.cartBtn}
+                    onPress={() =>
+                      navigation.navigate("BrowseMealOptions", {
+                        residentId: r.id,
+                        residentName: r.name,
+                      })
+                    }
+                    hitSlop={10}
+                  >
+                    <Text style={styles.cartBtnIcon}>🛒</Text>
+                    <Text style={styles.cartBtnText}>Meals</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={() => openEditResident(r)}
                     hitSlop={10}
                   >
                     <Feather name="edit-2" size={18} color="#6D6B3B" />
                   </Pressable>
-                  <Pressable 
-                    style={styles.iconBtn} 
-                    onPress={() => askDeleteResident(r.id)} 
+                  <Pressable
+                    style={styles.iconBtn}
+                    onPress={() => askDeleteResident(r.id)}
                     hitSlop={10}
                   >
                     <Feather name="trash-2" size={18} color="#6D6B3B" />
@@ -989,12 +1002,29 @@ const styles = StyleSheet.create({
     height: 44, 
     width: "100%" 
   },
-  iconBtn: { 
-    width: 34, 
-    height: 34, 
-    borderRadius: 10, 
-    alignItems: "center", 
-    justifyContent: "center" 
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  cartBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#6D6B3B",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cartBtnIcon: {
+    fontSize: 14,
+  },
+  cartBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
   modalBackdrop: { 
     flex: 1, 
