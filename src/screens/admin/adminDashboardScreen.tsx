@@ -1011,11 +1011,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E3E3E3",
-    overflow: "hidden"
   },
   picker: {
-    height: 44,
-    width: "100%"
+    height: 52,
+    width: "100%",
   },
   iconBtn: {
     width: 34,
@@ -1027,11 +1026,12 @@ const styles = StyleSheet.create({
   cartBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+    gap: 6,
     backgroundColor: "#6D6B3B",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    height: 52,
   },
   cartBtnIcon: {
     fontSize: 14,
