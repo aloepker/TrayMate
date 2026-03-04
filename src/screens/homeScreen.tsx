@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,23 +6,11 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
-  ActivityIndicator,
 } from 'react-native';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { translateMealName } from '../services/mealLocalization';
-import {
-  RecommendationService,
-  ResidentService,
-  Meal as ServiceMeal,
-} from '../services/localDataService';
-
-type Recommendation = {
-  meal: ServiceMeal;
-  score: number;
-  reason: string;
-  allReasons: string[];
-};
+import { ResidentService } from '../services/localDataService';
 
 const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount } = useCart();
@@ -45,29 +33,6 @@ const HomeScreen = ({ navigation, route }: any) => {
     }
     return residentName.slice(0, 2).toUpperCase();
   }, [residentName]);
-
-  // Personalized meal recommendations for this resident
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [loadingRecs, setLoadingRecs] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoadingRecs(true);
-        const resId = residentId || ResidentService.getDefaultResident().id;
-        const recs = await RecommendationService.getRecommendations(resId, null, 4);
-        if (!cancelled) {
-          setRecommendations(recs);
-        }
-      } catch (e) {
-        console.warn('[Home] Failed to load recommendations:', e);
-      } finally {
-        if (!cancelled) setLoadingRecs(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [residentId]);
 
   const activeOrders = orders.filter((o) => o.status !== 'completed');
   const cartCount = getCartCount();
@@ -117,52 +82,6 @@ const HomeScreen = ({ navigation, route }: any) => {
           >
             <Text style={[styles.avatarText, { fontSize: scaled(16) }]}>{initials}</Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Recommended Meals for This Resident */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { fontSize: scaled(18) }]}>
-              Recommended for {residentName.split(' ')[0]}
-            </Text>
-            <TouchableOpacity onPress={() => navWithResident('BrowseMealOptions')}>
-              <Text style={[styles.seeAllText, { fontSize: scaled(14) }]}>{t.seeAll}</Text>
-            </TouchableOpacity>
-          </View>
-          {loadingRecs ? (
-            <ActivityIndicator size="small" color="#717644" style={{ marginVertical: 20 }} />
-          ) : recommendations.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.mealsScroll}
-            >
-              {recommendations.map((rec) => (
-                <TouchableOpacity
-                  key={rec.meal.id}
-                  style={styles.recCard}
-                  onPress={() => navWithResident('BrowseMealOptions')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.recEmoji}>
-                    {rec.meal.mealPeriod === 'Breakfast' ? '🌅' : rec.meal.mealPeriod === 'Lunch' ? '☀️' : '🌙'}
-                  </Text>
-                  <Text style={styles.recPeriod}>{rec.meal.mealPeriod}</Text>
-                  <Text style={styles.recName} numberOfLines={2}>
-                    {translateMealName(rec.meal.name, language)}
-                  </Text>
-                  <Text style={styles.recReason} numberOfLines={2}>
-                    {rec.reason}
-                  </Text>
-                  <View style={styles.recSafeBadge}>
-                    <Text style={styles.recSafeText}>✅ Safe</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <Text style={styles.noRecsText}>No personalized recommendations available.</Text>
-          )}
         </View>
 
         {/* Upcoming Meals Preview (orders) */}
@@ -410,63 +329,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#717644',
     marginBottom: 14,
-  },
-
-  // Recommended meals
-  recCard: {
-    width: 170,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  recEmoji: {
-    fontSize: 22,
-    marginBottom: 6,
-  },
-  recPeriod: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#717644',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  recName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#3A3A3A',
-    marginBottom: 6,
-  },
-  recReason: {
-    fontSize: 11,
-    color: '#6A6A6A',
-    marginBottom: 8,
-    lineHeight: 15,
-  },
-  recSafeBadge: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginTop: 'auto' as any,
-  },
-  recSafeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#15803D',
-  },
-  noRecsText: {
-    fontSize: 13,
-    color: '#8A8A8A',
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingVertical: 16,
   },
 
   // Upcoming meals horizontal scroll
