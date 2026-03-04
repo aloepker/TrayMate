@@ -408,7 +408,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </SectionCard>
 
           {/* RESIDENTS ASSIGNMENT SECTION */}
-          <SectionCard title="Assign Residents to Caregivers">
+          <SectionCard title="Select Resident for Tablet">
             {!residents.length && (
               <Text style={styles.emptyText}>No residents found.</Text>
             )}
@@ -450,7 +450,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   <Pressable
                     style={styles.cartBtn}
                     onPress={() =>
-                      navigation.navigate("BrowseMealOptions", {
+                      navigation.navigate("Home", {
                         residentId: r.id,
                         residentName: r.name,
                       })
@@ -458,7 +458,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     hitSlop={10}
                   >
                     <Text style={styles.cartBtnIcon}>🛒</Text>
-                    <Text style={styles.cartBtnText}>Meals</Text>
+                    <Text style={styles.cartBtnText}>Select Resident</Text>
                   </Pressable>
                   <Pressable
                     style={styles.iconBtn}
