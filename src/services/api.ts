@@ -13,10 +13,12 @@ async function getAuthHeaders() {
   };
 }
 
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authHeaders = await getAuthHeaders();
 
   const res = await fetch(`${BASE_URL}${path}`, {
+
     ...options,
     headers: {
       ...authHeaders,
@@ -24,17 +26,45 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
 
+  // Common for DELETE: backend returns 204 No Content
+  if (res.status === 204) {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return null as unknown as T;
+  }
+
+  const contentType = res.headers.get("content-type") || "";
   const text = await res.text();
-  const data = text ? (JSON.parse(text) as any) : null;
+
+ 
+  const looksLikeJson =
+    text.trim().startsWith("{") || text.trim().startsWith("[");
+
+  let data: any = null;
+
+  if ((contentType.includes("application/json") || looksLikeJson) && text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  } else {
+    // plain text like "Deleted" or empty string
+    data = text || null;
+  }
 
   if (!res.ok) {
     const message =
-      data?.message || data?.error || `Request failed (${res.status})`;
+      data?.message ||
+      data?.error ||
+      (typeof data === "string" ? data : "") ||
+      `Request failed (${res.status})`;
+
     throw new Error(message);
   }
 
   return data as T;
 }
+
 
 /* ----------------------------- Helpers ----------------------------- */
 
