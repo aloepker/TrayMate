@@ -66,14 +66,22 @@ const ChatRichText = ({
   isUser,
   scaled,
   language,
+  allMeals = [],
 }: {
   text: string;
   isUser: boolean;
   scaled: (base: number) => number;
   language: 'English' | 'Español' | 'Français' | '中文';
+  allMeals?: ServiceMeal[];
 }) => {
-  const allMeals = MealService.getAllMeals();
   const lines = text.split('\n');
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[’']/g, "'")
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   return (
     <View>
@@ -82,32 +90,44 @@ const ChatRichText = ({
         const mealCardMatch = line.match(
           /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
         );
-        const requestedMealName = mealCardMatch?.[1].toLowerCase().trim();
+        const requestedMealName = mealCardMatch ? norm(mealCardMatch[1]) : '';
         const matchedMeal = mealCardMatch
-          ? allMeals.find(
-              m =>
-                m.name.toLowerCase() === requestedMealName ||
-                translateMealName(m.name, language).toLowerCase() === requestedMealName,
-            )
+          ? allMeals.find(m => {
+              const n1 = norm(m.name);
+              const n2 = norm(translateMealName(m.name, language));
+              if (!requestedMealName) return false;
+              if (n1 === requestedMealName || n2 === requestedMealName) return true;
+              // allow small formatting differences (hyphens, extra words)
+              if (requestedMealName.length >= 4 && (n1.includes(requestedMealName) || n2.includes(requestedMealName))) return true;
+              if (n1.length >= 4 && requestedMealName.includes(n1)) return true;
+              if (n2.length >= 4 && requestedMealName.includes(n2)) return true;
+              return false;
+            })
           : null;
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
+          const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
-            <View key={lineIdx} style={chatRichStyles.mealCard}>
+            <View key={lineIdx} style={chatRichStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
               <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
                 <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
               </View>
               <View style={chatRichStyles.mealCardInfo}>
-                <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(14) }]}>
+                <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(16) }]}>
                   {translateMealName(matchedMeal.name, language)}
                 </Text>
-                <Text style={[chatRichStyles.mealCardMeta, { fontSize: scaled(11) }]}>
+                <Text style={[chatRichStyles.mealCardMeta, { fontSize: scaled(13) }]}>
                   {translateMealPeriod(matchedMeal.mealPeriod, language)} · {translateMealTimeRange(matchedMeal.timeRange, language)}
                 </Text>
-                <Text style={[chatRichStyles.mealCardNutrition, { fontSize: scaled(10) }]}>
-                  {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium
+                <Text style={[chatRichStyles.mealCardNutrition, { fontSize: scaled(12) }]}>
+                  {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium · {matchedMeal.nutrition.protein} protein
                 </Text>
+                {suffixText !== '' && (
+                  <Text style={[chatRichStyles.mealCardReason, { fontSize: scaled(12) }]}>
+                    {suffixText}
+                  </Text>
+                )}
               </View>
             </View>
           );
@@ -126,13 +146,13 @@ const ChatRichText = ({
               const boldMatch = part.match(/^\*\*(.+)\*\*$/);
               if (boldMatch) {
                 return (
-                  <Text key={pi} style={[chatRichStyles.text, { fontSize: scaled(15), lineHeight: scaled(22) }, chatRichStyles.bold, isUser && chatRichStyles.textUser]}>
+                  <Text key={pi} style={[chatRichStyles.text, { fontSize: scaled(16), lineHeight: scaled(24) }, chatRichStyles.bold, isUser && chatRichStyles.textUser]}>
                     {boldMatch[1]}
                   </Text>
                 );
               }
               return (
-                <Text key={pi} style={[chatRichStyles.text, { fontSize: scaled(15), lineHeight: scaled(22) }, isUser && chatRichStyles.textUser]}>
+                <Text key={pi} style={[chatRichStyles.text, { fontSize: scaled(16), lineHeight: scaled(24) }, isUser && chatRichStyles.textUser]}>
                   {part}
                 </Text>
               );
@@ -145,26 +165,27 @@ const ChatRichText = ({
 };
 
 const chatRichStyles = StyleSheet.create({
-  lineRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 2 },
-  bulletRow: { paddingLeft: 4, marginBottom: 4 },
-  text: { fontSize: 15, lineHeight: 22, color: '#374151' },
+  lineRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 3 },
+  bulletRow: { paddingLeft: 4, marginBottom: 5 },
+  text: { fontSize: 16, lineHeight: 24, color: '#374151' },
   textUser: { color: '#FFFFFF' },
   bold: { fontWeight: '700', color: '#111827' },
   mealCard: {
     flexDirection: 'row',
     backgroundColor: '#F3F4F6',
-    borderRadius: 10,
-    marginVertical: 5,
+    borderRadius: 12,
+    marginVertical: 6,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  mealCardImage: { width: 50, justifyContent: 'center', alignItems: 'center' },
-  mealCardEmoji: { fontSize: 24 },
-  mealCardInfo: { flex: 1, padding: 8 },
-  mealCardName: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 1 },
-  mealCardMeta: { fontSize: 11, color: '#6B7280', marginBottom: 1 },
-  mealCardNutrition: { fontSize: 10, color: '#b77f3f', fontWeight: '600' },
+  mealCardImage: { width: 64, justifyContent: 'center', alignItems: 'center' },
+  mealCardEmoji: { fontSize: 30 },
+  mealCardInfo: { flex: 1, padding: 12 },
+  mealCardName: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 3 },
+  mealCardMeta: { fontSize: 13, color: '#6B7280', marginBottom: 3 },
+  mealCardNutrition: { fontSize: 12, color: '#b77f3f', fontWeight: '600' },
+  mealCardReason: { fontSize: 12, color: '#15803d', fontWeight: '700', marginTop: 5 },
 });
 
 // ---------- TrayMate Color Palette (from design slide) ----------
@@ -229,19 +250,23 @@ const AIAssistantChat = ({
   onClose,
   residentName,
   residentId,
+  dietaryRestrictions = [],
 }: {
   visible: boolean;
   onClose: () => void;
   residentName: string;
   residentId: string;
+  dietaryRestrictions?: string[];
 }) => {
   const { t, scaled, language } = useSettings();
+    const [aiAvailable, setAiAvailable] = useState<boolean>(false);
   const QUICK_QUESTIONS = [
     t.whatsOnMenuToday,
     t.recommendAMeal,
     t.viewDietaryRestrictionsPrompt,
     t.placeLunchOrder,
   ];
+  const [chatMeals, setChatMeals] = useState<ServiceMeal[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -254,6 +279,33 @@ const AIAssistantChat = ({
   const [isTyping, setIsTyping] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // If Gemini replies without **Meal Name** formatting, try to bold known meal names
+  const injectMealBold = (raw: string) => {
+    if (!raw) return raw;
+    // If the model already used markdown bold somewhere, don't over-touch it
+    if (raw.includes('**')) return raw;
+
+    // Prefer longer names first to avoid partial replacements
+    const mealNames = (chatMeals || [])
+      .map(m => ({
+        raw: m.name,
+        localized: translateMealName(m.name, language),
+      }))
+      .sort((a, b) => b.localized.length - a.localized.length);
+
+    let out = raw;
+    for (const mn of mealNames) {
+      const candidates = Array.from(new Set([mn.localized, mn.raw])).filter(Boolean);
+      for (const c of candidates) {
+        const re = new RegExp(`\\b${escapeRegExp(c)}\\b`, 'gi');
+        out = out.replace(re, match => `**${match}**`);
+      }
+    }
+    return out;
+  };
 
   useEffect(() => {
     if (visible) {
@@ -272,17 +324,28 @@ const AIAssistantChat = ({
     }
   }, [visible, slideAnim]);
 
+  // Load meals for chat when modal opens
+  useEffect(() => {
+    if (visible) {
+      MealService.getAllMeals().then(setChatMeals).catch(() => setChatMeals([]));
+    }
+  }, [visible]);
+
   // Initialize Gemini chat session when modal opens
   useEffect(() => {
     if (visible && geminiChat.isConfigured()) {
-      geminiChat.initialize(residentId, language);
+      const resident = ResidentService.getResidentById(residentId);
+      const override = !resident ? { name: residentName, dietaryRestrictions } : undefined;
+      geminiChat.initialize(residentId, language, override)
+        .then(() => setAiAvailable(true))
+        .catch(() => setAiAvailable(false));
     }
-  }, [visible, residentId, language]);
+  }, [visible, residentId, language, residentName, dietaryRestrictions]);
 
   // Minimal fallback when ALL Gemini models are down
-  const generateFallbackResponse = (userMessage: string): string => {
+  const generateFallbackResponse = async (userMessage: string): Promise<string> => {
     const lower = userMessage.toLowerCase();
-    const allServiceMeals = MealService.getAllMeals();
+    const allServiceMeals = await MealService.getAllMeals();
     const menuItems = allServiceMeals
       .map(
         (m: ServiceMeal) =>
@@ -297,11 +360,42 @@ const AIAssistantChat = ({
       return `${t.heresTheMenu} 📋\n\n${menuItems}\n\n${t.aiOfflineMenuAvailable}`;
     }
     if (isRecommendQuery) {
-      const recs = RecommendationService.getRecommendations(residentId, null, 3);
-      const recList = recs
-        .map((r, i) => `${i + 1}. **${translateMealName(r.meal.name, language)}** — ${r.allReasons.join(', ')}`)
+      const recs = await RecommendationService.getRecommendations(residentId, null, 3);
+      if (recs.length > 0) {
+        const recList = recs
+          .map((r: any, i: number) => `${i + 1}. **${translateMealName(r.meal.name, language)}** — ${r.allReasons.join(', ')}`)
+          .join('\n');
+        return `${t.topPicksFor} ${residentName}:\n\n${recList}`;
+      }
+      // Fallback: filter meals by dietary restrictions and show top 3
+      const restrictionsLower = dietaryRestrictions.map((r: string) => r.toLowerCase());
+      const safeMeals = allServiceMeals.filter(m => {
+        const allergens = m.allergenInfo.map(a => a.toLowerCase());
+        return !restrictionsLower.some(r => allergens.some(a => a.includes(r)));
+      });
+      const topMeals = (safeMeals.length > 0 ? safeMeals : allServiceMeals).slice(0, 3);
+      const recList = topMeals
+        .map((m, i) => {
+          const reasons: string[] = [];
+          if (dietaryRestrictions.length > 0) {
+            const avoided = dietaryRestrictions.filter(r =>
+              !m.allergenInfo.some(a => a.toLowerCase().includes(r.toLowerCase()))
+            );
+            if (avoided.length > 0) {
+              reasons.push(`Free of: ${avoided.join(', ')}`);
+            }
+          }
+          reasons.push(`${m.nutrition.calories} cal`);
+          if (parseInt(String(m.nutrition.sodium)) <= 400) reasons.push('Low sodium');
+          if (parseInt(String(m.nutrition.protein)) >= 20) reasons.push('High protein');
+          if (m.allergenInfo.length === 0) reasons.push('No allergens');
+          return `${i + 1}. **${translateMealName(m.name, language)}** — ${reasons.join(' · ')}`;
+        })
         .join('\n');
-      return `${t.topPicksFor} ${residentName}:\n\n${recList}`;
+      const header = dietaryRestrictions.length > 0
+        ? `${t.topPicksFor} ${residentName} (avoiding ${dietaryRestrictions.join(', ')}):`
+        : `${t.topPicksFor} ${residentName}:`;
+      return `${header}\n\n${recList}`;
     }
     return `${t.aiCurrentlyOffline} 😴\n\n${t.youCanStillTry}\n• **"menu"** — ${t.viewTodaysMeals}\n• **"recommend"** — ${t.seeTopPicks}\n\n${t.tryAgainMoment}`;
   };
@@ -326,12 +420,17 @@ const AIAssistantChat = ({
       if (geminiChat.isConfigured()) {
         try {
           responseText = await geminiChat.sendMessage(userMessage.content);
+          responseText = injectMealBold(responseText);
+          setAiAvailable(true);
         } catch (apiError) {
           console.warn('Gemini API error:', apiError);
-          responseText = generateFallbackResponse(userMessage.content);
+          setAiAvailable(false);
+          responseText = await generateFallbackResponse(userMessage.content);
+          responseText = injectMealBold(responseText);
         }
       } else {
-        responseText = generateFallbackResponse(userMessage.content);
+        responseText = await generateFallbackResponse(userMessage.content);
+        responseText = injectMealBold(responseText);
       }
 
       const aiResponse: ChatMessage = {
@@ -368,16 +467,21 @@ const AIAssistantChat = ({
       setIsTyping(true);
       try {
         let responseText: string;
+
         if (geminiChat.isConfigured()) {
           try {
             responseText = await geminiChat.sendMessage(question);
+            setAiAvailable(true);
           } catch (apiError) {
             console.warn('Gemini API error:', apiError);
-            responseText = generateFallbackResponse(question);
+            setAiAvailable(false);
+            responseText = await generateFallbackResponse(question);
           }
         } else {
-          responseText = generateFallbackResponse(question);
+          responseText = await generateFallbackResponse(question);
         }
+
+        responseText = injectMealBold(responseText);
         const aiResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -428,7 +532,11 @@ const AIAssistantChat = ({
             <View style={chatStyles.headerText}>
               <Text style={[chatStyles.headerTitle, { fontSize: scaled(20) }]}>{t.grannyGBT}</Text>
               <Text style={[chatStyles.headerSubtitle, { fontSize: scaled(15) }]}>{t.mealAdvisorFor} {residentName}</Text>
-            </View>
+              </View>
+              {/* AI status badge */}
+              <View style={[chatStyles.statusBadge, aiAvailable ? chatStyles.aiOn : chatStyles.aiOff]}>
+                <Text style={chatStyles.statusText}>{aiAvailable ? '✨ AI' : '💤 Offline'}</Text>
+              </View>
             <TouchableOpacity onPress={onClose} style={chatStyles.closeButton}>
               <Text style={[chatStyles.closeButtonText, { fontSize: scaled(18) }]}>✕</Text>
             </TouchableOpacity>
@@ -439,6 +547,8 @@ const AIAssistantChat = ({
             ref={scrollViewRef}
             style={chatStyles.messagesContainer}
             contentContainerStyle={chatStyles.messagesContent}
+            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+            keyboardShouldPersistTaps="handled"
           >
             {messages.map((message) => (
               <View key={message.id}>
@@ -461,6 +571,7 @@ const AIAssistantChat = ({
                     isUser={message.role === 'user'}
                     scaled={scaled}
                     language={language}
+                    allMeals={chatMeals}
                   />
                   <Text style={[
                     chatStyles.timestamp,
@@ -544,6 +655,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const touchTarget = getTouchTargetSize();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
+  const [rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
 
@@ -562,159 +674,154 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     route?.params?.residentName ||
     ResidentService.getDefaultResident().fullName;
 
-  // Navigate to cart screen
+  // Navigate to cart screen with resident context
   const goToCart = () => {
-    navigation.navigate('Cart');
+    navigation.navigate('Cart', { residentId, residentName });
   };
 
-  // Local "fetch menu" (CSV-backed)
+  // Fetch meals from API (async)
   const loadMenu = useCallback(async (period: PeriodOption["value"]) => {
     setMenuLoading(true);
     setError("");
 
-    setTimeout(() => {
-      try {
-        // Pull from localDataService
-        const serviceMeals = MealService.getMealsByPeriod(period);
+    try {
+      // Pull from API-backed localDataService (async)
+      let serviceMeals = await MealService.getMealsByPeriod(period);
 
-        // Map service Meal -> screen Meal shape
-const mapped: Meal[] = serviceMeals.map((m) => ({
-  id: String(m.id),
-  name: m.name,
-  meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod) as Meal["meal_period"],
-          description: m.description,
-          time_range: m.timeRange,
-          kcal: m.nutrition.calories,
-          sodium_mg: parseInt(
-            String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0",
-            10
-          ),
-          protein_g: parseInt(
-            String(m.nutrition.protein).replace(/[^\d]/g, "") || "0",
-            10
-          ),
-          tags: m.tags ?? [],
-        }));
-
-        setMeals(mapped);
-        setMenuLoading(false);
-      } catch {
-        setError("Failed to load meals");
-        setMenuLoading(false);
+      // Filter out meals that are unsafe for this resident's dietary restrictions
+      const resId = residentId || ResidentService.getDefaultResident().id;
+      const resident = ResidentService.getResidentById(resId);
+      if (resident) {
+        serviceMeals = serviceMeals.filter((m) =>
+          ResidentService.isMealSafeForResident(m, resident)
+        );
       }
-    }, 200);
-  }, []);
 
-  // Local "fetch recommendation" (CSV-backed)
+      // Map service Meal -> screen Meal shape
+      const mapped: Meal[] = serviceMeals.map((m) => ({
+        id: String(m.id),
+        name: m.name,
+        meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod) as Meal["meal_period"],
+        description: m.description,
+        time_range: m.timeRange,
+        kcal: m.nutrition.calories,
+        sodium_mg: parseInt(
+          String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0",
+          10
+        ),
+        protein_g: parseInt(
+          String(m.nutrition.protein).replace(/[^\d]/g, "") || "0",
+          10
+        ),
+        tags: m.tags ?? [],
+      }));
+
+      setRawServiceMeals(serviceMeals);
+      setMeals(mapped);
+      setMenuLoading(false);
+    } catch {
+      setError("Failed to load meals");
+      setMenuLoading(false);
+    }
+  }, [residentId]);
+
+  // Fetch recommendation from API (async)
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
 
-    setTimeout(() => {
-      try {
-        const resId = (route?.params?.residentId as string | undefined) || ResidentService.getDefaultResident().id;
-        const rec = RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
-        setRecommendation(rec);
-        setRecLoading(false);
-      } catch {
-        setRecommendation(null);
-        setRecLoading(false);
-      }
-    }, 200);
-  }, [route?.params?.residentId, selectedPeriod.value]);
+    try {
+      const resId = residentId || ResidentService.getDefaultResident().id;
+      const rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
+      setRecommendation(rec);
+      setRecLoading(false);
+    } catch {
+      setRecommendation(null);
+      setRecLoading(false);
+    }
+  }, [residentId, selectedPeriod.value]);
 
+  // Load menu and recommendation when component mounts or period changes
   useEffect(() => {
     loadMenu(selectedPeriod.value);
-  }, [loadMenu, selectedPeriod.value]);
-
-  useEffect(() => {
     loadRecommendation();
-  }, [loadRecommendation]);
+  }, [selectedPeriod, loadMenu, loadRecommendation]);
 
+  // Handle refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadMenu(selectedPeriod.value), loadRecommendation()]);
-    if (notifications.menuUpdates) {
-      Alert.alert(t.menuUpdates, t.menuUpdatesDesc);
-    }
-    setTimeout(() => setRefreshing(false), 250);
-  }, [loadMenu, loadRecommendation, notifications.menuUpdates, selectedPeriod.value, t.menuUpdates, t.menuUpdatesDesc]);
+    await loadMenu(selectedPeriod.value);
+    await loadRecommendation();
+    setRefreshing(false);
+  }, [selectedPeriod.value, loadMenu, loadRecommendation]);
 
-  // Get tag style based on tag name
-  const getTagStyle = (tag: string) => {
-    const tagLower = tag.toLowerCase();
-    if (tagLower.includes('vegetarian')) {
-      return { bg: '#DCFCE7', text: '#166534' };
-    }
-    if (tagLower.includes('low sodium') || tagLower.includes('heart')) {
-      return { bg: '#DBEAFE', text: '#1E40AF' };
-    }
-    if (tagLower.includes('dairy') || tagLower.includes('contains')) {
-      return { bg: '#FEF3C7', text: '#92400E' };
-    }
-    if (tagLower.includes('chef') || tagLower.includes('special')) {
-      return { bg: '#F3E8FF', text: '#7C3AED' };
-    }
-    return { bg: '#F3F4F6', text: '#374151' };
-  };
-
-const renderMeal = ({ item }: { item: Meal }) => {
-    const placeholder = getMealPlaceholder(item.name);
-    const localizedMealName = translateMealName(item.name, language);
-    const localizedMealPeriod = translateMealPeriod(item.meal_period, language);
-    const localizedDescription = translateMealDescription(item.description, language);
-    const localizedTimeRange = translateMealTimeRange(item.time_range, language);
+  // Render individual meal item for FlatList
+  const renderMeal = ({ item }: { item: Meal }) => {
+    const ph = getMealPlaceholder(item.name);
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.7}
-        onPress={() => addToCart(item as any)}
+        onPress={() => {
+          addToCart({ ...item, id: parseInt(item.id) });
+        }}
       >
-        {/* Meal Photo Placeholder */}
-        <View style={[styles.mealImageContainer, { backgroundColor: placeholder.bg }]}>
-          <Text style={styles.mealImageEmoji}>{placeholder.emoji}</Text>
+        <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
+          <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
           <View style={styles.mealImageOverlay}>
-            <Text style={[styles.mealImageLabel, { color: placeholder.accent }]}>
-              {localizedMealPeriod}
+            <Text style={[styles.mealImageLabel, { color: ph.accent }]}>
+              {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
         </View>
-
         <View style={styles.cardContent}>
-          <Text style={[styles.cardTitle, { fontSize: scaled(20) }]}>{localizedMealName}</Text>
-
+          <Text style={[styles.cardTitle, { fontSize: scaled(20) }]}>
+            {translateMealName(item.name, language)}
+          </Text>
           <View style={styles.timeBadge}>
             <Text style={[styles.timeBadgeText, { fontSize: scaled(14) }]}>
-              {localizedMealPeriod} • {localizedTimeRange}
+              {item.time_range}
             </Text>
           </View>
-
-          <Text style={[styles.cardDescription, { fontSize: scaled(16) }]}>{localizedDescription}</Text>
-
-          {/* Nutrition Quick Info */}
+          <Text style={[styles.cardDescription, { fontSize: scaled(15) }]}>
+            {translateMealDescription(item.description, language)}
+          </Text>
           <View style={styles.nutritionRow}>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>🔥 {item.kcal} {t.calories}</Text>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>🧂 {item.sodium_mg}mg {t.sodium}</Text>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>💪 {item.protein_g}g {t.protein}</Text>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+              {item.kcal} kcal
+            </Text>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+              Sodium: {item.sodium_mg}mg
+            </Text>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+              Protein: {item.protein_g}g
+            </Text>
           </View>
-
-          {item.tags?.length ? (
+          {item.tags && item.tags.length > 0 && (
             <View style={styles.tagRow}>
-              {item.tags.map((tag) => {
-                const tagStyle = getTagStyle(tag);
-                return (
-                  <View
-                    key={tag}
-                    style={[styles.tag, { backgroundColor: tagStyle.bg }]}
+              {item.tags.map((tag, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.tag,
+                    {
+                      backgroundColor: tag.includes('Low Sodium') ? '#DBEAFE' : '#FEE2E2',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tagText,
+                      { fontSize: scaled(14) },
+                      { color: tag.includes('Low Sodium') ? '#1E40AF' : '#991B1B' },
+                    ]}
                   >
-                    <Text style={[styles.tagText, { color: tagStyle.text, fontSize: scaled(14) }]}>
-                      {translateMealTag(tag, language)}
-                    </Text>
-                  </View>
-                );
-              })}
+                    {translateMealTag(tag, language)}
+                  </Text>
+                </View>
+              ))}
             </View>
-          ) : null}
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -846,6 +953,7 @@ const renderMeal = ({ item }: { item: Meal }) => {
         onClose={() => setShowAIChat(false)}
         residentName={residentName}
         residentId={residentId || ResidentService.getDefaultResident().id}
+        dietaryRestrictions={route?.params?.dietaryRestrictions || []}
       />
     </SafeAreaView>
   );
@@ -995,7 +1103,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 160,
     paddingHorizontal: 16,
   },
   card: {
@@ -1260,12 +1368,32 @@ const chatStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#b77f3f',
   },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  aiOn: {
+    backgroundColor: 'rgba(52, 211, 153, 0.9)'
+  },
+  aiOff: {
+    backgroundColor: 'rgba(107, 114, 128, 0.9)'
+  },
   messagesContainer: {
     flex: 1,
     backgroundColor: COLORS.neutral,
   },
   messagesContent: {
     padding: 16,
+    paddingBottom: 30,
   },
   messageBubble: {
     maxWidth: '85%',

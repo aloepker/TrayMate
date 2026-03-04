@@ -12,7 +12,7 @@
  * - Resident-aware system prompt with full meal database
  */
 
-import { GEMINI_CONFIG } from '../config/geminiConfig.example';
+import { GEMINI_CONFIG } from '../config/geminiConfig';
 import { MealService, ResidentService } from './localDataService';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -22,18 +22,29 @@ type GeminiMessage = {
   parts: { text: string }[];
 };
 
+type ResidentOverride = {
+  name: string;
+  dietaryRestrictions?: string[];
+};
+
 /**
- * Builds the full system prompt with resident + meal context
+ * Builds the full system prompt with resident + meal context.
+ * Supports both local residents (full data) and API-sourced residents
+ * (name + dietary restrictions passed via residentOverride).
  */
-function buildSystemPrompt(residentId: string, language: string = 'English'): string {
+async function buildSystemPrompt(
+  residentId: string,
+  language: string = 'English',
+  residentOverride?: ResidentOverride,
+): Promise<string> {
   const resident = ResidentService.getResidentById(residentId);
-  if (!resident) {
-    return 'You are GrannyGBT, a warm and loving grandmotherly meal planning assistant. No resident data is available.';
-  }
+  const allMeals = await MealService.getAllMeals();
 
-  const allMeals = MealService.getAllMeals();
+  let residentContext: string;
 
-  const residentContext = `
+  if (resident) {
+    // Local resident — full data available
+    residentContext = `
 CURRENT RESIDENT: ${resident.fullName} (Room ${resident.roomNumber})
 
 ALLERGIES & DIETARY RESTRICTIONS:
@@ -56,6 +67,28 @@ NUTRITION GOALS:
 
 FAVORITE MEAL IDS: ${resident.favoriteMealIds.join(', ')}
 `;
+  } else if (residentOverride) {
+    // API-sourced resident — use override data
+    const restrictions = residentOverride.dietaryRestrictions;
+    residentContext = `
+CURRENT RESIDENT: ${residentOverride.name}
+
+ALLERGIES & DIETARY RESTRICTIONS:
+${restrictions && restrictions.length > 0
+    ? restrictions.map(r => `- ${r} (MUST AVOID)`).join('\n')
+    : 'None specified'}
+
+DISLIKED INGREDIENTS: None specified
+`;
+  } else {
+    // No resident data at all — still include meal database
+    residentContext = `
+CURRENT RESIDENT: Unknown resident
+
+ALLERGIES & DIETARY RESTRICTIONS: None specified
+DISLIKED INGREDIENTS: None specified
+`;
+  }
 
   const mealsContext = allMeals
     .map(
@@ -105,6 +138,7 @@ LANGUAGE: You MUST respond in ${language}. All your responses — greetings, rec
 
 /**
  * Try calling Gemini REST API with a specific model.
+ * Uses the :generateContent endpoint with systemInstruction.
  * Returns the response text or throws on error.
  */
 async function callGeminiModel(
@@ -114,53 +148,54 @@ async function callGeminiModel(
   userMessage: string,
 ): Promise<string> {
   const url = `${BASE_URL}/${modelName}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+  console.log(`[GrannyGBT] Calling ${modelName}, key starts with: ${GEMINI_CONFIG.apiKey.substring(0, 10)}...`);
 
-  // Build contents array: system instruction as first user message,
-  // then conversation history, then current message
-  const contents: GeminiMessage[] = [];
-
-  // Include conversation history
-  for (const msg of history) {
-    contents.push(msg);
-  }
-
-  // Add current user message
-  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+  // Build contents array: conversation history followed by current message
+  const contents: GeminiMessage[] = [...history, { role: 'user', parts: [{ text: userMessage }] }];
 
   const body = {
-    systemInstruction: {
-      parts: [{ text: systemPrompt }],
-    },
+    systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: {
-      maxOutputTokens: 2048,
-      temperature: 0.8,
-    },
+    generationConfig: { maxOutputTokens: 2048, temperature: 0.8 },
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (fetchErr: any) {
+    console.error(`[GrannyGBT] fetch() threw: ${fetchErr.message}`);
+    throw new Error(`Network error: ${fetchErr.message}`);
+  }
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const status = response.status;
-    const message =
-      errorData?.error?.message || `HTTP ${status}`;
+  console.log(`[GrannyGBT] ${modelName} response status: ${resp.status}`);
+
+  const text = await resp.text().catch(() => '');
+  let data: any = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    data = { _raw: text };
+  }
+
+  if (!resp.ok) {
+    const status = resp.status;
+    const message = data?.error?.message || data?._raw || `HTTP ${status}`;
+    console.error(`[GrannyGBT] ${modelName} error: [${status}] ${message}`);
     throw new Error(`[${status}] ${message}`);
   }
 
-  const data = await response.json();
-
-  // Extract text from response
-  const candidate = data?.candidates?.[0];
-  if (!candidate?.content?.parts?.[0]?.text) {
-    throw new Error('No text in Gemini response');
+  // Extract text from candidates (standard Gemini response shape)
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (parts && Array.isArray(parts)) {
+    const combined = parts.map((p: any) => p.text).filter(Boolean).join('\n');
+    if (combined.trim().length > 0) return combined.trim();
   }
 
-  return candidate.content.parts[0].text;
+  throw new Error('No text in Gemini response');
 }
 
 /**
@@ -170,37 +205,55 @@ export class GeminiChatService {
   private systemPrompt: string = '';
   private history: GeminiMessage[] = [];
   private currentModel: string = GEMINI_CONFIG.models[0];
+  private initPromise: Promise<void> | null = null;
 
   /**
    * Check if the Gemini API key is configured.
    */
   isConfigured(): boolean {
+    const key = GEMINI_CONFIG.apiKey;
     return (
-      GEMINI_CONFIG.apiKey !== 'YOUR_GEMINI_API_KEY_HERE' &&
-      GEMINI_CONFIG.apiKey.length > 0
+      typeof key === 'string' &&
+      key.length > 0 &&
+      key !== 'YOUR_GEMINI_API_KEY_HERE' &&
+      key !== 'REPLACE_WITH_YOUR_KEY'
     );
   }
 
   /**
    * Initialize (or re-initialize) a chat session for the given resident.
+   * Pass residentOverride for API-sourced residents not in the local database.
    */
-  initialize(residentId: string, language: string = 'English'): void {
-    this.systemPrompt = buildSystemPrompt(residentId, language);
-    this.history = [];
-    this.currentModel = GEMINI_CONFIG.models[0];
+  async initialize(
+    residentId: string,
+    language: string = 'English',
+    residentOverride?: ResidentOverride,
+  ): Promise<void> {
+    this.initPromise = (async () => {
+      this.systemPrompt = await buildSystemPrompt(residentId, language, residentOverride);
+      this.history = [];
+      this.currentModel = GEMINI_CONFIG.models[0];
+      console.log('[GrannyGBT] Chat initialized, system prompt length:', this.systemPrompt.length);
+    })();
+    return this.initPromise;
   }
 
   /**
    * Send a message and get a response, with automatic model fallback.
+   * Waits for initialization to complete if still in progress.
    */
   async sendMessage(userMessage: string): Promise<string> {
+    // Wait for initialization to complete if it's in progress
+    if (this.initPromise) {
+      await this.initPromise;
+    }
     if (!this.systemPrompt) {
       throw new Error('Chat not initialized. Call initialize() first.');
     }
 
     let lastError: Error | null = null;
 
-    // Try each model in order
+    // Try each model in order — retry on any failure
     for (const modelName of GEMINI_CONFIG.models) {
       try {
         const responseText = await callGeminiModel(
@@ -230,18 +283,10 @@ export class GeminiChatService {
         return responseText;
       } catch (error: any) {
         lastError = error;
-        const is429 = error.message?.includes('[429]');
-        const is404 = error.message?.includes('[404]');
-
-        if (is429 || is404) {
-          console.warn(
-            `[GrannyGBT] ${modelName} unavailable (${is429 ? 'quota' : 'not found'}), trying next model...`,
-          );
-          continue; // Try next model
-        }
-
-        // For other errors (network, 500, etc.), don't retry
-        throw error;
+        console.warn(
+          `[GrannyGBT] ${modelName} failed: ${error.message}, trying next model...`,
+        );
+        continue; // Try next model
       }
     }
 
@@ -257,10 +302,37 @@ export class GeminiChatService {
   }
 
   /**
+   * Test connectivity to Gemini models by sending a tiny safety-check message.
+   * Returns true if any model responds successfully.
+   */
+  async testConnection(): Promise<boolean> {
+    if (!this.systemPrompt) return false;
+
+    try {
+      // Try each model but do not mutate conversation history
+      for (const modelName of GEMINI_CONFIG.models) {
+        try {
+          const res = await callGeminiModel(modelName, this.systemPrompt, [], 'Say "ok"');
+          if (res && res.length > 0) {
+            this.currentModel = modelName;
+            return true;
+          }
+        } catch (e) {
+          // try next
+          continue;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Reset the chat session for a (possibly different) resident.
    */
-  reset(residentId: string, language: string = 'English'): void {
-    this.initialize(residentId, language);
+  reset(residentId: string, language: string = 'English', residentOverride?: ResidentOverride): void {
+    this.initialize(residentId, language, residentOverride);
   }
 }
 
