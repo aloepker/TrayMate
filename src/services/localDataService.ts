@@ -78,11 +78,35 @@ function apiMealToMeal(api: any): Meal {
   };
 }
 
+// Fallback meals for when the API is unreachable
+const FALLBACK_MEALS: Meal[] = [
+  { id: 1, name: "Banana-Chocolate Pancakes", ingredients: ["Flour","Sugar","Baking Powder","Cinnamon","Milk","Banana","Egg","Vanilla","Chocolate Chips"], nutrition: { calories: 372, totalFat: "11g", cholesterol: "64mg", carbohydrate: "61g", fiber: "3.1g", sugar: "17g", sodium: "240mg", protein: "10g" }, description: "Pancakes topped with fresh sliced bananas and chocolate chips, served with scrambled eggs.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Contains Dairy","Contains Eggs"], isAvailable: true, isSeasonal: false },
+  { id: 2, name: "Broccoli-Cheddar Quiche", ingredients: ["AP Flour","Sugar","Salt","Eggs","Butter","Garlic","Heavy Cream","Cheese","Pepper","Broccoli"], nutrition: { calories: 746, totalFat: "58g", saturatedFat: "34g", transFat: "1.1g", cholesterol: "411mg", carbohydrate: "37g", fiber: "1.2g", sugar: "3.2g", sodium: "680mg", protein: "22g" }, description: "Diced broccoli with cheddar and parmesan cheese in a traditional quiche.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Vegetarian","High Protein"], isAvailable: true, isSeasonal: false },
+  { id: 3, name: "Caesar Salad with Chicken", ingredients: ["Croutons","Chicken","Parmesan Cheese","Caesar Dressing","Romaine Lettuce"], nutrition: { calories: 250, totalFat: "18g", cholesterol: "66mg", carbohydrate: "2g", fiber: "1g", sugar: "1g", sodium: "405mg", protein: "20g" }, description: "Fresh romaine, caesar dressing, shaved parmesan, and herb croutons.", imageUrl: "", mealType: "L, D", mealPeriod: "All Day", timeRange: "11am - 7pm", allergenInfo: ["Dairy","Gluten"], tags: ["High Protein","Low Carb"], isAvailable: true, isSeasonal: false },
+  { id: 4, name: "Citrus Butter Salmon", ingredients: ["Salmon","Olive Oil","Basil","Parsley","Salt","Pepper","Lemon","Butter"], nutrition: { calories: 239, totalFat: "17g", cholesterol: "52mg", carbohydrate: "1g", fiber: "0.3g", sugar: "0.2g", sodium: "135mg", protein: "19g" }, description: "Fresh salmon with brown sugar-lemon seasoning topped with compound butter.", imageUrl: "", mealType: "D", mealPeriod: "Dinner", timeRange: "5pm - 7pm", allergenInfo: ["Fish","Dairy"], tags: ["Low Sodium","Heart Healthy","Omega-3","High Protein"], isAvailable: true, isSeasonal: false },
+  { id: 5, name: "Chicken Bruschetta", ingredients: ["Olive Oil","Chicken","Oregano","Garlic","Salt","Pepper","Tomatoes","Basil","Parmesan"], nutrition: { calories: 266, totalFat: "13g", saturatedFat: "2.1g", cholesterol: "83mg", carbohydrate: "9g", fiber: "2.6g", sugar: "3.7g", sodium: "582mg", protein: "28g" }, description: "A baked chicken breast topped with fresh tomatoes, garlic, and basil.", imageUrl: "", mealType: "D", mealPeriod: "Dinner", timeRange: "5pm - 7pm", allergenInfo: ["Dairy"], tags: ["High Protein"], isAvailable: true, isSeasonal: false },
+  { id: 6, name: "Breakfast Banana Split", ingredients: ["Banana","Greek Yogurt","Granola","Honey","Strawberries","Blueberries"], nutrition: { calories: 212, totalFat: "4.5g", cholesterol: "6mg", carbohydrate: "36g", fiber: "2.6g", sugar: "26g", sodium: "84mg", protein: "8g" }, description: "Fresh sliced banana with vanilla Greek yogurt, fresh berries, granola and honey.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Dairy","Nuts"], tags: ["Vegetarian","Low Sodium","Healthy Choice"], isAvailable: true, isSeasonal: false },
+  { id: 7, name: "Herb Baked Chicken", ingredients: ["Chicken Breast","Olive Oil","Rosemary","Thyme","Garlic","Salt","Pepper"], nutrition: { calories: 420, totalFat: "12g", cholesterol: "125mg", carbohydrate: "8g", fiber: "2g", sugar: "2g", sodium: "380mg", protein: "45g" }, description: "Steamed White Rice, Seasonal Vegetables", imageUrl: "", mealType: "L", mealPeriod: "Lunch", timeRange: "11am - 1pm", allergenInfo: [], tags: ["Low Sodium","Heart Healthy","High Protein"], isAvailable: true, isSeasonal: false },
+  { id: 8, name: "Garden Vegetable Medley", ingredients: ["Zucchini","Bell Peppers","Carrots","Broccoli","Olive Oil","Herbs"], nutrition: { calories: 180, totalFat: "8g", cholesterol: "0mg", carbohydrate: "24g", fiber: "6g", sugar: "8g", sodium: "240mg", protein: "6g" }, description: "Fresh Seasonal Vegetables", imageUrl: "", mealType: "L", mealPeriod: "Lunch", timeRange: "11am - 1pm", allergenInfo: [], tags: ["Vegetarian","Vegan","Heart Healthy","Low Calorie"], isAvailable: true, isSeasonal: true },
+  { id: 9, name: "Strawberry Belgian Waffle", ingredients: ["Flour","Eggs","Butter","Milk","Sugar","Strawberries","Whipped Cream"], nutrition: { calories: 350, totalFat: "14g", cholesterol: "95mg", carbohydrate: "48g", fiber: "2g", sugar: "22g", sodium: "420mg", protein: "8g" }, description: "Fresh Berries, Light Syrup", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Contains Dairy"], isAvailable: true, isSeasonal: false },
+  { id: 10, name: "Spring Menu Special", ingredients: ["Chef's Selection"], nutrition: { calories: 480, totalFat: "18g", cholesterol: "85mg", carbohydrate: "32g", fiber: "4g", sugar: "6g", sodium: "520mg", protein: "32g" }, description: "Chef's Daily Creation", imageUrl: "", mealType: "D", mealPeriod: "Dinner", timeRange: "5pm - 7pm", allergenInfo: [], tags: ["Chef Special"], isAvailable: true, isSeasonal: true },
+  { id: 11, name: "Grilled Salmon Fillet", ingredients: ["Atlantic Salmon","Lemon","Dill","Olive Oil","Asparagus"], nutrition: { calories: 390, totalFat: "22g", cholesterol: "78mg", carbohydrate: "4g", fiber: "2g", sugar: "1g", sodium: "320mg", protein: "38g" }, description: "Citrus Butter, Roasted Asparagus", imageUrl: "", mealType: "D", mealPeriod: "Dinner", timeRange: "5pm - 7pm", allergenInfo: ["Fish"], tags: ["Low Sodium","Heart Healthy","Omega-3","High Protein"], isAvailable: true, isSeasonal: false },
+  { id: 12, name: "Oatmeal Bowl", ingredients: ["Steel Cut Oats","Milk","Honey","Blueberries","Almonds","Cinnamon"], nutrition: { calories: 280, totalFat: "8g", cholesterol: "5mg", carbohydrate: "45g", fiber: "6g", sugar: "18g", sodium: "120mg", protein: "12g" }, description: "Fresh Berries, Honey, Almonds", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Dairy","Nuts"], tags: ["Vegetarian","Heart Healthy","High Fiber"], isAvailable: true, isSeasonal: false },
+];
+
 async function fetchMealsFromApi(): Promise<Meal[]> {
-  const res = await fetch(`${API_BASE_URL}/meals`);
-  if (!res.ok) throw new Error(`Failed to fetch meals: HTTP ${res.status}`);
-  const data = await res.json();
-  return data.map(apiMealToMeal);
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+    const res = await fetch(`${API_BASE_URL}/meals`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`Failed to fetch meals: HTTP ${res.status}`);
+    const data = await res.json();
+    return data.map(apiMealToMeal);
+  } catch (error) {
+    console.warn("API unreachable, using fallback meals:", error);
+    return FALLBACK_MEALS;
+  }
 }
 
 export interface Nutrition {
@@ -851,9 +875,37 @@ export const RecommendationService = {
 
   const restrictions = resident?.dietaryRestrictions.map((r) => r.name) || [];
 
+  // Build a specific explanation of WHY this meal is safe and recommended
+  const whyParts: string[] = [];
+
+  // Explain allergen safety
+  if (restrictions.length > 0) {
+    const avoided = restrictions.filter(
+      (r) => !rec.meal.allergenInfo.some((a) => a.toLowerCase().includes(r.toLowerCase()))
+    );
+    if (avoided.length > 0) {
+      whyParts.push(`free of ${avoided.join(', ')}`);
+    }
+  }
+
+  // Add scoring reasons
+  if (rec.allReasons && rec.allReasons.length > 0) {
+    for (const r of rec.allReasons) {
+      const lower = r.toLowerCase();
+      // Avoid duplicating the allergen info
+      if (!lower.includes('free of')) {
+        whyParts.push(r.toLowerCase());
+      }
+    }
+  }
+
+  const whyText = whyParts.length > 0
+    ? `It's ${whyParts.join(', ')} — a great fit for ${resident?.firstName || 'this resident'}. We recommend the`
+    : `Based on ${resident?.firstName || 'their'}'s profile (${restrictions.join(', ')}), we suggest the`;
+
   return {
     meal_name: rec.meal.name,
-    reason: `Based on their dietary restrictions (${restrictions.join(", ")}), we suggest the`,
+    reason: whyText,
     dietary_restrictions: restrictions,
   };
 },
