@@ -414,23 +414,43 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             )}
             {residents.map((r, idx) => (
               <View key={r.id || `res-${idx}`} style={styles.assignRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.personName}>{r.name}</Text>
-                  <Text style={styles.personMeta}>Room {r.room}</Text>
-                  <View style={styles.chipRow}>
-                    {(r.dietaryRestrictions ?? []).length ? (
-                      r.dietaryRestrictions.map((tag, i) => (
-                        <View key={`${r.id}-tag-${i}`} style={styles.chip}>
-                          <Text style={styles.chipText}>{tag}</Text>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={styles.restrictionsMuted}>No restrictions</Text>
-                    )}
+                {/* Top: Resident info + action icons */}
+                <View style={styles.assignTopRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.personName}>{r.name}</Text>
+                    <Text style={styles.personMeta}>Room {r.room}</Text>
+                    <View style={styles.chipRow}>
+                      {(r.dietaryRestrictions ?? []).length ? (
+                        r.dietaryRestrictions.map((tag, i) => (
+                          <View key={`${r.id}-tag-${i}`} style={styles.chip}>
+                            <Text style={styles.chipText}>{tag}</Text>
+                          </View>
+                        ))
+                      ) : (
+                        <Text style={styles.restrictionsMuted}>No restrictions</Text>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.actionIcons}>
+                    <Pressable
+                      style={styles.iconBtn}
+                      onPress={() => openEditResident(r)}
+                      hitSlop={10}
+                    >
+                      <Feather name="edit-2" size={18} color="#6D6B3B" />
+                    </Pressable>
+                    <Pressable
+                      style={styles.iconBtn}
+                      onPress={() => askDeleteResident(r.id)}
+                      hitSlop={10}
+                    >
+                      <Feather name="trash-2" size={18} color="#6D6B3B" />
+                    </Pressable>
                   </View>
                 </View>
 
-                <View style={styles.rightActions}>
+                {/* Bottom: Caregiver picker + Meals button */}
+                <View style={styles.assignBottomRow}>
                   <View style={styles.pickerWrap}>
                     <Picker
                       selectedValue={r.caregiverId ?? "none"}
@@ -459,20 +479,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   >
                     <Text style={styles.cartBtnIcon}>🛒</Text>
                     <Text style={styles.cartBtnText}>Select Resident</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.iconBtn}
-                    onPress={() => openEditResident(r)}
-                    hitSlop={10}
-                  >
-                    <Feather name="edit-2" size={18} color="#6D6B3B" />
-                  </Pressable>
-                  <Pressable
-                    style={styles.iconBtn}
-                    onPress={() => askDeleteResident(r.id)}
-                    hitSlop={10}
-                  >
-                    <Feather name="trash-2" size={18} color="#6D6B3B" />
                   </Pressable>
                 </View>
               </View>
@@ -944,14 +950,28 @@ const styles = StyleSheet.create({
     fontWeight: "700", 
     marginTop: 6 
   },
-  assignRow: { 
-    backgroundColor: "#F8F8F8", 
-    borderRadius: 14, 
-    padding: 14, 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 14, 
-    marginBottom: 12 
+  assignRow: {
+    backgroundColor: "#F8F8F8",
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "column",
+    gap: 12,
+    marginBottom: 12
+  },
+  assignTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  assignBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  actionIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   personName: { 
     fontSize: 14, 
@@ -985,22 +1005,17 @@ const styles = StyleSheet.create({
     color: "#7A7A7A", 
     fontWeight: "700" 
   },
-  rightActions: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 10 
+  pickerWrap: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E3E3E3",
+    overflow: "hidden"
   },
-  pickerWrap: { 
-    width: 180, 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 10, 
-    borderWidth: 1, 
-    borderColor: "#E3E3E3", 
-    overflow: "hidden" 
-  },
-  picker: { 
-    height: 44, 
-    width: "100%" 
+  picker: {
+    height: 44,
+    width: "100%"
   },
   iconBtn: {
     width: 34,
