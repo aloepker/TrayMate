@@ -473,6 +473,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       navigation.navigate("Home", {
                         residentId: r.id,
                         residentName: r.name,
+                        dietaryRestrictions: r.dietaryRestrictions ?? [],
                       })
                     }
                     hitSlop={10}

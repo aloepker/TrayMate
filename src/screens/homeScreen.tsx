@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,69 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { translateMealName } from '../services/mealLocalization';
+import {
+  RecommendationService,
+  ResidentService,
+  Meal as ServiceMeal,
+} from '../services/localDataService';
 
-const HomeScreen = ({ navigation }: any) => {
+type Recommendation = {
+  meal: ServiceMeal;
+  score: number;
+  reason: string;
+  allReasons: string[];
+};
+
+const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount } = useCart();
   const { t, scaled, language, getTouchTargetSize, theme } = useSettings();
   const touchTarget = getTouchTargetSize();
 
-  const residentName = 'Bobby';
+  // Get resident info from navigation params (set by admin dashboard)
+  const residentId = route?.params?.residentId as string | undefined;
+  const residentName =
+    route?.params?.residentName ||
+    (residentId && ResidentService.getResidentById(residentId)?.fullName) ||
+    'Resident';
+  const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
+
+  // Build avatar initials from resident name
+  const initials = useMemo(() => {
+    const parts = residentName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return residentName.slice(0, 2).toUpperCase();
+  }, [residentName]);
+
+  // Personalized meal recommendations for this resident
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingRecs(true);
+        const resId = residentId || ResidentService.getDefaultResident().id;
+        const recs = await RecommendationService.getRecommendations(resId, null, 4);
+        if (!cancelled) {
+          setRecommendations(recs);
+        }
+      } catch (e) {
+        console.warn('[Home] Failed to load recommendations:', e);
+      } finally {
+        if (!cancelled) setLoadingRecs(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [residentId]);
+
   const activeOrders = orders.filter((o) => o.status !== 'completed');
   const cartCount = getCartCount();
 
@@ -24,6 +76,16 @@ const HomeScreen = ({ navigation }: any) => {
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? t.goodMorning : hour < 17 ? t.goodAfternoon : t.goodEvening;
+
+  // Navigation helper — passes resident info to all child screens
+  const navWithResident = (screen: string, extra?: Record<string, any>) => {
+    navigation.navigate(screen, {
+      residentId,
+      residentName,
+      dietaryRestrictions,
+      ...extra,
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -39,22 +101,77 @@ const HomeScreen = ({ navigation }: any) => {
           <View style={styles.headerLeft}>
             <Text style={[styles.greeting, { fontSize: scaled(16) }]}>{greeting},</Text>
             <Text style={[styles.userName, { fontSize: scaled(28) }]}>{residentName}</Text>
+            {dietaryRestrictions.length > 0 && (
+              <View style={styles.dietaryRow}>
+                {dietaryRestrictions.map((tag, i) => (
+                  <View key={`diet-${i}`} style={styles.dietaryChip}>
+                    <Text style={styles.dietaryChipText}>⚠ {tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
           <TouchableOpacity
             style={[styles.avatarButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => navWithResident('Settings')}
           >
-            <Text style={[styles.avatarText, { fontSize: scaled(16) }]}>BJ</Text>
+            <Text style={[styles.avatarText, { fontSize: scaled(16) }]}>{initials}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Upcoming Meals Preview */}
+        {/* Recommended Meals for This Resident */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { fontSize: scaled(18) }]}>
+              Recommended for {residentName.split(' ')[0]}
+            </Text>
+            <TouchableOpacity onPress={() => navWithResident('BrowseMealOptions')}>
+              <Text style={[styles.seeAllText, { fontSize: scaled(14) }]}>{t.seeAll}</Text>
+            </TouchableOpacity>
+          </View>
+          {loadingRecs ? (
+            <ActivityIndicator size="small" color="#717644" style={{ marginVertical: 20 }} />
+          ) : recommendations.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mealsScroll}
+            >
+              {recommendations.map((rec) => (
+                <TouchableOpacity
+                  key={rec.meal.id}
+                  style={styles.recCard}
+                  onPress={() => navWithResident('BrowseMealOptions')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.recEmoji}>
+                    {rec.meal.mealPeriod === 'Breakfast' ? '🌅' : rec.meal.mealPeriod === 'Lunch' ? '☀️' : '🌙'}
+                  </Text>
+                  <Text style={styles.recPeriod}>{rec.meal.mealPeriod}</Text>
+                  <Text style={styles.recName} numberOfLines={2}>
+                    {translateMealName(rec.meal.name, language)}
+                  </Text>
+                  <Text style={styles.recReason} numberOfLines={2}>
+                    {rec.reason}
+                  </Text>
+                  <View style={styles.recSafeBadge}>
+                    <Text style={styles.recSafeText}>✅ Safe</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noRecsText}>No personalized recommendations available.</Text>
+          )}
+        </View>
+
+        {/* Upcoming Meals Preview (orders) */}
         {activeOrders.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { fontSize: scaled(18) }]}>{t.upcomingMeals}</Text>
               <TouchableOpacity
-                onPress={() => navigation.navigate('UpcomingMeals')}
+                onPress={() => navWithResident('UpcomingMeals')}
               >
                 <Text style={[styles.seeAllText, { fontSize: scaled(14) }]}>{t.seeAll}</Text>
               </TouchableOpacity>
@@ -82,7 +199,7 @@ const HomeScreen = ({ navigation }: any) => {
                   <TouchableOpacity
                     key={order.id}
                     style={styles.mealPreviewCard}
-                    onPress={() => navigation.navigate('UpcomingMeals')}
+                    onPress={() => navWithResident('UpcomingMeals')}
                     activeOpacity={0.8}
                   >
                     <View
@@ -127,7 +244,7 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: '#FFF8E7' }]}
-            onPress={() => navigation.navigate('BrowseMealOptions')}
+            onPress={() => navWithResident('BrowseMealOptions')}
             activeOpacity={0.75}
             accessibilityRole="button"
           >
@@ -143,7 +260,7 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: '#EBF5FF' }]}
-            onPress={() => navigation.navigate('UpcomingMeals')}
+            onPress={() => navWithResident('UpcomingMeals')}
             activeOpacity={0.75}
             accessibilityRole="button"
           >
@@ -161,7 +278,7 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: '#F3EDFF' }]}
-            onPress={() => navigation.navigate('AIMealAssistant')}
+            onPress={() => navWithResident('AIMealAssistant')}
             activeOpacity={0.75}
             accessibilityRole="button"
           >
@@ -177,7 +294,7 @@ const HomeScreen = ({ navigation }: any) => {
 
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: '#EDFBF1' }]}
-            onPress={() => navigation.navigate('Cart')}
+            onPress={() => navWithResident('Cart')}
             activeOpacity={0.75}
             accessibilityRole="button"
           >
@@ -215,7 +332,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 24,
     marginBottom: 28,
   },
@@ -232,6 +349,25 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#3A3A3A',
     marginTop: 2,
+  },
+  dietaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  dietaryChip: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  dietaryChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
   },
   avatarButton: {
     width: 48,
@@ -274,6 +410,63 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#717644',
     marginBottom: 14,
+  },
+
+  // Recommended meals
+  recCard: {
+    width: 170,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  recEmoji: {
+    fontSize: 22,
+    marginBottom: 6,
+  },
+  recPeriod: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#717644',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  recName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#3A3A3A',
+    marginBottom: 6,
+  },
+  recReason: {
+    fontSize: 11,
+    color: '#6A6A6A',
+    marginBottom: 8,
+    lineHeight: 15,
+  },
+  recSafeBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 'auto' as any,
+  },
+  recSafeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  noRecsText: {
+    fontSize: 13,
+    color: '#8A8A8A',
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 
   // Upcoming meals horizontal scroll
