@@ -12,9 +12,10 @@ type Meal = {
   tags?: string[];
 };
 
-// Order type — a confirmed group of meals
+// Order type — a confirmed group of meals, scoped to a resident
 export type Order = {
   id: string;
+  residentId: string;
   items: Meal[];
   status: 'confirmed' | 'preparing' | 'ready' | 'completed';
   placedAt: Date;
@@ -31,8 +32,9 @@ type CartContextType = {
   getTotalNutrition: () => { calories: number; sodium: number; protein: number };
   // Orders
   orders: Order[];
-  placeOrder: () => Order | null;
+  placeOrder: (residentId?: string) => Order | null;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
+  getOrdersForResident: (residentId: string) => Order[];
 };
 
 // Create the context
@@ -74,12 +76,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const placeOrder = (): Order | null => {
+  const placeOrder = (residentId?: string): Order | null => {
     if (cart.length === 0) return null;
 
     const totals = getTotalNutrition();
     const newOrder: Order = {
       id: `order_${Date.now()}`,
+      residentId: residentId || 'unknown',
       items: [...cart],
       status: 'confirmed',
       placedAt: new Date(),
@@ -97,6 +100,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
+  const getOrdersForResident = (residentId: string): Order[] => {
+    return orders.filter((o) => o.residentId === residentId);
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -109,6 +116,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         orders,
         placeOrder,
         updateOrderStatus,
+        getOrdersForResident,
       }}
     >
       {children}

@@ -13,7 +13,7 @@ import { translateMealName } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
 
 const HomeScreen = ({ navigation, route }: any) => {
-  const { orders, getCartCount } = useCart();
+  const { orders, getCartCount, getOrdersForResident } = useCart();
   const { t, scaled, language, getTouchTargetSize, theme } = useSettings();
   const touchTarget = getTouchTargetSize();
 
@@ -34,7 +34,9 @@ const HomeScreen = ({ navigation, route }: any) => {
     return residentName.slice(0, 2).toUpperCase();
   }, [residentName]);
 
-  const activeOrders = orders.filter((o) => o.status !== 'completed');
+  // Only show orders for this specific resident
+  const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
+  const activeOrders = residentOrders.filter((o) => o.status !== 'completed');
   const cartCount = getCartCount();
 
   // Get current time of day for greeting

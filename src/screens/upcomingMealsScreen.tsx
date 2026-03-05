@@ -28,11 +28,19 @@ const MEAL_EMOJIS: Record<string, string> = {
   'Oatmeal Bowl': '🥣',
 };
 
-function UpcomingMealsScreen({ navigation }: any) {
-  const { orders, updateOrderStatus } = useCart();
+function UpcomingMealsScreen({ navigation, route }: any) {
+  const { orders, updateOrderStatus, getOrdersForResident } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Get resident info from navigation params
+  const residentId = route?.params?.residentId as string | undefined;
+  const residentName = route?.params?.residentName || 'Resident';
+  const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
+
+  // Only show orders for this specific resident
+  const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
 
   const statusConfig: Record<
     Order['status'],
@@ -117,8 +125,8 @@ function UpcomingMealsScreen({ navigation }: any) {
     }
   };
 
-  const activeOrders = orders.filter((o) => o.status !== 'completed');
-  const completedOrders = orders.filter((o) => o.status === 'completed');
+  const activeOrders = residentOrders.filter((o) => o.status !== 'completed');
+  const completedOrders = residentOrders.filter((o) => o.status === 'completed');
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -143,7 +151,7 @@ function UpcomingMealsScreen({ navigation }: any) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {orders.length === 0 ? (
+        {residentOrders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>📋</Text>
             <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
@@ -152,7 +160,11 @@ function UpcomingMealsScreen({ navigation }: any) {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => navigation.navigate('BrowseMealOptions')}
+              onPress={() => navigation.navigate('BrowseMealOptions', {
+                residentId,
+                residentName,
+                dietaryRestrictions,
+              })}
             >
               <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
@@ -385,6 +397,20 @@ function UpcomingMealsScreen({ navigation }: any) {
                 ))}
               </>
             )}
+
+            {/* Browse Menu button — quick access without going back */}
+            <TouchableOpacity
+              style={styles.browseMenuBtn}
+              onPress={() => navigation.navigate('BrowseMealOptions', {
+                residentId,
+                residentName,
+                dietaryRestrictions,
+              })}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.browseMenuEmoji}>🍽</Text>
+              <Text style={[styles.browseMenuText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -769,6 +795,29 @@ const styles = StyleSheet.create({
     color: '#166534',
     textAlign: 'center',
     marginTop: 8,
+  },
+  browseMenuBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#717644',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 20,
+    shadowColor: '#717644',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  browseMenuEmoji: {
+    fontSize: 20,
+  },
+  browseMenuText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });
 
