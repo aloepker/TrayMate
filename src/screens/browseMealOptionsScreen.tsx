@@ -676,7 +676,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Navigate to cart screen with resident context
   const goToCart = () => {
-    navigation.navigate('Cart', { residentId, residentName });
+    navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
   // Fetch meals from API (async)

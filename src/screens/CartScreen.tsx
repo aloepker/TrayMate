@@ -16,20 +16,29 @@ import {
   translateMealPeriod,
 } from '../services/mealLocalization';
 
-const CartScreen = ({ navigation }: any) => {
+const CartScreen = ({ navigation, route }: any) => {
   // Use the cart context
   const { cart: cartItems, removeFromCart, placeOrder, getTotalNutrition } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
   const touchTarget = getTouchTargetSize();
 
+  // Get resident info from navigation params
+  const residentId = route?.params?.residentId as string | undefined;
+  const residentName = route?.params?.residentName;
+  const dietaryRestrictions = route?.params?.dietaryRestrictions;
+
   const confirmOrder = () => {
-    // Save order and clear cart
-    const placed = placeOrder();
+    // Save order scoped to this resident
+    const placed = placeOrder(residentId);
     if (placed && notifications.orderUpdates) {
       Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
     }
-    // Navigate to upcoming meals
-    navigation.navigate('UpcomingMeals');
+    // Navigate to upcoming meals with resident context
+    navigation.navigate('UpcomingMeals', {
+      residentId,
+      residentName,
+      dietaryRestrictions,
+    });
   };
 
   const totals = getTotalNutrition();
