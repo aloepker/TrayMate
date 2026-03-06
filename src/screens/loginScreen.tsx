@@ -49,7 +49,7 @@ export default function Login({ navigation }: any) {
           navigation.replace("AdminDashboard");
           break;
         case "ROLE_CAREGIVER":
-          navigation.replace("Home");
+          navigation.replace("CaregiverDashboard");
           break;
         case "ROLE_KITCHEN":
           navigation.replace("Home");
