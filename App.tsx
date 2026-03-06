@@ -17,6 +17,9 @@ import SettingsScreen from './src/screens/SettingsScreens';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
 
+//Caregiver dashboard screen
+import CaregiverDashboardScreen from './src/screens/caregiver/caregiverDashboardScreen';
+
 const Stack = createStackNavigator();
 
 // Adding them to the navigation stack
@@ -39,6 +42,7 @@ export default function App() {
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
             <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+            <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </CartProvider>

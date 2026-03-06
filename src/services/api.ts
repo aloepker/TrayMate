@@ -134,12 +134,44 @@ export type KitchenStaff = {
   shift?: string;
 };
 
+/**
+ * UPDATED Resident type
+ *
+ * Previously Resident only included:
+ * id, name, room, dietaryRestrictions
+ *
+ * Expanded it so the caregiver dashboard can show
+ * the real medical information collected in AddResidentModal:
+ *
+ * - medicalConditions
+ * - foodAllergies
+ * - medications
+ *
+ * These fields are displayed in the caregiver resident popup.
+ */
 export type Resident = {
   id: string;
-  name: string; // UI field
-  room: string; // UI field
-  dietaryRestrictions: string[]; // UI field
+  name: string;
+  room: string;
+  dietaryRestrictions: string[];
+  medicalConditions: string[];
+  foodAllergies: string[];
+  medications: string[];
   caregiverId?: string | null;
+};
+
+/**
+ * Notification object used by caregiver dashboard
+ *
+ * Represents alerts coming from the kitchen
+ */
+export type KitchenNotification = {
+  id: string;
+  residentId: string;
+  message: string;
+  status?: string;
+  createdAt?: string;
+  read?: boolean;
 };
 
 
@@ -147,9 +179,16 @@ export type Resident = {
 
 type ResidentApi = {
   id: string | number;
-  fullName: string;
-  roomNumber: string;
-  foodAllergies: any;
+  fullName?: string;
+  name?: string;
+  roomNumber?: string | number;
+  room?: string | number;
+
+  dietaryRestrictions?: any;
+  foodAllergies?: any;
+  medicalConditions?: any;
+  medications?: any;
+
   caregiverId?: string | null;
 };
 
@@ -160,9 +199,12 @@ type ResidentApi = {
 function mapResident(api: ResidentApi): Resident {
   return {
     id: String(api.id),
-    name: String(api.fullName ?? ""),
-    room: String(api.roomNumber ?? ""),
-    dietaryRestrictions: normalizeStringArray(api.foodAllergies),
+    name: String(api.fullName ?? api.name ?? ""),
+    room: String(api.roomNumber ?? api.room ?? ""),
+    dietaryRestrictions: normalizeStringArray(api.dietaryRestrictions),
+    medicalConditions: normalizeStringArray(api.medicalConditions),
+    foodAllergies: normalizeStringArray(api.foodAllergies),
+    medications: normalizeStringArray(api.medications),
     caregiverId: api.caregiverId ?? null,
   };
 }
@@ -259,6 +301,45 @@ export async function getResidents(): Promise<Resident[]> {
   const list = unwrapList<ResidentApi>(raw);
   return list.map(mapResident);
 }
+
+/**
+ * GET caregiver's assigned residents
+ * Endpoint: /caregiver/residents
+ * This should return ONLY residents assigned to the logged-in caregiver.
+ */
+export async function getCaregiverResidents(): Promise<Resident[]> {
+  const raw = await request<any>("/caregiver/residents");
+  const list = unwrapList<ResidentApi>(raw);
+  return list.map(mapResident);
+}
+
+
+
+/**
+ * NEW: Caregiver Notifications
+ *
+ * GET /caregiver/notifications
+ *
+ * Returns alerts related to the caregiver's assigned residents.
+ *
+ * Example notifications:
+ * - Kitchen order ready
+ * - Meal preparation updates
+ * - Dietary restriction alerts
+ *
+ * These are shown in the caregiver dashboard
+ * notification bell icon.
+ */
+
+export async function getCaregiverNotifications(): Promise<KitchenNotification[]> {
+  const raw = await request<any>("/caregiver/notifications");
+  return unwrapList<KitchenNotification>(raw);
+}
+
+
+
+
+
 
 /**
  * Create resident
