@@ -15,6 +15,7 @@ import {
   Animated,
   Dimensions,
   Alert,
+  Image,
 } from "react-native";
 import { StatusBar } from "react-native";
 import { useCart } from "./context/CartContext";
@@ -59,6 +60,20 @@ const MEAL_PLACEHOLDER_COLORS: Record<string, { bg: string; accent: string; emoj
 const getMealPlaceholder = (mealName: string) => {
   return MEAL_PLACEHOLDER_COLORS[mealName] || { bg: '#F3F4F6', accent: '#6B7280', emoji: '🍽' };
 };
+
+// Real meal images mapped by meal name
+const MEAL_IMAGES: Record<string, any> = {
+  'Banana-Chocolate Pancakes': require('../styles/pictures/Chocolate-chip-banana-pancakes.jpg'),
+  'Broccoli-Cheddar Quiche': require('../styles/pictures/Broccoli-Quiche.jpg'),
+  'Caesar Salad with Chicken': require('../styles/pictures/Chicken-Caesar-Salad.png'),
+  'Citrus Butter Salmon': require('../styles/pictures/Citrus-butter-salmon.png'),
+  'Chicken Bruschetta': require('../styles/pictures/Grilled_Bruschetta_Chicken.jpg'),
+  'Breakfast Banana Split': require('../styles/pictures/Breakfast-banana-split.webp'),
+  'Herb Baked Chicken': require('../styles/pictures/herb-baked-chicken.png'),
+  'Garden Vegetable Medley': require('../styles/pictures/Seasonal vegetables.png'),
+};
+
+const getMealImage = (mealName: string) => MEAL_IMAGES[mealName] ?? null;
 
 // ---------- Rich Text Renderer for Chat ----------
 const ChatRichText = ({
@@ -107,11 +122,16 @@ const ChatRichText = ({
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
+          const realImg = getMealImage(matchedMeal.name);
           const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
             <View key={lineIdx} style={chatRichStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
               <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
+                {realImg ? (
+                  <Image source={realImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
+                ) : (
+                  <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
+                )}
               </View>
               <View style={chatRichStyles.mealCardInfo}>
                 <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(16) }]}>
@@ -179,7 +199,8 @@ const chatRichStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  mealCardImage: { width: 64, justifyContent: 'center', alignItems: 'center' },
+  mealCardImage: { width: 80, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  mealCardRealImage: { width: 80, height: 80 },
   mealCardEmoji: { fontSize: 30 },
   mealCardInfo: { flex: 1, padding: 12 },
   mealCardName: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 3 },
@@ -758,42 +779,47 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
+    const realImg = getMealImage(item.name);
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
         activeOpacity={0.7}
         onPress={() => {
           addToCart({ ...item, id: parseInt(item.id) });
         }}
       >
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
-          <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          {realImg ? (
+            <Image source={realImg} style={styles.mealRealImage} resizeMode="cover" />
+          ) : (
+            <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          )}
           <View style={styles.mealImageOverlay}>
-            <Text style={[styles.mealImageLabel, { color: ph.accent }]}>
+            <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
               {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
         </View>
-        <View style={styles.cardContent}>
-          <Text style={[styles.cardTitle, { fontSize: scaled(20) }]}>
+        <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
             {translateMealName(item.name, language)}
           </Text>
-          <View style={styles.timeBadge}>
-            <Text style={[styles.timeBadgeText, { fontSize: scaled(14) }]}>
+          <View style={[styles.timeBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
+            <Text style={[styles.timeBadgeText, { fontSize: scaled(14), color: theme.accent }]}>
               {item.time_range}
             </Text>
           </View>
-          <Text style={[styles.cardDescription, { fontSize: scaled(15) }]}>
+          <Text style={[styles.cardDescription, { fontSize: scaled(15), color: theme.textSecondary }]}>
             {translateMealDescription(item.description, language)}
           </Text>
           <View style={styles.nutritionRow}>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
               {item.kcal} kcal
             </Text>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
               Sodium: {item.sodium_mg}mg
             </Text>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
               Protein: {item.protein_g}g
             </Text>
           </View>
@@ -1121,28 +1147,35 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mealImageContainer: {
-    height: 122,
+    height: 180,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
+  },
+  mealRealImage: {
+    width: '100%',
+    height: 180,
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   mealImageEmoji: {
     fontSize: 56,
   },
   mealImageOverlay: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.38)',
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
   },
   mealImageLabel: {
     fontSize: 13,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
   cardContent: {
     padding: 16,

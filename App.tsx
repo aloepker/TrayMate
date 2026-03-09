@@ -6,6 +6,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 // Import context providers
 import { CartProvider } from './src/screens/context/CartContext';
 import { SettingsProvider } from './src/screens/context/SettingsContext';
+import { KitchenMessageProvider } from './src/screens/context/KitchenMessageContext';
 
 // Importing screen files
 import HomeScreen from './src/screens/homeScreen';
@@ -26,6 +27,7 @@ const Stack = createStackNavigator();
 export default function App() {
   return (
     <SettingsProvider>
+      <KitchenMessageProvider>
       <CartProvider>
         <NavigationContainer>
           <Stack.Navigator
@@ -46,6 +48,7 @@ export default function App() {
           </Stack.Navigator>
         </NavigationContainer>
       </CartProvider>
+      </KitchenMessageProvider>
     </SettingsProvider>
   );
 }
