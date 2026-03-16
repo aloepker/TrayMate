@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+
+// ---------- Types ----------
 
 export type KitchenMessage = {
   id: string;
@@ -25,23 +27,26 @@ const KitchenMessageContext = createContext<KitchenMessageContextType | undefine
 export const KitchenMessageProvider = ({ children }: { children: ReactNode }) => {
   const [messages, setMessages] = useState<KitchenMessage[]>([]);
 
-  const sendMessage = (msg: Omit<KitchenMessage, 'id' | 'timestamp' | 'read'>) => {
-    const newMsg: KitchenMessage = {
-      ...msg,
-      id: `msg_${Date.now()}`,
-      timestamp: new Date(),
-      read: false,
-    };
-    setMessages(prev => [newMsg, ...prev]);
-  };
+  const sendMessage = useCallback(
+    (msg: Omit<KitchenMessage, 'id' | 'timestamp' | 'read'>) => {
+      const newMsg: KitchenMessage = {
+        ...msg,
+        id: `msg_${Date.now()}`,
+        timestamp: new Date(),
+        read: false,
+      };
+      setMessages(prev => [newMsg, ...prev]);
+    },
+    [],
+  );
 
-  const markAllRead = () => {
+  const markAllRead = useCallback(() => {
     setMessages(prev => prev.map(m => ({ ...m, read: true })));
-  };
+  }, []);
 
-  const markRead = (id: string) => {
+  const markRead = useCallback((id: string) => {
     setMessages(prev => prev.map(m => m.id === id ? { ...m, read: true } : m));
-  };
+  }, []);
 
   const unreadCount = messages.filter(m => !m.read).length;
 

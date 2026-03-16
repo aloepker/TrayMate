@@ -14,9 +14,10 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
-import { TextInput } from "react-native";
 import { useKitchenMessages } from "../context/KitchenMessageContext";
 
 import {
@@ -35,6 +36,9 @@ interface CaregiverDashboardProps {
 export default function CaregiverDashboardScreen({
   navigation,
 }: CaregiverDashboardProps) {
+  // Kitchen message context
+  const { messages, unreadCount, sendMessage, markAllRead, markRead } = useKitchenMessages();
+
   // -----------------------------
   // Main screen state
   // -----------------------------
@@ -45,6 +49,14 @@ export default function CaregiverDashboardScreen({
   // Notifications related to the caregiver's assigned residents
   const [notifications, setNotifications] = useState<KitchenNotification[]>([]);
 
+  // Kitchen message compose state
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [composeResident, setComposeResident] = useState<Resident | null>(null);
+  const [messageText, setMessageText] = useState('');
+
+  // Inbox (view messages) modal state
+  const [showInboxModal, setShowInboxModal] = useState(false);
+
   // Loading spinner for initial page fetch
   const [loading, setLoading] = useState(true);
 
@@ -53,12 +65,6 @@ export default function CaregiverDashboardScreen({
 
   // Controls resident detail popup
   const [showResidentModal, setShowResidentModal] = useState(false);
-
-  // Kitchen messaging
-  const { sendMessage, unreadCount: kitchenUnread } = useKitchenMessages();
-  const [showComposeModal, setShowComposeModal] = useState(false);
-  const [composeResident, setComposeResident] = useState<Resident | null>(null);
-  const [messageText, setMessageText] = useState('');
 
   // -----------------------------
   // Initial data load
@@ -202,6 +208,7 @@ export default function CaregiverDashboardScreen({
     });
     setMessageText('');
     setShowComposeModal(false);
+    setComposeResident(null);
     Alert.alert('Sent', 'Your message was sent to the kitchen.');
   };
 
@@ -221,12 +228,28 @@ export default function CaregiverDashboardScreen({
           </View>
         </View>
 
-        <Pressable
-          style={styles.logoutBtn}
-          onPress={() => navigation.replace("Login")}
-        >
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+        <View style={styles.topBarRight}>
+          {/* Kitchen messages bell */}
+          <Pressable
+            style={styles.bellBtn}
+            onPress={() => { setShowInboxModal(true); markAllRead(); }}
+            hitSlop={8}
+          >
+            <Feather name="bell" size={22} color="#3C3C3C" />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable
+            style={styles.logoutBtn}
+            onPress={() => navigation.replace("Login")}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* -----------------------------
@@ -496,6 +519,41 @@ export default function CaregiverDashboardScreen({
           </Pressable>
         </View>
       </Modal>
+
+      {/* Inbox Modal */}
+      <Modal visible={showInboxModal} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <Text style={styles.composeTitle}>Kitchen Messages</Text>
+              <Pressable onPress={() => setShowInboxModal(false)} hitSlop={8}>
+                <Feather name="x" size={22} color="#111827" />
+              </Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {messages.length === 0 ? (
+                <Text style={styles.inboxEmpty}>No messages sent yet.</Text>
+              ) : (
+                messages.map(m => (
+                  <View key={m.id} style={styles.inboxItem}>
+                    <View style={styles.inboxItemHeader}>
+                      <Text style={styles.inboxResident}>{m.residentName} · Room {m.residentRoom}</Text>
+                      <Text style={styles.inboxTime}>
+                        {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <Text style={styles.inboxMessage}>{m.text}</Text>
+                    <Text style={styles.inboxFrom}>From: {m.fromRole === 'admin' ? 'Admin' : 'Caregiver'}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <Pressable onPress={() => setShowInboxModal(false)}>
+              <Text style={[styles.modalCancel, { marginTop: 12 }]}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -583,6 +641,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6F6F6F",
     marginTop: 1,
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F5F3EF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   logoutBtn: {
     height: 44,
@@ -987,5 +1075,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8A8A8A',
     fontWeight: '600',
+  },
+  // Inbox modal
+  inboxCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    marginHorizontal: 20,
+    width: '92%',
+    maxWidth: 500,
+    alignItems: 'stretch',
+  },
+  inboxHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inboxEmpty: {
+    textAlign: 'center',
+    color: '#9CA3AF',
+    paddingVertical: 20,
+    fontSize: 15,
+  },
+  inboxItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6D6B3B',
+  },
+  inboxItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  inboxResident: {
+    fontWeight: '800',
+    color: '#111827',
+    fontSize: 14,
+  },
+  inboxTime: {
+    color: '#9CA3AF',
+    fontSize: 12,
+  },
+  inboxMessage: {
+    color: '#374151',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  inboxFrom: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });
