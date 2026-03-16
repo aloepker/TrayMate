@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import Feather from "react-native-vector-icons/Feather";
+import { useKitchenMessages } from "../context/KitchenMessageContext";
 
 /**
  * FILE PATHS
@@ -53,6 +54,12 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ---- Kitchen Messaging ----
+  const { sendMessage } = useKitchenMessages();
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [composeResident, setComposeResident] = useState<Resident | null>(null);
+  const [adminMessageText, setAdminMessageText] = useState('');
 
   // ---- Add Caregiver Modal State ----
   const [showAddCaregiver, setShowAddCaregiver] = useState(false);
@@ -481,6 +488,18 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     <Text style={styles.cartBtnIcon}>🛒</Text>
                     <Text style={styles.cartBtnText}>Select Resident</Text>
                   </Pressable>
+
+                  <Pressable
+                    style={styles.msgKitchenBtn}
+                    onPress={() => {
+                      setComposeResident(r);
+                      setAdminMessageText('');
+                      setShowComposeModal(true);
+                    }}
+                    hitSlop={10}
+                  >
+                    <Text style={styles.msgKitchenText}>📩 Kitchen</Text>
+                  </Pressable>
                 </View>
               </View>
             ))}
@@ -680,6 +699,49 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               <Text style={styles.modalCancel}>Cancel</Text>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+
+      {/* Compose Kitchen Message Modal (Admin) */}
+      <Modal visible={showComposeModal} transparent animationType="slide" onRequestClose={() => setShowComposeModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+        <View style={styles.composeSheet}>
+          <Text style={styles.modalTitle}>Message Kitchen</Text>
+          {composeResident && (
+            <Text style={styles.composeResident}>For: {composeResident.name} — Room {composeResident.room || '--'}</Text>
+          )}
+          <TextInput
+            style={styles.composeInput}
+            placeholder="Type your message for the kitchen…"
+            placeholderTextColor="#9CA3AF"
+            value={adminMessageText}
+            onChangeText={setAdminMessageText}
+            multiline
+            maxLength={300}
+            autoFocus
+          />
+          <Pressable
+            style={styles.modalPrimaryBtn}
+            onPress={() => {
+              if (!composeResident || !adminMessageText.trim()) return;
+              sendMessage({
+                residentId: composeResident.id,
+                residentName: composeResident.name,
+                residentRoom: composeResident.room || '--',
+                fromRole: 'admin',
+                fromName: 'Admin',
+                text: adminMessageText.trim(),
+              });
+              setAdminMessageText('');
+              setShowComposeModal(false);
+              Alert.alert('Sent', 'Your message was sent to the kitchen.');
+            }}
+          >
+            <Text style={styles.modalPrimaryText}>Send to Kitchen</Text>
+          </Pressable>
+          <Pressable onPress={() => setShowComposeModal(false)}>
+            <Text style={styles.modalCancel}>Cancel</Text>
+          </Pressable>
         </View>
       </Modal>
     </SafeAreaView>
@@ -1091,10 +1153,49 @@ const styles = StyleSheet.create({
     color: "#fff", 
     fontWeight: "900" 
   },
-  modalCancel: { 
-    marginTop: 12, 
-    textAlign: "center", 
-    fontWeight: "800", 
-    color: "#6B7280" 
+  modalCancel: {
+    marginTop: 12,
+    textAlign: "center",
+    fontWeight: "800",
+    color: "#6B7280"
+  },
+  msgKitchenBtn: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    marginLeft: 8,
+  },
+  msgKitchenText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#D87000',
+  },
+  composeSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  composeResident: {
+    fontSize: 14,
+    color: '#6A6A6A',
+    fontWeight: '600',
+    marginBottom: 14,
+  },
+  composeInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#1A1A1A',
+    backgroundColor: '#F9FAFB',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 4,
   },
 });

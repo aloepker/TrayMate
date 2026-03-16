@@ -13,6 +13,14 @@ import {
 
 const AUTH_BASE_URL = "https://traymate-auth.onrender.com";
 
+// Mock users for offline / dev fallback (when backend is unreachable)
+const MOCK_USERS: Record<string, { token: string; role: string }> = {
+  "admin@traymate.com":      { token: "mock-admin-token",     role: "ROLE_ADMIN" },
+  "caregiver@traymate.com":  { token: "mock-caregiver-token", role: "ROLE_CAREGIVER" },
+  "kitchen@traymate.com":    { token: "mock-kitchen-token",   role: "ROLE_KITCHEN" },
+  "salimova.s@traymate.com": { token: "mock-caregiver-token", role: "ROLE_CAREGIVER" },
+};
+
 export default function Login({ navigation }: any) {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -22,6 +30,15 @@ export default function Login({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const navigateByRole = (role: string) => {
+    switch (role) {
+      case "ROLE_ADMIN":     navigation.replace("AdminDashboard"); break;
+      case "ROLE_CAREGIVER": navigation.replace("CaregiverDashboard"); break;
+      case "ROLE_KITCHEN":   navigation.replace("KitchenBoard"); break;
+      default:               navigation.replace("Home");
+    }
+  };
+
   const handleLogin = async () => {
     setError("");
     setLoading(true);
@@ -29,9 +46,7 @@ export default function Login({ navigation }: any) {
     try {
       const response = await fetch(`${AUTH_BASE_URL}/auth/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
@@ -41,24 +56,22 @@ export default function Login({ navigation }: any) {
         throw new Error(data.message || "Invalid email or password");
       }
 
-      console.log("Login success:", data);
       await setAuth(data.token, data.role);
-
-      switch (data.role) {
-        case "ROLE_ADMIN":
-          navigation.replace("AdminDashboard");
-          break;
-        case "ROLE_CAREGIVER":
-          navigation.replace("CaregiverDashboard");
-          break;
-        case "ROLE_KITCHEN":
-          navigation.replace("Home");
-          break;
-        default:
-          navigation.replace("Home");
-      }
+      navigateByRole(data.role);
     } catch (err: any) {
-      setError(err.message);
+      // Network unreachable — try mock credentials
+      if (err.message === "Network request failed") {
+        const key = email.trim().toLowerCase();
+        const mock = MOCK_USERS[key];
+        if (mock) {
+          await setAuth(mock.token, mock.role);
+          navigateByRole(mock.role);
+          return;
+        }
+        setError("Server unreachable. Use a demo account (e.g. admin@traymate.com).");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

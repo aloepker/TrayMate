@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -36,6 +37,7 @@ import {
 } from "../services/mealLocalization";
 
 import { geminiChat } from "../services/geminiService";
+import { Picker } from "@react-native-picker/picker";
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -54,11 +56,50 @@ const MEAL_PLACEHOLDER_COLORS: Record<string, { bg: string; accent: string; emoj
   'Spring Menu Special': { bg: '#E0E7FF', accent: '#3730A3', emoji: '🌸' },
   'Grilled Salmon Fillet': { bg: '#CFFAFE', accent: '#155E75', emoji: '🐟' },
   'Oatmeal Bowl': { bg: '#FEF3C7', accent: '#78350F', emoji: '🥣' },
+  'Fresh Orange Juice':   { bg: '#FEF3C7', accent: '#B45309', emoji: '🍊' },
+  'Hot Green Tea':        { bg: '#DCFCE7', accent: '#166534', emoji: '🍵' },
+  'Hot Coffee':           { bg: '#451A03', accent: '#FDE68A', emoji: '☕' },
+  'Mixed Berry Smoothie': { bg: '#FCE7F3', accent: '#9D174D', emoji: '🍓' },
+  'Warm Apple Cider':     { bg: '#FEF3C7', accent: '#92400E', emoji: '🍎' },
+  'Sparkling Water':      { bg: '#CFFAFE', accent: '#155E75', emoji: '💧' },
+  'Whole Milk':           { bg: '#F0FDF4', accent: '#166534', emoji: '🥛' },
+  'Decaf Coffee':         { bg: '#78350F', accent: '#FDE68A', emoji: '☕' },
+  'Chamomile Tea':        { bg: '#FFFBEB', accent: '#92400E', emoji: '🌼' },
+  'Cranberry Juice':      { bg: '#FEE2E2', accent: '#991B1B', emoji: '🫐' },
+  'Apple Juice':          { bg: '#ECFDF5', accent: '#065F46', emoji: '🍏' },
+  'Hot Cocoa':            { bg: '#3B1A0E', accent: '#FDE68A', emoji: '🍫' },
 };
 
 const getMealPlaceholder = (mealName: string) => {
   return MEAL_PLACEHOLDER_COLORS[mealName] || { bg: '#F3F4F6', accent: '#6B7280', emoji: '🍽' };
 };
+
+const MEAL_IMAGES: Record<string, any> = {
+  // Meals (local)
+  'Banana-Chocolate Pancakes': require('../styles/pictures/Chocolate-chip-banana-pancakes.jpg'),
+  'Broccoli-Cheddar Quiche':   require('../styles/pictures/Broccoli-Quiche.jpg'),
+  'Caesar Salad with Chicken': require('../styles/pictures/Chicken-Caesar-Salad.png'),
+  'Citrus Butter Salmon':      require('../styles/pictures/Citrus-butter-salmon.png'),
+  'Chicken Bruschetta':        require('../styles/pictures/Grilled_Bruschetta_Chicken.jpg'),
+  'Breakfast Banana Split':    require('../styles/pictures/Breakfast-banana-split.webp'),
+  'Herb Baked Chicken':        require('../styles/pictures/herb-baked-chicken.png'),
+  'Garden Vegetable Medley':   require('../styles/pictures/Seasonal vegetables.png'),
+  // Drinks (local — downloaded from Unsplash)
+  'Fresh Orange Juice':   require('../styles/pictures/drink-orange-juice.jpg'),
+  'Hot Green Tea':        require('../styles/pictures/drink-green-tea.jpg'),
+  'Hot Coffee':           require('../styles/pictures/drink-coffee.jpg'),
+  'Mixed Berry Smoothie': require('../styles/pictures/drink-berry-smoothie.jpg'),
+  'Warm Apple Cider':     require('../styles/pictures/drink-apple-cider.jpg'),
+  'Sparkling Water':      require('../styles/pictures/drink-sparkling-water.jpg'),
+  'Whole Milk':           require('../styles/pictures/drink-milk.jpg'),
+  'Decaf Coffee':         require('../styles/pictures/drink-decaf-coffee.jpg'),
+  'Chamomile Tea':        require('../styles/pictures/drink-chamomile-tea.jpg'),
+  'Cranberry Juice':      require('../styles/pictures/drink-cranberry.jpg'),
+  'Apple Juice':          require('../styles/pictures/drink-apple-juice.jpg'),
+  'Hot Cocoa':            require('../styles/pictures/drink-hot-cocoa.jpg'),
+};
+
+const getMealImage = (mealName: string) => MEAL_IMAGES[mealName] ?? null;
 
 // ---------- Rich Text Renderer for Chat ----------
 const ChatRichText = ({
@@ -208,7 +249,7 @@ const COLORS = {
 type Meal = {
   id: string;
   name: string;
-  meal_period: "Breakfast" | "Lunch" | "Dinner";
+  meal_period: "Breakfast" | "Lunch" | "Dinner" | "Drinks";
   description: string;
   time_range: string;
   kcal: number;
@@ -242,6 +283,7 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "breakfast", value: "Breakfast" },
   { key: "lunch", value: "Lunch" },
   { key: "dinner", value: "Dinner" },
+  { key: "beverages", value: "Drinks" },
 ];
 
 // ---------- AI Chat Component ----------
@@ -651,13 +693,18 @@ const AIAssistantChat = ({
 
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
-  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
+  const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
+  const [showMealDetail, setShowMealDetail] = useState(false);
+  const [specialNote, setSpecialNote] = useState('');
+  const [availableDrinks, setAvailableDrinks] = useState<Meal[]>([]);
+  const [selectedDrink, setSelectedDrink] = useState<Meal | null>(null);
 
   // Use the cart context
   const { addToCart, getCartCount } = useCart();
@@ -666,6 +713,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Activate this resident's settings when screen mounts
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident name from route params or use localDataService
   const residentId = route?.params?.residentId as string | undefined;
@@ -677,6 +729,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Navigate to cart screen with resident context
   const goToCart = () => {
     navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
+  };
+
+  // Navigate to settings with resident context
+  const goToSettings = () => {
+    navigation.navigate('Settings', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
   // Fetch meals from API (async)
@@ -698,23 +755,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       }
 
       // Map service Meal -> screen Meal shape
-      const mapped: Meal[] = serviceMeals.map((m) => ({
+      const mapServiceMeal = (m: ServiceMeal): Meal => ({
         id: String(m.id),
         name: m.name,
         meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod) as Meal["meal_period"],
         description: m.description,
         time_range: m.timeRange,
         kcal: m.nutrition.calories,
-        sodium_mg: parseInt(
-          String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0",
-          10
-        ),
-        protein_g: parseInt(
-          String(m.nutrition.protein).replace(/[^\d]/g, "") || "0",
-          10
-        ),
+        sodium_mg: parseInt(String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0", 10),
+        protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
         tags: m.tags ?? [],
-      }));
+      });
+
+      const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
+
+      // Also pre-load drinks for the add-drink option in meal detail modal
+      const drinkServiceMeals = await MealService.getMealsByPeriod("Drinks");
+      setAvailableDrinks(drinkServiceMeals.map(mapServiceMeal));
 
       setRawServiceMeals(serviceMeals);
       setMeals(mapped);
@@ -755,19 +812,40 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setRefreshing(false);
   }, [selectedPeriod.value, loadMenu, loadRecommendation]);
 
+  // Open meal detail modal
+  const openMealDetail = (meal: Meal) => {
+    setSelectedMeal(meal);
+    setSpecialNote('');
+    setSelectedDrink(null);
+    setShowMealDetail(true);
+  };
+
+  // Add meal (and optional drink) to cart from detail modal
+  const handleAddToCartFromModal = () => {
+    if (!selectedMeal) return;
+    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
+    if (selectedDrink) {
+      addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+    }
+    setShowMealDetail(false);
+  };
+
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
+    const mealImg = getMealImage(item.name);
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.7}
-        onPress={() => {
-          addToCart({ ...item, id: parseInt(item.id) });
-        }}
+        onPress={() => openMealDetail(item)}
       >
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
-          <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          {mealImg ? (
+            <Image source={mealImg} style={styles.mealRealImage} resizeMode="cover" />
+          ) : (
+            <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          )}
           <View style={styles.mealImageOverlay}>
             <Text style={[styles.mealImageLabel, { color: ph.accent }]}>
               {translateMealPeriod(item.meal_period, language)}
@@ -844,6 +922,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           <Text style={[styles.title, { fontSize: scaled(32) }]}>{t.availableMenus}</Text>
           <Text style={[styles.subtitle, { fontSize: scaled(17) }]}>{t.orderingFor} {residentName}</Text>
         </View>
+        <TouchableOpacity
+          onPress={goToSettings}
+          style={styles.settingsButton}
+          accessibilityLabel="Settings"
+          accessibilityRole="button"
+        >
+          <Text style={[styles.settingsButtonText, { color: theme.accent }]}>⚙️</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Period Tabs */}
@@ -947,6 +1033,116 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         )}
       </View>
 
+      {/* Meal Detail Modal */}
+      <Modal
+        visible={showMealDetail}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMealDetail(false)}
+      >
+        <TouchableOpacity style={styles.detailBackdrop} activeOpacity={1} onPress={() => setShowMealDetail(false)} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.detailSheet}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {selectedMeal && (() => {
+              const ph = getMealPlaceholder(selectedMeal.name);
+              const mealImg = getMealImage(selectedMeal.name);
+              return (
+                <>
+                  {/* Image */}
+                  <View style={[styles.detailImageWrap, { backgroundColor: ph.bg }]}>
+                    {mealImg ? (
+                      <Image source={mealImg} style={styles.detailRealImage} resizeMode="cover" />
+                    ) : (
+                      <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
+                    )}
+                  </View>
+                  {/* Info */}
+                  <View style={styles.detailBody}>
+                    <Text style={[styles.detailTitle, { fontSize: scaled(22) }]}>{translateMealName(selectedMeal.name, language)}</Text>
+                    <Text style={[styles.detailDesc, { fontSize: scaled(15) }]}>{translateMealDescription(selectedMeal.description, language)}</Text>
+                    <View style={styles.detailNutrRow}>
+                      <Text style={styles.detailNutr}>{selectedMeal.kcal} kcal</Text>
+                      <Text style={styles.detailNutr}>Sodium: {selectedMeal.sodium_mg}mg</Text>
+                      <Text style={styles.detailNutr}>Protein: {selectedMeal.protein_g}g</Text>
+                    </View>
+
+                    {/* Special Note */}
+                    <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>Special note for kitchen</Text>
+                    <TextInput
+                      style={styles.detailNoteInput}
+                      placeholder="e.g. No onions, extra sauce…"
+                      placeholderTextColor="#9CA3AF"
+                      value={specialNote}
+                      onChangeText={setSpecialNote}
+                      multiline
+                      maxLength={200}
+                    />
+
+                    {/* Add a Drink — Picker dropdown */}
+                    {selectedMeal.meal_period !== 'Drinks' && availableDrinks.length > 0 && (
+                      <>
+                        <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>
+                          Add a drink? 🥤
+                        </Text>
+                        <View style={styles.drinkPickerWrap}>
+                          <Picker
+                            selectedValue={selectedDrink?.id ?? '__none__'}
+                            onValueChange={(val) => {
+                              if (val === '__none__') {
+                                setSelectedDrink(null);
+                              } else {
+                                const found = availableDrinks.find(d => d.id === val);
+                                setSelectedDrink(found ?? null);
+                              }
+                            }}
+                            style={styles.drinkPicker}
+                            itemStyle={styles.drinkPickerItem}
+                          >
+                            <Picker.Item label="— No drink —" value="__none__" />
+                            {availableDrinks.map(drink => {
+                              const ph = getMealPlaceholder(drink.name);
+                              return (
+                                <Picker.Item
+                                  key={drink.id}
+                                  label={`${ph.emoji}  ${drink.name}  ·  ${drink.kcal} kcal`}
+                                  value={drink.id}
+                                />
+                              );
+                            })}
+                          </Picker>
+                        </View>
+                        {selectedDrink && (
+                          <View style={styles.drinkSelectedRow}>
+                            <Text style={styles.drinkSelectedEmoji}>
+                              {getMealPlaceholder(selectedDrink.name).emoji}
+                            </Text>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.drinkSelectedName, { fontSize: scaled(14) }]}>
+                                {selectedDrink.name}
+                              </Text>
+                              <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(12) }]}>
+                                {selectedDrink.kcal} kcal · Sodium: {selectedDrink.sodium_mg}mg · Protein: {selectedDrink.protein_g}g
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+                      </>
+                    )}
+
+                    {/* Add to Cart Button */}
+                    <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
+                      <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
+                        {selectedDrink ? `Add to Cart + ${selectedDrink.name}` : 'Add to Cart'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* AI Assistant Chat Modal */}
       <AIAssistantChat
         visible={showAIChat}
@@ -986,6 +1182,18 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 20,
     backgroundColor: COLORS.surface,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    marginLeft: 8,
+  },
+  settingsButtonText: {
+    fontSize: 22,
   },
   backArrow: {
     width: 12,
@@ -1125,6 +1333,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+  },
+  mealRealImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
   },
   mealImageEmoji: {
     fontSize: 56,
@@ -1277,6 +1490,134 @@ const styles = StyleSheet.create({
   retryText: {
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  // Meal Detail Modal
+  detailBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  detailSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  detailImageWrap: {
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailRealImage: {
+    width: '100%',
+    height: 200,
+  },
+  detailImageEmoji: {
+    fontSize: 72,
+  },
+  detailBody: {
+    padding: 20,
+  },
+  detailTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginBottom: 6,
+  },
+  detailDesc: {
+    fontSize: 15,
+    color: COLORS.textLight,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  detailNutrRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  detailNutr: {
+    fontSize: 13,
+    color: COLORS.textMid,
+    fontWeight: '600',
+    backgroundColor: COLORS.surface,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  detailSectionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  detailNoteInput: {
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: COLORS.textDark,
+    minHeight: 60,
+    backgroundColor: COLORS.surface,
+    textAlignVertical: 'top',
+  },
+  // Drink Picker
+  drinkPickerWrap: {
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surface,
+    marginBottom: 8,
+  },
+  drinkPicker: {
+    height: 50,
+    color: COLORS.textDark,
+  },
+  drinkPickerItem: {
+    fontSize: 15,
+    color: COLORS.textDark,
+  },
+  drinkSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  drinkSelectedEmoji: {
+    fontSize: 26,
+  },
+  drinkSelectedName: {
+    fontWeight: '700',
+    color: COLORS.textDark,
+  },
+  drinkSelectedMeta: {
+    color: COLORS.textMid,
+    marginTop: 2,
+  },
+  detailAddBtn: {
+    backgroundColor: COLORS.secondary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 8,
+    shadowColor: COLORS.secondary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  detailAddBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
 

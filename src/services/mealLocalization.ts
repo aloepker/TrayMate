@@ -143,10 +143,11 @@ const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
 };
 
 const PERIOD_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
-  Breakfast: { Español: 'Desayuno', Français: 'Petit-déjeuner', 中文: '早餐' },
-  Lunch: { Español: 'Almuerzo', Français: 'Déjeuner', 中文: '午餐' },
-  Dinner: { Español: 'Cena', Français: 'Dîner', 中文: '晚餐' },
-  'All Day': { Español: 'Todo el Día', Français: 'Toute la Journée', 中文: '全天' },
+  Breakfast: { Español: 'Desayuno',    Français: 'Petit-déjeuner',  中文: '早餐' },
+  Lunch:     { Español: 'Almuerzo',    Français: 'Déjeuner',        中文: '午餐' },
+  Dinner:    { Español: 'Cena',        Français: 'Dîner',           中文: '晚餐' },
+  'All Day': { Español: 'Todo el Día', Français: 'Toute la Journée',中文: '全天' },
+  Drinks:    { Español: 'Bebida',      Français: 'Boisson',         中文: '饮品' },
 };
 
 const TIME_RANGE_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {

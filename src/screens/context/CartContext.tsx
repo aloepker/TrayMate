@@ -4,12 +4,13 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 type Meal = {
   id: number;
   name: string;
-  meal_period: 'Breakfast' | 'Lunch' | 'Dinner';
+  meal_period: 'Breakfast' | 'Lunch' | 'Dinner' | 'Drinks';
   description: string;
   kcal: number;
   sodium_mg: number;
   protein_g: number;
   tags?: string[];
+  specialNote?: string;
 };
 
 // Order type — a confirmed group of meals, scoped to a resident
