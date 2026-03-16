@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -30,9 +30,13 @@ const MEAL_EMOJIS: Record<string, string> = {
 
 function UpcomingMealsScreen({ navigation, route }: any) {
   const { orders, updateOrderStatus, getOrdersForResident } = useCart();
-  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident info from navigation params
   const residentId = route?.params?.residentId as string | undefined;
@@ -137,7 +141,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             <View style={styles.backArrowLine2} />
           </View>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontSize: scaled(24) }]}>{t.upcomingMeals}</Text>
+        <Text style={[styles.headerTitle, { fontSize: scaled(24), color: theme.textPrimary }]}>{t.upcomingMeals}</Text>
         <TouchableOpacity
           style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
           onPress={handleSettings}
@@ -154,8 +158,8 @@ function UpcomingMealsScreen({ navigation, route }: any) {
         {residentOrders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
-            <Text style={[styles.emptyText, { fontSize: scaled(15), lineHeight: scaled(22) }]}>
+            <Text style={[styles.emptyTitle, { fontSize: scaled(22), color: theme.textPrimary }]}>{t.noUpcoming}</Text>
+            <Text style={[styles.emptyText, { fontSize: scaled(15), lineHeight: scaled(22), color: theme.textSecondary }]}>
               {t.noUpcomingDesc}
             </Text>
             <TouchableOpacity
@@ -179,7 +183,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {/* Active Orders */}
             {activeOrders.length > 0 && (
               <>
-                <Text style={[styles.sectionHeader, { fontSize: scaled(16) }]}>{t.activeOrdersLabel}</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(16), color: theme.textSecondary }]}>{t.activeOrdersLabel}</Text>
                 {activeOrders.map((order) => {
                   const expanded = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];
@@ -187,7 +191,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                   return (
                     <TouchableOpacity
                       key={order.id}
-                      style={styles.mealCard}
+                      style={[styles.mealCard, { backgroundColor: theme.surface }]}
                       onPress={() => toggleExpand(order.id)}
                       activeOpacity={0.8}
                     >
@@ -249,7 +253,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       {/* Order header */}
                       <View style={styles.mealHeader}>
                         <View style={styles.mealInfo}>
-                          <Text style={[styles.orderLabel, { fontSize: scaled(14) }]}>
+                          <Text style={[styles.orderLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>
                             {formatDate(order.placedAt)} ·{' '}
                             {formatTime(order.placedAt)}
                           </Text>
@@ -282,14 +286,14 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             {MEAL_EMOJIS[item.name] || '🍽'}
                           </Text>
                           <View style={styles.mealRowInfo}>
-                            <Text style={[styles.mealName, { fontSize: scaled(16) }]}>
+                            <Text style={[styles.mealName, { fontSize: scaled(16), color: theme.textPrimary }]}>
                               {translateMealName(item.name, language)}
                             </Text>
-                            <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
+                            <Text style={[styles.mealPeriod, { fontSize: scaled(13), color: theme.textSecondary }]}>
                               {translateMealPeriod(item.meal_period, language)}
                             </Text>
                           </View>
-                          <Text style={[styles.mealCal, { fontSize: scaled(14) }]}>{item.kcal} {t.calories}</Text>
+                          <Text style={[styles.mealCal, { fontSize: scaled(14), color: theme.textSecondary }]}>{item.kcal} {t.calories}</Text>
                         </View>
                       ))}
 
@@ -360,16 +364,16 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {/* Completed Orders */}
             {completedOrders.length > 0 && (
               <>
-                <Text style={[styles.sectionHeader, { fontSize: scaled(16) }]}>{t.completed}</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(16), color: theme.textSecondary }]}>{t.completed}</Text>
                 {completedOrders.map((order) => (
-                  <View key={order.id} style={styles.completedCard}>
+                  <View key={order.id} style={[styles.completedCard, { backgroundColor: theme.surface }]}>
                     <View style={styles.completedHeader}>
                       <View style={styles.completedBadge}>
                         <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>
                           ✓ {t.completed}
                         </Text>
                       </View>
-                      <Text style={[styles.completedTime, { fontSize: scaled(13) }]}>
+                      <Text style={[styles.completedTime, { fontSize: scaled(13), color: theme.textSecondary }]}>
                         {formatDate(order.placedAt)}
                       </Text>
                     </View>
@@ -381,7 +385,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         <Text style={styles.mealEmoji}>
                           {MEAL_EMOJIS[item.name] || '🍽'}
                         </Text>
-                        <Text style={[styles.completedMealName, { fontSize: scaled(15) }]}>
+                        <Text style={[styles.completedMealName, { fontSize: scaled(15), color: theme.textPrimary }]}>
                           {translateMealName(item.name, language)}
                         </Text>
                       </View>

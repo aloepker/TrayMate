@@ -16,6 +16,8 @@ import {
   StatusBar,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
+import { TextInput } from "react-native";
+import { useKitchenMessages } from "../context/KitchenMessageContext";
 
 import {
   Resident,
@@ -51,6 +53,12 @@ export default function CaregiverDashboardScreen({
 
   // Controls resident detail popup
   const [showResidentModal, setShowResidentModal] = useState(false);
+
+  // Kitchen messaging
+  const { sendMessage, unreadCount: kitchenUnread } = useKitchenMessages();
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [composeResident, setComposeResident] = useState<Resident | null>(null);
+  const [messageText, setMessageText] = useState('');
 
   // -----------------------------
   // Initial data load
@@ -174,6 +182,27 @@ export default function CaregiverDashboardScreen({
       residentName: resident.name,
       dietaryRestrictions: resident.dietaryRestrictions ?? [],
     });
+  };
+
+  const openCompose = (resident: Resident) => {
+    setComposeResident(resident);
+    setMessageText('');
+    setShowComposeModal(true);
+  };
+
+  const handleSendKitchenMessage = () => {
+    if (!composeResident || !messageText.trim()) return;
+    sendMessage({
+      residentId: composeResident.id,
+      residentName: composeResident.name,
+      residentRoom: composeResident.room || '--',
+      fromRole: 'caregiver',
+      fromName: 'Caregiver',
+      text: messageText.trim(),
+    });
+    setMessageText('');
+    setShowComposeModal(false);
+    Alert.alert('Sent', 'Your message was sent to the kitchen.');
   };
 
   return (
@@ -407,25 +436,64 @@ export default function CaregiverDashboardScreen({
               </View>
             </ScrollView>
 
-            {/* Action button to continue into meal selection flow */}
+            {/* Action buttons */}
             {selectedResident && (
-              <Pressable
-                style={styles.modalPrimaryBtn}
-                onPress={() => handleBrowseMeals(selectedResident)}
-              >
-                <View style={styles.modalBtnRow}>
-                  <Feather name="shopping-cart" size={16} color="#FFFFFF" />
-                  <Text style={styles.modalPrimaryText}>
-                    Browse Meals & Place Order
-                  </Text>
-                </View>
-              </Pressable>
+              <>
+                <Pressable
+                  style={styles.modalPrimaryBtn}
+                  onPress={() => handleBrowseMeals(selectedResident)}
+                >
+                  <View style={styles.modalBtnRow}>
+                    <Feather name="shopping-cart" size={16} color="#FFFFFF" />
+                    <Text style={styles.modalPrimaryText}>
+                      Browse Meals & Place Order
+                    </Text>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  style={styles.modalKitchenBtn}
+                  onPress={() => { closeResidentModal(); openCompose(selectedResident); }}
+                >
+                  <View style={styles.modalBtnRow}>
+                    <Feather name="message-square" size={16} color="#D87000" />
+                    <Text style={styles.modalKitchenText}>Message Kitchen</Text>
+                  </View>
+                </Pressable>
+              </>
             )}
 
             <Pressable onPress={closeResidentModal}>
               <Text style={styles.modalCancel}>Close</Text>
             </Pressable>
           </View>
+        </View>
+      </Modal>
+
+      {/* Compose Kitchen Message Modal */}
+      <Modal visible={showComposeModal} transparent animationType="slide" onRequestClose={() => setShowComposeModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+        <View style={styles.composeSheet}>
+          <Text style={styles.composeTitle}>Message Kitchen</Text>
+          {composeResident && (
+            <Text style={styles.composeResident}>For: {composeResident.name} — Room {composeResident.room || '--'}</Text>
+          )}
+          <TextInput
+            style={styles.composeInput}
+            placeholder="Type your message for the kitchen…"
+            placeholderTextColor="#9CA3AF"
+            value={messageText}
+            onChangeText={setMessageText}
+            multiline
+            maxLength={300}
+            autoFocus
+          />
+          <Pressable style={styles.composeSendBtn} onPress={handleSendKitchenMessage}>
+            <Text style={styles.composeSendText}>Send to Kitchen</Text>
+          </Pressable>
+          <Pressable style={styles.composeCancelBtn} onPress={() => setShowComposeModal(false)}>
+            <Text style={styles.composeCancelText}>Cancel</Text>
+          </Pressable>
         </View>
       </Modal>
     </SafeAreaView>
@@ -852,5 +920,72 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "800",
     color: "#6B7280",
+  },
+  modalKitchenBtn: {
+    marginTop: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  modalKitchenText: {
+    color: '#D87000',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  // Compose modal
+  composeSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  composeTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  composeResident: {
+    fontSize: 14,
+    color: '#6A6A6A',
+    fontWeight: '600',
+    marginBottom: 14,
+  },
+  composeInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#1A1A1A',
+    backgroundColor: '#F9FAFB',
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  composeSendBtn: {
+    backgroundColor: '#6D6B3B',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  composeSendText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  composeCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 6,
+  },
+  composeCancelText: {
+    fontSize: 14,
+    color: '#8A8A8A',
+    fontWeight: '600',
   },
 });
