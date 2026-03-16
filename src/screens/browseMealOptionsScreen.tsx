@@ -16,7 +16,6 @@ import {
   Animated,
   Dimensions,
   Alert,
-  Image,
 } from "react-native";
 import { StatusBar } from "react-native";
 import { useCart } from "./context/CartContext";
