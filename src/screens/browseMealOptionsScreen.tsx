@@ -848,7 +848,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       >
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
           {mealImg ? (
-            <Image source={mealImg} style={styles.mealRealImage} resizeMode="cover" />
+            <Image source={mealImg} style={styles.mealRealImage} resizeMode="contain" />
           ) : (
             <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
           )}
@@ -1057,7 +1057,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   {/* Image */}
                   <View style={[styles.detailImageWrap, { backgroundColor: ph.bg }]}>
                     {mealImg ? (
-                      <Image source={mealImg} style={styles.detailRealImage} resizeMode="cover" />
+                      <Image source={mealImg} style={styles.detailRealImage} resizeMode="contain" />
                     ) : (
                       <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
                     )}
@@ -1335,7 +1335,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mealImageContainer: {
-    height: 180,
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -1343,7 +1343,7 @@ const styles = StyleSheet.create({
   },
   mealRealImage: {
     width: '100%',
-    height: 180,
+    height: 200,
     position: 'absolute',
     top: 0,
     left: 0,
@@ -1512,13 +1512,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   detailImageWrap: {
-    height: 200,
+    height: 220,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   detailRealImage: {
     width: '100%',
-    height: 200,
+    height: 220,
   },
   detailImageEmoji: {
     fontSize: 72,
