@@ -54,6 +54,7 @@ function parseNutrition(nutri_info: string, nutri_amounts: string): Nutrition {
 function normalizeMealPeriod(value: string): Meal["mealPeriod"] {
   const v = value.trim();
   if (v.includes("Drinks") || v.includes("Beverage")) return "Drinks";
+  if (v.includes("Sides") || v.includes("Side")) return "Sides";
   if (v.includes("Breakfast")) return "Breakfast";
   if (v.includes("Lunch")) return "Lunch";
   if (v.includes("Dinner")) return "Dinner";
@@ -106,6 +107,15 @@ const FALLBACK_MEALS: Meal[] = [
   { id: 22, name: "Cranberry Juice",      ingredients: ["Cranberry Juice","Water","Sugar"],                                         nutrition: { calories: 116, totalFat: "0g",  cholesterol: "0mg",  carbohydrate: "30g", fiber: "0.5g", sugar: "28g", sodium: "5mg",   protein: "0g" }, description: "100% cranberry juice. Supports urinary tract health.",      imageUrl: "", mealType: "D", mealPeriod: "Drinks", timeRange: "7am – 8pm", allergenInfo: [],         tags: ["Vegan","Antioxidant","UTI Prevention"],          isAvailable: true,  isSeasonal: false },
   { id: 23, name: "Apple Juice",          ingredients: ["Pressed Apples","Water"],                                                  nutrition: { calories: 114, totalFat: "0g",  cholesterol: "0mg",  carbohydrate: "28g", fiber: "0.5g", sugar: "24g", sodium: "7mg",   protein: "0g" }, description: "Clear, mild apple juice — easy on sensitive stomachs.",     imageUrl: "", mealType: "D", mealPeriod: "Drinks", timeRange: "7am – 8pm", allergenInfo: [],         tags: ["Vegan","Low Sodium","Gentle"],                   isAvailable: true,  isSeasonal: false },
   { id: 24, name: "Hot Cocoa",            ingredients: ["Cocoa Powder","Milk","Sugar","Vanilla"],                                   nutrition: { calories: 192, totalFat: "6g",  cholesterol: "18mg", carbohydrate: "30g", fiber: "2g",   sugar: "25g", sodium: "120mg", protein: "8g" }, description: "Warm, creamy hot cocoa made with real milk and cocoa.",     imageUrl: "", mealType: "D", mealPeriod: "Drinks", timeRange: "7am – 8pm", allergenInfo: ["Dairy"], tags: ["Vegetarian","Warming","Comfort"],                 isAvailable: true,  isSeasonal: false },
+  // Sides (elder-care curated selection)
+  { id: 25, name: "Chicken Noodle Soup",    ingredients: ["Chicken Broth","Egg Noodles","Chicken","Carrots","Celery","Onion","Salt","Pepper"],        nutrition: { calories: 120, totalFat: "3g",  cholesterol: "25mg", carbohydrate: "14g", fiber: "1g",   sugar: "2g",  sodium: "890mg", protein: "8g"  }, description: "Classic chicken noodle soup — warm, comforting, and easy to eat.",         imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 7pm", allergenInfo: ["Gluten"],         tags: ["Low Sodium","Warming"],              isAvailable: true, isSeasonal: false },
+  { id: 26, name: "Garden Side Salad",      ingredients: ["Romaine Lettuce","Cherry Tomatoes","Cucumber","Carrots","Ranch Dressing"],                nutrition: { calories: 80,  totalFat: "4g",  cholesterol: "5mg",  carbohydrate: "9g",  fiber: "2g",   sugar: "4g",  sodium: "180mg", protein: "2g"  }, description: "Fresh mixed greens with cherry tomatoes, cucumber, and light ranch.",     imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 7pm", allergenInfo: ["Dairy"],          tags: ["Vegetarian","Low Calorie"],          isAvailable: true, isSeasonal: false },
+  { id: 27, name: "Vanilla Ice Cream",      ingredients: ["Cream","Sugar","Vanilla Extract","Milk","Egg Yolks"],                                    nutrition: { calories: 210, totalFat: "11g", cholesterol: "58mg", carbohydrate: "25g", fiber: "0g",   sugar: "21g", sodium: "53mg",  protein: "4g"  }, description: "Two scoops of creamy vanilla ice cream — a classic comfort dessert.",     imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 8pm", allergenInfo: ["Dairy","Eggs"],   tags: ["Comfort","Dairy"],                   isAvailable: true, isSeasonal: false },
+  { id: 28, name: "Apple Pie Slice",        ingredients: ["Apples","Flour","Butter","Sugar","Cinnamon","Nutmeg"],                                   nutrition: { calories: 296, totalFat: "14g", cholesterol: "0mg",  carbohydrate: "43g", fiber: "2g",   sugar: "22g", sodium: "251mg", protein: "2g"  }, description: "Warm slice of homemade apple pie with a flaky golden crust.",            imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 8pm", allergenInfo: ["Gluten","Dairy"], tags: ["Comfort","Gluten"],                  isAvailable: true, isSeasonal: false },
+  { id: 29, name: "Chocolate Chip Cookies", ingredients: ["Flour","Butter","Sugar","Brown Sugar","Eggs","Chocolate Chips","Vanilla"],                nutrition: { calories: 160, totalFat: "8g",  cholesterol: "18mg", carbohydrate: "22g", fiber: "1g",   sugar: "13g", sodium: "105mg", protein: "2g"  }, description: "Two freshly baked chocolate chip cookies — soft and chewy.",             imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 8pm", allergenInfo: ["Gluten","Dairy","Eggs"], tags: ["Comfort","Dairy"],              isAvailable: true, isSeasonal: false },
+  { id: 30, name: "Fresh Fruit Cup",        ingredients: ["Strawberries","Blueberries","Grapes","Melon","Kiwi"],                                    nutrition: { calories: 70,  totalFat: "0g",  cholesterol: "0mg",  carbohydrate: "18g", fiber: "2g",   sugar: "14g", sodium: "2mg",   protein: "1g"  }, description: "Seasonal mixed fresh fruit — light, refreshing, and vitamin-rich.",      imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "7am – 8pm",  allergenInfo: [],                tags: ["Vegan","Vitamin C"],                 isAvailable: true, isSeasonal: false },
+  { id: 31, name: "Tomato Basil Soup",      ingredients: ["Tomatoes","Onion","Garlic","Basil","Olive Oil","Vegetable Broth","Cream"],                nutrition: { calories: 150, totalFat: "7g",  cholesterol: "15mg", carbohydrate: "18g", fiber: "3g",   sugar: "10g", sodium: "680mg", protein: "4g"  }, description: "Creamy tomato soup with fresh basil — perfect with a side of bread.",    imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 7pm", allergenInfo: ["Dairy"],          tags: ["Vegetarian","Warming"],              isAvailable: true, isSeasonal: false },
+  { id: 32, name: "Rice Pudding",           ingredients: ["Rice","Milk","Sugar","Vanilla","Cinnamon","Raisins"],                                    nutrition: { calories: 190, totalFat: "4g",  cholesterol: "14mg", carbohydrate: "35g", fiber: "0.5g", sugar: "20g", sodium: "95mg",  protein: "5g"  }, description: "Creamy rice pudding with cinnamon and raisins — a nostalgic treat.",     imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 8pm", allergenInfo: ["Dairy"],          tags: ["Comfort","Dairy"],                   isAvailable: true, isSeasonal: false },
 ];
 
 async function fetchMealsFromApi(): Promise<Meal[]> {
@@ -144,7 +154,7 @@ export interface Meal {
   description: string;
   imageUrl: string;
   mealType: string; // 'B', 'L', 'D', or combinations like 'L, D'
-  mealPeriod: 'Breakfast' | 'Lunch' | 'Dinner' | 'All Day' | 'Drinks';
+  mealPeriod: 'Breakfast' | 'Lunch' | 'Dinner' | 'All Day' | 'Drinks' | 'Sides';
   timeRange: string;
   allergenInfo: string[];
   tags: string[];
@@ -605,11 +615,15 @@ export const MealService = {
     period: Meal["mealPeriod"] | null
   ): Promise<Meal[]> => {
     const meals = await fetchMealsFromApi();
-    // null = "All" tab — exclude Drinks from general tabs
-    if (!period) return meals.filter((m) => m.isAvailable && m.mealPeriod !== "Drinks");
+    // null = "All" tab — exclude Drinks and Sides from general tabs
+    if (!period) return meals.filter((m) => m.isAvailable && m.mealPeriod !== "Drinks" && m.mealPeriod !== "Sides");
 
     if (period === "Drinks") {
       return meals.filter((m) => m.isAvailable && m.mealPeriod === "Drinks");
+    }
+
+    if (period === "Sides") {
+      return meals.filter((m) => m.isAvailable && m.mealPeriod === "Sides");
     }
 
     return meals.filter((m) => {

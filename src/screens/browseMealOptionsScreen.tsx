@@ -21,6 +21,17 @@ import { StatusBar } from "react-native";
 import { useCart } from "./context/CartContext";
 import { useSettings } from './context/SettingsContext';
 
+// Display-layer constants (images, colours, mappers) — extracted for clarity
+import {
+  COLORS,
+  DisplayMeal,
+  MEAL_PLACEHOLDER_COLORS,
+  getMealPlaceholder,
+  MEAL_IMAGES,
+  getMealImage,
+  mapServiceMeal,
+} from '../services/mealDisplayService';
+
 // Local CSV-backed data service (temporary until API is ready)
 import {
   MealService,
@@ -42,64 +53,8 @@ import { Picker } from "@react-native-picker/picker";
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Meal placeholder image colors based on meal type
-const MEAL_PLACEHOLDER_COLORS: Record<string, { bg: string; accent: string; emoji: string }> = {
-  'Banana-Chocolate Pancakes': { bg: '#FEF3C7', accent: '#92400E', emoji: '🥞' },
-  'Broccoli-Cheddar Quiche': { bg: '#DCFCE7', accent: '#166534', emoji: '🥧' },
-  'Caesar Salad with Chicken': { bg: '#D1FAE5', accent: '#065F46', emoji: '🥗' },
-  'Citrus Butter Salmon': { bg: '#DBEAFE', accent: '#1E40AF', emoji: '🐟' },
-  'Chicken Bruschetta': { bg: '#FEE2E2', accent: '#991B1B', emoji: '🍗' },
-  'Breakfast Banana Split': { bg: '#FCE7F3', accent: '#9D174D', emoji: '🍌' },
-  'Herb Baked Chicken': { bg: '#FEF3C7', accent: '#78350F', emoji: '🍗' },
-  'Garden Vegetable Medley': { bg: '#DCFCE7', accent: '#14532D', emoji: '🥦' },
-  'Strawberry Belgian Waffle': { bg: '#FCE7F3', accent: '#831843', emoji: '🧇' },
-  'Spring Menu Special': { bg: '#E0E7FF', accent: '#3730A3', emoji: '🌸' },
-  'Grilled Salmon Fillet': { bg: '#CFFAFE', accent: '#155E75', emoji: '🐟' },
-  'Oatmeal Bowl': { bg: '#FEF3C7', accent: '#78350F', emoji: '🥣' },
-  'Fresh Orange Juice':   { bg: '#FEF3C7', accent: '#B45309', emoji: '🍊' },
-  'Hot Green Tea':        { bg: '#DCFCE7', accent: '#166534', emoji: '🍵' },
-  'Hot Coffee':           { bg: '#451A03', accent: '#FDE68A', emoji: '☕' },
-  'Mixed Berry Smoothie': { bg: '#FCE7F3', accent: '#9D174D', emoji: '🍓' },
-  'Warm Apple Cider':     { bg: '#FEF3C7', accent: '#92400E', emoji: '🍎' },
-  'Sparkling Water':      { bg: '#CFFAFE', accent: '#155E75', emoji: '💧' },
-  'Whole Milk':           { bg: '#F0FDF4', accent: '#166534', emoji: '🥛' },
-  'Decaf Coffee':         { bg: '#78350F', accent: '#FDE68A', emoji: '☕' },
-  'Chamomile Tea':        { bg: '#FFFBEB', accent: '#92400E', emoji: '🌼' },
-  'Cranberry Juice':      { bg: '#FEE2E2', accent: '#991B1B', emoji: '🫐' },
-  'Apple Juice':          { bg: '#ECFDF5', accent: '#065F46', emoji: '🍏' },
-  'Hot Cocoa':            { bg: '#3B1A0E', accent: '#FDE68A', emoji: '🍫' },
-};
-
-const getMealPlaceholder = (mealName: string) => {
-  return MEAL_PLACEHOLDER_COLORS[mealName] || { bg: '#F3F4F6', accent: '#6B7280', emoji: '🍽' };
-};
-
-const MEAL_IMAGES: Record<string, any> = {
-  // Meals (local)
-  'Banana-Chocolate Pancakes': require('../styles/pictures/Chocolate-chip-banana-pancakes.jpg'),
-  'Broccoli-Cheddar Quiche':   require('../styles/pictures/Broccoli-Quiche.jpg'),
-  'Caesar Salad with Chicken': require('../styles/pictures/Chicken-Caesar-Salad.png'),
-  'Citrus Butter Salmon':      require('../styles/pictures/Citrus-butter-salmon.png'),
-  'Chicken Bruschetta':        require('../styles/pictures/Grilled_Bruschetta_Chicken.jpg'),
-  'Breakfast Banana Split':    require('../styles/pictures/Breakfast-banana-split.webp'),
-  'Herb Baked Chicken':        require('../styles/pictures/herb-baked-chicken.png'),
-  'Garden Vegetable Medley':   require('../styles/pictures/Seasonal vegetables.png'),
-  // Drinks (local — downloaded from Unsplash)
-  'Fresh Orange Juice':   require('../styles/pictures/drink-orange-juice.jpg'),
-  'Hot Green Tea':        require('../styles/pictures/drink-green-tea.jpg'),
-  'Hot Coffee':           require('../styles/pictures/drink-coffee.jpg'),
-  'Mixed Berry Smoothie': require('../styles/pictures/drink-berry-smoothie.jpg'),
-  'Warm Apple Cider':     require('../styles/pictures/drink-apple-cider.jpg'),
-  'Sparkling Water':      require('../styles/pictures/drink-sparkling-water.jpg'),
-  'Whole Milk':           require('../styles/pictures/drink-milk.jpg'),
-  'Decaf Coffee':         require('../styles/pictures/drink-decaf-coffee.jpg'),
-  'Chamomile Tea':        require('../styles/pictures/drink-chamomile-tea.jpg'),
-  'Cranberry Juice':      require('../styles/pictures/drink-cranberry.jpg'),
-  'Apple Juice':          require('../styles/pictures/drink-apple-juice.jpg'),
-  'Hot Cocoa':            require('../styles/pictures/drink-hot-cocoa.jpg'),
-};
-
-const getMealImage = (mealName: string) => MEAL_IMAGES[mealName] ?? null;
+// MEAL_PLACEHOLDER_COLORS, MEAL_IMAGES, getMealPlaceholder, getMealImage
+// → now imported from ../services/mealDisplayService.ts
 
 // ---------- Rich Text Renderer for Chat ----------
 const ChatRichText = ({
@@ -235,34 +190,9 @@ const chatRichStyles = StyleSheet.create({
   mealCardReason: { fontSize: 12, color: '#15803d', fontWeight: '700', marginTop: 5 },
 });
 
-// ---------- TrayMate Color Palette (from design slide) ----------
-const COLORS = {
-  primary: "#717644",       // Olive green
-  accent: "#f6a72d",        // Bright orange
-  secondary: "#d27028",     // Burnt orange
-  neutral: "#cbc2b4",       // Warm gray
-  support: "#b77f3f",       // Caramel
-
-  white: "#FFFFFF",
-  textDark: "#111827",
-  textMid: "#374151",
-  textLight: "#6B7280",
-  borderLight: "#E5E7EB",
-  surface: "#F3F4F6",
-};
-
-// ---------- Types ----------
-type Meal = {
-  id: string;
-  name: string;
-  meal_period: "Breakfast" | "Lunch" | "Dinner" | "Drinks";
-  description: string;
-  time_range: string;
-  kcal: number;
-  sodium_mg: number;
-  protein_g: number;
-  tags?: string[];
-};
+// COLORS → imported from ../services/mealDisplayService.ts
+// DisplayMeal (aliased as Meal below) → imported from ../services/mealDisplayService.ts
+type Meal = DisplayMeal;
 
 type ChatMessage = {
   id: string;
@@ -290,6 +220,7 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "lunch", value: "Lunch" },
   { key: "dinner", value: "Dinner" },
   { key: "beverages", value: "Drinks" },
+  { key: "sides", value: "Sides" },
 ];
 
 // ---------- AI Chat Component ----------
@@ -760,19 +691,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         );
       }
 
-      // Map service Meal -> screen Meal shape
-      const mapServiceMeal = (m: ServiceMeal): Meal => ({
-        id: String(m.id),
-        name: m.name,
-        meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod) as Meal["meal_period"],
-        description: m.description,
-        time_range: m.timeRange,
-        kcal: m.nutrition.calories,
-        sodium_mg: parseInt(String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0", 10),
-        protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
-        tags: m.tags ?? [],
-      });
-
+      // mapServiceMeal imported from mealDisplayService.ts
       const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
 
       // Also pre-load drinks for the add-drink option in meal detail modal

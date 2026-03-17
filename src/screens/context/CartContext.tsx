@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 type Meal = {
   id: number;
   name: string;
-  meal_period: 'Breakfast' | 'Lunch' | 'Dinner' | 'Drinks';
+  meal_period: 'Breakfast' | 'Lunch' | 'Dinner' | 'Drinks' | 'Sides';
   description: string;
   kcal: number;
   sodium_mg: number;

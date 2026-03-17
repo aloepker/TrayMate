@@ -75,6 +75,7 @@ export type TranslationKeys = {
   lunch: string;
   dinner: string;
   beverages: string;
+  sides: string;
   tapToAdd: string;
   meals: string;
   // Cart
@@ -193,6 +194,7 @@ const EN: TranslationKeys = {
   lunch: 'Lunch',
   dinner: 'Dinner',
   beverages: 'Beverages',
+  sides: 'Sides',
   tapToAdd: 'Tap to add to order',
   meals: 'Meals',
   yourCart: 'Your Cart',
@@ -305,6 +307,7 @@ const ES: TranslationKeys = {
   lunch: 'Almuerzo',
   dinner: 'Cena',
   beverages: 'Bebidas',
+  sides: 'Acompañamientos',
   tapToAdd: 'Toque para agregar al pedido',
   meals: 'Comidas',
   yourCart: 'Tu Carrito',
@@ -417,6 +420,7 @@ const FR: TranslationKeys = {
   lunch: 'Déjeuner',
   dinner: 'Dîner',
   beverages: 'Boissons',
+  sides: 'Accompagnements',
   tapToAdd: 'Appuyez pour ajouter',
   meals: 'Repas',
   yourCart: 'Votre Panier',
@@ -529,6 +533,7 @@ const ZH: TranslationKeys = {
   lunch: '午餐',
   dinner: '晚餐',
   beverages: '饮品',
+  sides: '配菜',
   tapToAdd: '点击添加到订单',
   meals: '餐食',
   yourCart: '您的购物车',
