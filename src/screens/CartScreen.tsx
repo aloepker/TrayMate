@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,13 @@ import {
 const CartScreen = ({ navigation, route }: any) => {
   // Use the cart context
   const { cart: cartItems, removeFromCart, placeOrder, getTotalNutrition } = useCart();
-  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
+
+  // Activate this resident's settings when screen mounts
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident info from navigation params
   const residentId = route?.params?.residentId as string | undefined;
@@ -107,6 +112,13 @@ const CartScreen = ({ navigation, route }: any) => {
                 <Text style={[styles.cartItemDescription, { fontSize: scaled(14), color: theme.textSecondary }]}>
                   {translateMealDescription(item.description, language)}
                 </Text>
+
+                {item.specialNote ? (
+                  <View style={styles.specialNoteRow}>
+                    <Text style={styles.specialNoteIcon}>📝</Text>
+                    <Text style={[styles.specialNoteText, { fontSize: scaled(13) }]}>{item.specialNote}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.nutritionRow}>
                   <View style={styles.nutritionChip}>
@@ -292,6 +304,27 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginBottom: 12,
     lineHeight: 20,
+  },
+  specialNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  specialNoteIcon: {
+    fontSize: 13,
+  },
+  specialNoteText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+    fontStyle: 'italic',
   },
   nutritionRow: {
     flexDirection: 'row',
