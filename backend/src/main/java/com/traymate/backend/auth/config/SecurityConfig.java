@@ -1,3 +1,47 @@
+// package com.traymate.backend.auth.config;
+
+// import org.springframework.context.annotation.Bean;
+// import org.springframework.context.annotation.Configuration;
+// import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+// import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+// import org.springframework.security.web.SecurityFilterChain;
+// import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+// import lombok.RequiredArgsConstructor;
+
+// @Configuration
+// @EnableWebSecurity
+// @RequiredArgsConstructor
+// public class SecurityConfig {
+
+//     //JWT filter that validates tokens on every request
+//     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    
+//     /**
+//      * main Spring Security configuration
+//      *
+//      * defines:
+//      * - which endpoints are public
+//      * - which require authentication or roles
+//      * - where the JWT filter runs in the filter chain
+//      */
+//     @Bean
+//     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+//         http
+//             .csrf(csrf -> csrf.disable())
+//             .authorizeHttpRequests(auth -> auth
+//             .requestMatchers("/auth/login").permitAll()                     //login endpoint is public (anyone can attempt to login)
+//             .requestMatchers("/auth/register").hasAuthority("ROLE_ADMIN")   //only ADMIN users can register new users
+//             .anyRequest().authenticated()                                   //all other endpoints require authentication
+//         )
+
+//         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+//         return http.build();
+//     }
+// }
+
+
 package com.traymate.backend.auth.config;
 
 import java.util.List;
@@ -5,6 +49,7 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -17,35 +62,41 @@ import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http)
+            throws Exception {
+
         http
-            // REQUIRED for Expo / mobile / browser clients
             .cors(cors -> {})
             .csrf(csrf -> csrf.disable())
 
             .authorizeHttpRequests(auth -> auth
-                // allow preflight requests
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // public auth endpoints
                 .requestMatchers("/auth/login").permitAll()
 
-                // admin-only
+                .requestMatchers("/").permitAll()
+
+                // ADMIN only
                 .requestMatchers("/auth/register").hasAuthority("ROLE_ADMIN")
                 .requestMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
 
-                // everything else secured
+                // CAREGIVER Only
+                .requestMatchers("/caregiver/**").hasAuthority("ROLE_CAREGIVER")
+                
+                // everything else needs a token
                 .anyRequest().authenticated()
             )
 
-            // JWT should run AFTER CORS + auth rules
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(
+                jwtAuthenticationFilter,
+                UsernamePasswordAuthenticationFilter.class
+            );
 
         return http.build();
     }
