@@ -181,8 +181,12 @@ type ResidentApi = {
   id: string | number;
   fullName?: string;
   name?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
   roomNumber?: string | number;
   room?: string | number;
+
 
   dietaryRestrictions?: any;
   foodAllergies?: any;
@@ -197,9 +201,14 @@ type ResidentApi = {
  * so the dashboard can display correctly.
  */
 function mapResident(api: ResidentApi): Resident {
+  const builtName = [api.firstName, api.middleName, api.lastName]
+    .filter((part) => String(part ?? "").trim().length > 0)
+    .join(" ")
+    .trim();
+
   return {
     id: String(api.id),
-    name: String(api.fullName ?? api.name ?? ""),
+    name: String(api.fullName ?? api.name ?? builtName ?? ""),
     room: String(api.roomNumber ?? api.room ?? ""),
     dietaryRestrictions: normalizeStringArray(api.dietaryRestrictions),
     medicalConditions: normalizeStringArray(api.medicalConditions),
