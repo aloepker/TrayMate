@@ -25,7 +25,7 @@ function splitCommaList(value: string | null | undefined): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
 }
-//-------------------WENDY'S CHANGES-------------------//
+
 function normalizeMealPeriod(value: string | null | undefined): Meal["mealPeriod"] {
   const v = (value ?? "").trim().toLowerCase();
 
@@ -71,67 +71,15 @@ function parseNutrition(nutritionText: string | null | undefined): Nutrition {
     protein,
   };
 }
-// function parseNutrition(nutri_info: string, nutri_amounts: string): Nutrition {
-//   // Example:
-//   // nutri_info = "Calories, Total Fat, Cholesterol, Carbohydrate, Fiber, Sugar, Sodium, Protein"
-//   // nutri_amounts = "372, 11g, 64mg, 61g, 3.1g, 17g, 240mg, 10g"
 
-//   const keys = splitCommaList(nutri_info).map((k) => k.toLowerCase());
-//   const vals = splitCommaList(nutri_amounts);
-
-//   const map = new Map<string, string>();
-//   keys.forEach((k, i) => map.set(k, vals[i] ?? ""));
-
-//   // build Nutrition with safe defaults
-//   return {
-//     calories: Number(map.get("calories") ?? 0) || 0,
-//     totalFat: map.get("total fat") ?? "",
-//     saturatedFat: map.get("saturated fat") || undefined,
-//     transFat: map.get("trans fat") || undefined,
-//     cholesterol: map.get("cholesterol") ?? "",
-//     carbohydrate: map.get("carbohydrate") ?? map.get("carbogydrate") ?? "",
-//     fiber: map.get("fiber") ?? "",
-//     sugar: map.get("sugar") ?? "",
-//     sodium: map.get("sodium") ?? "",
-//     protein: map.get("protein") ?? "",
-//   };
-// }
-
-// function normalizeMealPeriod(value: string): Meal["mealPeriod"] {
-//   const v = value.trim();
-//   if (v.includes("Drinks") || v.includes("Beverage")) return "Drinks";
-//   if (v.includes("Sides") || v.includes("Side")) return "Sides";
-//   if (v.includes("Breakfast")) return "Breakfast";
-//   if (v.includes("Lunch")) return "Lunch";
-//   if (v.includes("Dinner")) return "Dinner";
-//   return "All Day";
-// }
-
-// Converts one API row into your app's Meal interface
-
-//-------------------WENDY'S CHANGES-------------------//
+// Converts one API row into app's Meal interface
 function apiMealToMeal(api: any): Meal {
     console.log("API meal row:", api);
 
   return {
-    
-    // id: api.id,
-    // name: api.name,
-    // ingredients: splitCommaList(api.ingredients),
-    // nutrition: parseNutrition(api.nutri_info ?? "", api.nutri_amounts ?? ""),
-    // description: api.description ?? "",
-    // imageUrl: api.image_url ?? "",
-    // mealType: api.mealtype ?? "",
-    // mealPeriod: normalizeMealPeriod(api.mealPeriod ?? "All Day"),
-    // timeRange: api.time_range ?? "",
-    // allergenInfo: splitCommaList(api.allergen_info),
-    // tags: splitCommaList(api.tags),
-    // isAvailable: Boolean(api.isAvailable),
-    // isSeasonal: Boolean(api.isSeasonal),
     id: Number(api.id),
     name: api.name ?? "",
     ingredients: splitCommaList(api.ingredients),
-    //nutrition: parseNutrition(api.nutrition),
     nutrition: {
       calories: Number(api.calories) || 0,
       totalFat: "",
@@ -156,7 +104,6 @@ function apiMealToMeal(api: any): Meal {
   };
 }
 
-//-------------------WENDY'S CHANGES-------------------//
 async function fetchJsonWithTimeout(url: string, timeoutMs = 5000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -252,22 +199,6 @@ const FALLBACK_MEALS: Meal[] = [
   { id: 32, name: "Rice Pudding",           ingredients: ["Rice","Milk","Sugar","Vanilla","Cinnamon","Raisins"],                                    nutrition: { calories: 190, totalFat: "4g",  cholesterol: "14mg", carbohydrate: "35g", fiber: "0.5g", sugar: "20g", sodium: "95mg",  protein: "5g"  }, description: "Creamy rice pudding with cinnamon and raisins — a nostalgic treat.",     imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 8pm", allergenInfo: ["Dairy"],          tags: ["Comfort","Dairy"],                   isAvailable: true, isSeasonal: false },
 ];
 
-//-------------------WENDY'S CHANGES-------------------//
-// async function fetchMealsFromApi(): Promise<Meal[]> {
-//   try {
-//     const controller = new AbortController();
-//     const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
-//     const res = await fetch(`${API_BASE_URL}/meals`, { signal: controller.signal });
-//     clearTimeout(timeout);
-//     if (!res.ok) throw new Error(`Failed to fetch meals: HTTP ${res.status}`);
-//     const data = await res.json();
-//     return data.map(apiMealToMeal);
-//   } catch (error) {
-//     console.warn("API unreachable, using fallback meals:", error);
-//     return FALLBACK_MEALS;
-//   }
-// }
-
 export interface Nutrition {
   calories: number;
   totalFat: string;
@@ -355,304 +286,6 @@ export interface Recommendation {
   allReasons: string[];
 }
 
-// ==================== MEALS DATABASE ====================
-// Data imported from meals_db.csv
-
-// const MEALS_DATABASE: Meal[] = [
-//   {
-//     id: 1,
-//     name: "Banana-Chocolate Pancakes",
-//     ingredients: ["Flour", "Sugar", "Baking Powder", "Cinnamon", "Milk", "Banana", "Egg", "Vanilla", "Chocolate Chips"],
-//     nutrition: {
-      // calories: 372,
-      // totalFat: "11g",
-      // cholesterol: "64mg",
-      // carbohydrate: "61g",
-      // fiber: "3.1g",
-      // sugar: "17g",
-      // sodium: "240mg",
-      // protein: "10g"
-//     },
-//     description: "Pancakes topped with fresh sliced bananas and chocolate chips, served with scrambled eggs and your choice of bacon or sausage.",
-//     imageUrl: "",
-//     mealType: "B",
-//     mealPeriod: "Breakfast",
-//     timeRange: "7am - 9am",
-//     allergenInfo: ["Eggs", "Dairy", "Gluten"],
-//     tags: ["Contains Dairy", "Contains Eggs"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 2,
-//     name: "Broccoli-Cheddar Quiche",
-//     ingredients: ["AP Flour", "Sugar", "Salt", "Eggs", "White Vinegar", "Water", "Butter", "Garlic", "Heavy Cream", "Cheese", "Pepper", "Broccoli"],
-//     nutrition: {
-      // calories: 746,
-      // totalFat: "58g",
-      // saturatedFat: "34g",
-      // transFat: "1.1g",
-      // cholesterol: "411mg",
-      // carbohydrate: "37g",
-      // fiber: "1.2g",
-      // sugar: "3.2g",
-      // sodium: "680mg",
-      // protein: "22g"
-//     },
-//     description: "Diced broccoli with cheddar and parmesan cheese in a traditional quiche - served with fresh fruit.",
-//     imageUrl: "",
-//     mealType: "B",
-//     mealPeriod: "Breakfast",
-//     timeRange: "7am - 9am",
-//     allergenInfo: ["Eggs", "Dairy", "Gluten"],
-//     tags: ["Vegetarian", "High Protein"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 3,
-//     name: "Caesar Salad with Chicken",
-//     ingredients: ["Croutons", "Chicken", "Parmesan Cheese", "Caesar Dressing", "Romaine Lettuce"],
-//     nutrition: {
-      // calories: 250,
-      // totalFat: "18g",
-      // cholesterol: "66mg",
-      // carbohydrate: "2g",
-      // fiber: "1g",
-      // sugar: "1g",
-      // sodium: "405mg",
-      // protein: "20g"
-//     },
-//     description: "Fresh romaine, caesar dressing, shaved parmesan, and herb croutons. Add chicken or salmon if desired.",
-//     imageUrl: "",
-//     mealType: "L, D",
-//     mealPeriod: "All Day",
-//     timeRange: "11am - 7pm",
-//     allergenInfo: ["Dairy", "Gluten"],
-//     tags: ["High Protein", "Low Carb"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 4,
-//     name: "Citrus Butter Salmon",
-//     ingredients: ["Salmon", "Olive Oil", "Basil", "Parsley", "Salt", "Pepper", "Lemon", "Butter"],
-//     nutrition: {
-//       calories: 239,
-//       totalFat: "17g",
-//       cholesterol: "52mg",
-//       carbohydrate: "1g",
-//       fiber: "0.3g",
-//       sugar: "0.2g",
-//       sodium: "135mg",
-//       protein: "19g"
-//     },
-//     description: "Fresh salmon with brown sugar-lemon seasoning - topped with compound butter and citrus salsa - served with mashed potatoes and seasonal vegetables.",
-//     imageUrl: "",
-//     mealType: "D",
-//     mealPeriod: "Dinner",
-//     timeRange: "5pm - 7pm",
-//     allergenInfo: ["Fish", "Dairy"],
-//     tags: ["Low Sodium", "Heart Healthy", "Omega-3", "High Protein"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 5,
-//     name: "Chicken Bruschetta",
-//     ingredients: ["Olive Oil", "Chicken", "Oregano", "Garlic", "Salt", "Pepper", "Tomatoes", "Shallot", "Basil", "Parmesan", "Balsamic Glaze"],
-//     nutrition: {
-      // calories: 266,
-      // totalFat: "13g",
-      // saturatedFat: "2.1g",
-      // cholesterol: "83mg",
-      // carbohydrate: "9g",
-      // fiber: "2.6g",
-      // sugar: "3.7g",
-      // sodium: "582mg",
-      // protein: "28g"
-//     },
-//     description: "A baked chicken breast topped with fresh tomatoes, garlic, and basil - served with herbed corn and a baked potato.",
-//     imageUrl: "",
-//     mealType: "D",
-//     mealPeriod: "Dinner",
-//     timeRange: "5pm - 7pm",
-//     allergenInfo: ["Dairy"],
-//     tags: ["High Protein"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 6,
-//     name: "Breakfast Banana Split",
-//     ingredients: ["Banana", "Greek Yogurt", "Granola", "Honey", "Strawberries", "Blueberries", "Blackberries"],
-//     nutrition: {
-//       calories: 212,
-//       totalFat: "4.5g",
-//       cholesterol: "6mg",
-//       carbohydrate: "36g",
-//       fiber: "2.6g",
-//       sugar: "26g",
-//       sodium: "84mg",
-//       protein: "8g"
-//     },
-//     description: "Fresh sliced banana, with scoops of vanilla Greek yogurt, fresh berries, topped with granola and honey.",
-//     imageUrl: "",
-//     mealType: "B",
-//     mealPeriod: "Breakfast",
-//     timeRange: "7am - 9am",
-//     allergenInfo: ["Dairy", "Nuts"],
-//     tags: ["Vegetarian", "Low Sodium", "Healthy Choice"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   // Additional meals to match the Figma design
-//   {
-//     id: 7,
-//     name: "Herb Baked Chicken",
-//     ingredients: ["Chicken Breast", "Olive Oil", "Rosemary", "Thyme", "Garlic", "Salt", "Pepper"],
-//     nutrition: {
-//       calories: 420,
-//       totalFat: "12g",
-//       cholesterol: "125mg",
-//       carbohydrate: "8g",
-//       fiber: "2g",
-//       sugar: "2g",
-//       sodium: "380mg",
-//       protein: "45g"
-//     },
-//     description: "Steamed White Rice, Seasonal Vegetables",
-//     imageUrl: "",
-//     mealType: "L",
-//     mealPeriod: "Lunch",
-//     timeRange: "11am - 1pm",
-//     allergenInfo: [],
-//     tags: ["Low Sodium", "Heart Healthy", "High Protein"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 8,
-//     name: "Garden Vegetable Medley",
-//     ingredients: ["Zucchini", "Bell Peppers", "Carrots", "Broccoli", "Olive Oil", "Herbs"],
-//     nutrition: {
-//       calories: 180,
-//       totalFat: "8g",
-//       cholesterol: "0mg",
-//       carbohydrate: "24g",
-//       fiber: "6g",
-//       sugar: "8g",
-//       sodium: "240mg",
-//       protein: "6g"
-//     },
-//     description: "Fresh Seasonal Vegetables",
-//     imageUrl: "",
-//     mealType: "L",
-//     mealPeriod: "Lunch",
-//     timeRange: "11am - 1pm",
-//     allergenInfo: [],
-//     tags: ["Vegetarian", "Vegan", "Heart Healthy", "Low Calorie"],
-//     isAvailable: true,
-//     isSeasonal: true
-//   },
-//   {
-//     id: 9,
-//     name: "Strawberry Belgian Waffle",
-//     ingredients: ["Flour", "Eggs", "Butter", "Milk", "Sugar", "Strawberries", "Whipped Cream", "Maple Syrup"],
-//     nutrition: {
-//       calories: 350,
-//       totalFat: "14g",
-//       cholesterol: "95mg",
-//       carbohydrate: "48g",
-//       fiber: "2g",
-//       sugar: "22g",
-//       sodium: "420mg",
-//       protein: "8g"
-//     },
-//     description: "Fresh Berries, Light Syrup",
-//     imageUrl: "",
-//     mealType: "B",
-//     mealPeriod: "Breakfast",
-//     timeRange: "7am - 9am",
-//     allergenInfo: ["Eggs", "Dairy", "Gluten"],
-//     tags: ["Contains Dairy"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 10,
-//     name: "Spring Menu Special",
-//     ingredients: ["Chef's Selection"],
-//     nutrition: {
-//       calories: 480,
-//       totalFat: "18g",
-//       cholesterol: "85mg",
-//       carbohydrate: "32g",
-//       fiber: "4g",
-//       sugar: "6g",
-//       sodium: "520mg",
-//       protein: "32g"
-//     },
-//     description: "Chef's Daily Creation",
-//     imageUrl: "",
-//     mealType: "D",
-//     mealPeriod: "Dinner",
-//     timeRange: "5pm - 7pm",
-//     allergenInfo: [],
-//     tags: ["Chef Special"],
-//     isAvailable: true,
-//     isSeasonal: true
-//   },
-//   {
-//     id: 11,
-//     name: "Grilled Salmon Fillet",
-//     ingredients: ["Atlantic Salmon", "Lemon", "Dill", "Olive Oil", "Asparagus"],
-//     nutrition: {
-//       calories: 390,
-//       totalFat: "22g",
-//       cholesterol: "78mg",
-//       carbohydrate: "4g",
-//       fiber: "2g",
-//       sugar: "1g",
-//       sodium: "320mg",
-//       protein: "38g"
-//     },
-//     description: "Citrus Butter, Roasted Asparagus",
-//     imageUrl: "",
-//     mealType: "D",
-//     mealPeriod: "Dinner",
-//     timeRange: "5pm - 7pm",
-//     allergenInfo: ["Fish"],
-//     tags: ["Low Sodium", "Heart Healthy", "Omega-3", "High Protein"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   },
-//   {
-//     id: 12,
-//     name: "Oatmeal Bowl",
-//     ingredients: ["Steel Cut Oats", "Milk", "Honey", "Blueberries", "Almonds", "Cinnamon"],
-//     nutrition: {
-//       calories: 280,
-//       totalFat: "8g",
-//       cholesterol: "5mg",
-//       carbohydrate: "45g",
-//       fiber: "6g",
-//       sugar: "18g",
-//       sodium: "120mg",
-//       protein: "12g"
-//     },
-//     description: "Fresh Berries, Honey, Almonds",
-//     imageUrl: "",
-//     mealType: "B",
-//     mealPeriod: "Breakfast",
-//     timeRange: "7am - 9am",
-//     allergenInfo: ["Dairy", "Nuts"],
-//     tags: ["Vegetarian", "Heart Healthy", "High Fiber"],
-//     isAvailable: true,
-//     isSeasonal: false
-//   }
-// ];
-
 // ==================== RESIDENTS DATABASE ====================
 
 const RESIDENTS_DATABASE: Resident[] = [
@@ -735,16 +368,12 @@ const RESIDENTS_DATABASE: Resident[] = [
 let ORDERS_DATABASE: Order[] = [];
 
 // ==================== MEAL SERVICE ====================
-//-------------------WENDY'S CHANGES-------------------//
 export const MealService = {
   getAllMeals: async (): Promise<Meal[]> => {
-    // const meals = await fetchMealsFromApi();
-    // return meals.filter((m) => m.isAvailable);
     return await fetchAvailableMealsFromApi();
   },
 
   getMealById: async (id: number): Promise<Meal | undefined> => {
-    // const meals = await fetchMealsFromApi();
     const meals = await fetchAllMealsFromApi();
     return meals.find((m) => m.id === id);
   },
@@ -752,22 +381,6 @@ export const MealService = {
   getMealsByPeriod: async (
     period: Meal["mealPeriod"] | null
   ): Promise<Meal[]> => {
-    // const meals = await fetchMealsFromApi();
-    // // null = "All" tab — exclude Drinks and Sides from general tabs
-    // if (!period) return meals.filter((m) => m.isAvailable && m.mealPeriod !== "Drinks" && m.mealPeriod !== "Sides");
-
-    // if (period === "Drinks") {
-    //   return meals.filter((m) => m.isAvailable && m.mealPeriod === "Drinks");
-    // }
-
-    // if (period === "Sides") {
-    //   return meals.filter((m) => m.isAvailable && m.mealPeriod === "Sides");
-    // }
-
-    // return meals.filter((m) => {
-    //   if (!m.isAvailable) return false;
-    //   if (m.mealPeriod === "All Day") return true;
-    //   return m.mealPeriod === period;
     const meals = await fetchAvailableMealsFromApi();
 
   if (!period) {
@@ -800,24 +413,17 @@ export const MealService = {
   },
 
   searchMeals: async (query: string): Promise<Meal[]> => {
-    //const meals = await fetchMealsFromApi();
     const meals = await fetchAvailableMealsFromApi();
     const lowerQuery = query.toLowerCase();
-    //--------------------WENDY'S CHANGES-------------------//
     return meals.filter(
       (m) =>
-        // m.isAvailable &&
-        // (m.name.toLowerCase().includes(lowerQuery) ||
-        //   m.description.toLowerCase().includes(lowerQuery) ||
-        //   m.ingredients.some((i) => i.toLowerCase().includes(lowerQuery)) ||
-        //   m.tags.some((t) => t.toLowerCase().includes(lowerQuery)))
-         m.name.toLowerCase().includes(lowerQuery) ||
+        m.name.toLowerCase().includes(lowerQuery) ||
         m.description.toLowerCase().includes(lowerQuery) ||
         m.ingredients.some((i) => i.toLowerCase().includes(lowerQuery)) ||
         m.tags.some((t) => t.toLowerCase().includes(lowerQuery))
     );
   },
-//-------------------WENDY'S CHANGES-------------------//
+
   getMealsByTag: async (tag: string): Promise<Meal[]> => {
     // const meals = await fetchMealsFromApi();
     const meals = await fetchAvailableMealsFromApi();
@@ -838,81 +444,10 @@ export const MealService = {
   },
 
   getSeasonalMeals: async (): Promise<Meal[]> => {
-    // const meals = await fetchMealsFromApi();
     const meals = await fetchAvailableMealsFromApi();
     return meals.filter((m) => m.isAvailable && m.isSeasonal);
   },
 };
-// export const MealService = {
-//   /**
-//    * Get all meals
-//    */
-//   getAllMeals: (): Meal[] => {
-//     return MEALS_DATABASE.filter(m => m.isAvailable);
-//   },
-
-//   /**
-//    * Get meal by ID
-//    */
-//   getMealById: (id: number): Meal | undefined => {
-//     return MEALS_DATABASE.find(m => m.id === id);
-//   },
-
-//   /**
-//    * Get meals by period (Breakfast, Lunch, Dinner)
-//    */
-//   getMealsByPeriod: (period: 'Breakfast' | 'Lunch' | 'Dinner' | null): Meal[] => {
-//     if (!period) return MEALS_DATABASE.filter(m => m.isAvailable);
-    
-//     return MEALS_DATABASE.filter(m => {
-//       if (!m.isAvailable) return false;
-//       if (m.mealPeriod === 'All Day') return true;
-//       return m.mealPeriod === period;
-//     });
-//   },
-
-//   /**
-//    * Search meals by name or description
-//    */
-//   searchMeals: (query: string): Meal[] => {
-//     const lowerQuery = query.toLowerCase();
-//     return MEALS_DATABASE.filter(m => 
-//       m.isAvailable && (
-//         m.name.toLowerCase().includes(lowerQuery) ||
-//         m.description.toLowerCase().includes(lowerQuery) ||
-//         m.ingredients.some(i => i.toLowerCase().includes(lowerQuery)) ||
-//         m.tags.some(t => t.toLowerCase().includes(lowerQuery))
-//       )
-//     );
-//   },
-
-//   /**
-//    * Get meals by tag
-//    */
-//   getMealsByTag: (tag: string): Meal[] => {
-//     return MEALS_DATABASE.filter(m => 
-//       m.isAvailable && m.tags.some(t => t.toLowerCase() === tag.toLowerCase())
-//     );
-//   },
-
-//   /**
-//    * Get meals grouped by period
-//    */
-//   getMealsGroupedByPeriod: () => {
-//     return {
-//       breakfast: MealService.getMealsByPeriod('Breakfast'),
-//       lunch: MealService.getMealsByPeriod('Lunch'),
-//       dinner: MealService.getMealsByPeriod('Dinner'),
-//     };
-//   },
-
-//   /**
-//    * Get seasonal meals
-//    */
-//   getSeasonalMeals: (): Meal[] => {
-//     return MEALS_DATABASE.filter(m => m.isAvailable && m.isSeasonal);
-//   }
-// };
 
 // ==================== RESIDENT SERVICE ====================
 
