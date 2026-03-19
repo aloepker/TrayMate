@@ -758,7 +758,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
-    const mealImg = getMealImage(item.name);
+    //const mealImg = getMealImage(item.name);
+    const mealImg = !!item.imageUrl;
     return (
       <TouchableOpacity
         style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
@@ -766,10 +767,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         onPress={() => openMealDetail(item)}
       >
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
-          {mealImg ? (
+          {/* {mealImg ? (
             <Image source={mealImg} style={styles.mealRealImage} resizeMode="contain" />
           ) : (
             <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          )} */}
+          {mealImg ? (
+            <Image source={{ uri: item.imageUrl }} style={styles.mealRealImage} resizeMode="cover" />
+          ) : (
+          <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
           )}
           <View style={styles.mealImageOverlay}>
             <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
@@ -970,13 +976,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           <ScrollView showsVerticalScrollIndicator={false}>
             {selectedMeal && (() => {
               const ph = getMealPlaceholder(selectedMeal.name);
-              const mealImg = getMealImage(selectedMeal.name);
+              //const mealImg = getMealImage(selectedMeal.name);
+              const mealImg = !!selectedMeal.imageUrl;
               return (
                 <>
                   {/* Image */}
                   <View style={[styles.detailImageWrap, { backgroundColor: ph.bg }]}>
-                    {mealImg ? (
+                    {/* {mealImg ? (
                       <Image source={mealImg} style={styles.detailRealImage} resizeMode="contain" />
+                    ) : (
+                      <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
+                    )} */}
+                    {mealImg ? (
+                      <Image source={{ uri: selectedMeal.imageUrl }} style={styles.detailRealImage} resizeMode="cover" />
                     ) : (
                       <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
                     )}
