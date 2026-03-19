@@ -22,7 +22,7 @@ interface MealOrder {
   beverage: string;
   dietaryRestrictions: string[];
   specialInstructions?: string;
-  status: Status;
+  status: Status; 
 }
 
 const mockOrders: MealOrder[] = [
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 16,
-  },
+  }, 
 
   tabs: {
     flexDirection: "row",
