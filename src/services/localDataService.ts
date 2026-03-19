@@ -420,11 +420,13 @@ export const MealService = {
   //     );
   // }
   if (period === "Drinks") {
-    return await fetchDrinksFromApi();
+    const drinks = await fetchDrinksFromApi();
+    return drinks.filter((m) => m.isAvailable);
   }
 
   if (period === "Sides") {
-    return await fetchSidesFromApi();
+    const sides = await fetchSidesFromApi();
+    return sides.filter((m) => m.isAvailable);
   }
 
 
