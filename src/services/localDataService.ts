@@ -160,6 +160,26 @@ async function fetchMealsByPeriodFromApi(period: Meal["mealPeriod"]): Promise<Me
     });
   }
 }
+
+async function fetchDrinksFromApi(): Promise<Meal[]> {
+  try {
+    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/drinks`);
+    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+  } catch (error) {
+    console.warn("Backend /menu/period/drinks unreachable, using fallback drinks:", error);
+    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealType === "Beverage");
+  }
+}
+
+async function fetchSidesFromApi(): Promise<Meal[]> {
+  try {
+    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/sides`);
+    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+  } catch (error) {
+    console.warn("Backend /menu/period/sides unreachable, using fallback sides:", error);
+    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealType === "Side");
+  }
+}
 // Fallback meals for when the API is unreachable
 const FALLBACK_MEALS: Meal[] = [
   { id: 1, name: "Banana-Chocolate Pancakes", ingredients: ["Flour","Sugar","Baking Powder","Cinnamon","Milk","Banana","Egg","Vanilla","Chocolate Chips"], nutrition: { calories: 372, totalFat: "11g", cholesterol: "64mg", carbohydrate: "61g", fiber: "3.1g", sugar: "17g", sodium: "240mg", protein: "10g" }, description: "Pancakes topped with fresh sliced bananas and chocolate chips, served with scrambled eggs.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Contains Dairy","Contains Eggs"], isAvailable: true, isSeasonal: false },
@@ -388,17 +408,25 @@ export const MealService = {
     );
   }
 
+  // if (period === "Drinks") {
+  //   return meals.filter(
+  //     (m) => m.isAvailable && m.mealType === "Beverage"
+  //   );
+  // }
+
+  // if (period === "Sides") {
+  //   return meals.filter(
+  //     (m) => m.isAvailable && m.mealType === "Side"
+  //     );
+  // }
   if (period === "Drinks") {
-    return meals.filter(
-      (m) => m.isAvailable && m.mealType === "Beverage"
-    );
+    return await fetchDrinksFromApi();
   }
 
   if (period === "Sides") {
-    return meals.filter(
-      (m) => m.isAvailable && m.mealType === "Side"
-      );
+    return await fetchSidesFromApi();
   }
+
 
   return meals.filter((m) => {
     if (!m.isAvailable) return false;
