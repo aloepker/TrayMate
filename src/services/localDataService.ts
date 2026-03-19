@@ -14,8 +14,9 @@
 // ==================== TYPES ====================
 import { Platform } from "react-native";
 
-const API_BASE_URL =
-  Platform.OS === "android" ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000";
+const API_BASE_URL = "https://traymate-auth.onrender.com";
+// For local testing use: 
+// const API_BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:8000" : "http://127.0.0.1:8000";
 
 function splitCommaList(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -24,62 +25,195 @@ function splitCommaList(value: string | null | undefined): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
 }
+//-------------------WENDY'S CHANGES-------------------//
+function normalizeMealPeriod(value: string | null | undefined): Meal["mealPeriod"] {
+  const v = (value ?? "").trim().toLowerCase();
 
-function parseNutrition(nutri_info: string, nutri_amounts: string): Nutrition {
-  // Example:
-  // nutri_info = "Calories, Total Fat, Cholesterol, Carbohydrate, Fiber, Sugar, Sodium, Protein"
-  // nutri_amounts = "372, 11g, 64mg, 61g, 3.1g, 17g, 240mg, 10g"
-
-  const keys = splitCommaList(nutri_info).map((k) => k.toLowerCase());
-  const vals = splitCommaList(nutri_amounts);
-
-  const map = new Map<string, string>();
-  keys.forEach((k, i) => map.set(k, vals[i] ?? ""));
-
-  // build Nutrition with safe defaults
-  return {
-    calories: Number(map.get("calories") ?? 0) || 0,
-    totalFat: map.get("total fat") ?? "",
-    saturatedFat: map.get("saturated fat") || undefined,
-    transFat: map.get("trans fat") || undefined,
-    cholesterol: map.get("cholesterol") ?? "",
-    carbohydrate: map.get("carbohydrate") ?? map.get("carbogydrate") ?? "",
-    fiber: map.get("fiber") ?? "",
-    sugar: map.get("sugar") ?? "",
-    sodium: map.get("sodium") ?? "",
-    protein: map.get("protein") ?? "",
-  };
-}
-
-function normalizeMealPeriod(value: string): Meal["mealPeriod"] {
-  const v = value.trim();
-  if (v.includes("Drinks") || v.includes("Beverage")) return "Drinks";
-  if (v.includes("Sides") || v.includes("Side")) return "Sides";
-  if (v.includes("Breakfast")) return "Breakfast";
-  if (v.includes("Lunch")) return "Lunch";
-  if (v.includes("Dinner")) return "Dinner";
+  if (v.includes("drink") || v.includes("beverage")) return "Drinks";
+  if (v.includes("side")) return "Sides";
+  if (v.includes("breakfast")) return "Breakfast";
+  if (v.includes("lunch")) return "Lunch";
+  if (v.includes("dinner")) return "Dinner";
   return "All Day";
 }
 
-// Converts one API row into your app's Meal interface
-function apiMealToMeal(api: any): Meal {
+function parseNutrition(nutritionText: string | null | undefined): Nutrition {
+  const text = nutritionText ?? "";
+
+  const extract = (label: string): string => {
+    const regex = new RegExp(`${label}\\s*:?\\s*([^,]+)`, "i");
+    const match = text.match(regex);
+    return match?.[1]?.trim() ?? "";
+  };
+  const caloriesRaw = extract("Calories");
+  const totalFat = extract("Total Fat");
+  const saturatedFat = extract("Saturated Fat");
+  const transFat = extract("Trans Fat");
+  const cholesterol = extract("Cholesterol");
+  const carbohydrate = extract("Carbohydrate");
+  const fiber = extract("Fiber");
+  const sugar = extract("Sugar");
+  const sodium = extract("Sodium");
+  const protein = extract("Protein");
+
+  const calories = parseInt(caloriesRaw.replace(/[^\d]/g, ""), 10) || 0;
+
   return {
-    id: api.id,
-    name: api.name,
+    calories,
+    totalFat,
+    saturatedFat: saturatedFat || undefined,
+    transFat: transFat || undefined,
+    cholesterol,
+    carbohydrate,
+    fiber,
+    sugar,
+    sodium,
+    protein,
+  };
+}
+// function parseNutrition(nutri_info: string, nutri_amounts: string): Nutrition {
+//   // Example:
+//   // nutri_info = "Calories, Total Fat, Cholesterol, Carbohydrate, Fiber, Sugar, Sodium, Protein"
+//   // nutri_amounts = "372, 11g, 64mg, 61g, 3.1g, 17g, 240mg, 10g"
+
+//   const keys = splitCommaList(nutri_info).map((k) => k.toLowerCase());
+//   const vals = splitCommaList(nutri_amounts);
+
+//   const map = new Map<string, string>();
+//   keys.forEach((k, i) => map.set(k, vals[i] ?? ""));
+
+//   // build Nutrition with safe defaults
+//   return {
+//     calories: Number(map.get("calories") ?? 0) || 0,
+//     totalFat: map.get("total fat") ?? "",
+//     saturatedFat: map.get("saturated fat") || undefined,
+//     transFat: map.get("trans fat") || undefined,
+//     cholesterol: map.get("cholesterol") ?? "",
+//     carbohydrate: map.get("carbohydrate") ?? map.get("carbogydrate") ?? "",
+//     fiber: map.get("fiber") ?? "",
+//     sugar: map.get("sugar") ?? "",
+//     sodium: map.get("sodium") ?? "",
+//     protein: map.get("protein") ?? "",
+//   };
+// }
+
+// function normalizeMealPeriod(value: string): Meal["mealPeriod"] {
+//   const v = value.trim();
+//   if (v.includes("Drinks") || v.includes("Beverage")) return "Drinks";
+//   if (v.includes("Sides") || v.includes("Side")) return "Sides";
+//   if (v.includes("Breakfast")) return "Breakfast";
+//   if (v.includes("Lunch")) return "Lunch";
+//   if (v.includes("Dinner")) return "Dinner";
+//   return "All Day";
+// }
+
+// Converts one API row into your app's Meal interface
+
+//-------------------WENDY'S CHANGES-------------------//
+function apiMealToMeal(api: any): Meal {
+    console.log("API meal row:", api);
+
+  return {
+    
+    // id: api.id,
+    // name: api.name,
+    // ingredients: splitCommaList(api.ingredients),
+    // nutrition: parseNutrition(api.nutri_info ?? "", api.nutri_amounts ?? ""),
+    // description: api.description ?? "",
+    // imageUrl: api.image_url ?? "",
+    // mealType: api.mealtype ?? "",
+    // mealPeriod: normalizeMealPeriod(api.mealPeriod ?? "All Day"),
+    // timeRange: api.time_range ?? "",
+    // allergenInfo: splitCommaList(api.allergen_info),
+    // tags: splitCommaList(api.tags),
+    // isAvailable: Boolean(api.isAvailable),
+    // isSeasonal: Boolean(api.isSeasonal),
+    id: Number(api.id),
+    name: api.name ?? "",
     ingredients: splitCommaList(api.ingredients),
-    nutrition: parseNutrition(api.nutri_info ?? "", api.nutri_amounts ?? ""),
+    //nutrition: parseNutrition(api.nutrition),
+    nutrition: {
+      calories: Number(api.calories) || 0,
+      totalFat: "",
+      saturatedFat: undefined,
+      transFat: undefined,
+      cholesterol: "",
+      carbohydrate: "",
+      fiber: "",
+      sugar: "",
+      sodium: String(api.sodium ?? ""),
+      protein: String(api.protein ?? ""),
+    },
     description: api.description ?? "",
-    imageUrl: api.image_url ?? "",
+    imageUrl: api.imageUrl ?? "",
     mealType: api.mealtype ?? "",
-    mealPeriod: normalizeMealPeriod(api.mealPeriod ?? "All Day"),
-    timeRange: api.time_range ?? "",
-    allergenInfo: splitCommaList(api.allergen_info),
+    mealPeriod: normalizeMealPeriod(api.mealperiod),
+    timeRange: api.timeRange ?? "",
+    allergenInfo: splitCommaList(api.allergenInfo),
     tags: splitCommaList(api.tags),
-    isAvailable: Boolean(api.isAvailable),
-    isSeasonal: Boolean(api.isSeasonal),
+    isAvailable: Boolean(api.available),
+    isSeasonal: Boolean(api.seasonal),
   };
 }
 
+//-------------------WENDY'S CHANGES-------------------//
+async function fetchJsonWithTimeout(url: string, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} for ${url}`);
+    }
+
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchAllMealsFromApi(): Promise<Meal[]> {
+  try {
+    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu`);
+    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+  } catch (error) {
+    console.warn("Backend /menu unreachable, using fallback meals:", error);
+    return FALLBACK_MEALS;
+  }
+}
+
+async function fetchAvailableMealsFromApi(): Promise<Meal[]> {
+  try {
+    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/available`);
+    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+  } catch (error) {
+    console.warn("Backend /menu/available unreachable, using fallback meals:", error);
+    return FALLBACK_MEALS.filter((m) => m.isAvailable);
+  }
+}
+
+async function fetchMealsByPeriodFromApi(period: Meal["mealPeriod"]): Promise<Meal[]> {
+  try {
+    const encodedPeriod = encodeURIComponent(period);
+    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/${encodedPeriod}`);
+    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+  } catch (error) {
+    console.warn(`Backend /menu/period/${period} unreachable, using fallback meals:`, error);
+    return FALLBACK_MEALS.filter((m) => {
+      if (!m.isAvailable) return false;
+      if (m.mealPeriod === "All Day") return true;
+      return m.mealPeriod === period;
+    });
+  }
+}
 // Fallback meals for when the API is unreachable
 const FALLBACK_MEALS: Meal[] = [
   { id: 1, name: "Banana-Chocolate Pancakes", ingredients: ["Flour","Sugar","Baking Powder","Cinnamon","Milk","Banana","Egg","Vanilla","Chocolate Chips"], nutrition: { calories: 372, totalFat: "11g", cholesterol: "64mg", carbohydrate: "61g", fiber: "3.1g", sugar: "17g", sodium: "240mg", protein: "10g" }, description: "Pancakes topped with fresh sliced bananas and chocolate chips, served with scrambled eggs.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 9am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Contains Dairy","Contains Eggs"], isAvailable: true, isSeasonal: false },
@@ -118,20 +252,21 @@ const FALLBACK_MEALS: Meal[] = [
   { id: 32, name: "Rice Pudding",           ingredients: ["Rice","Milk","Sugar","Vanilla","Cinnamon","Raisins"],                                    nutrition: { calories: 190, totalFat: "4g",  cholesterol: "14mg", carbohydrate: "35g", fiber: "0.5g", sugar: "20g", sodium: "95mg",  protein: "5g"  }, description: "Creamy rice pudding with cinnamon and raisins — a nostalgic treat.",     imageUrl: "", mealType: "S", mealPeriod: "Sides", timeRange: "11am – 8pm", allergenInfo: ["Dairy"],          tags: ["Comfort","Dairy"],                   isAvailable: true, isSeasonal: false },
 ];
 
-async function fetchMealsFromApi(): Promise<Meal[]> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
-    const res = await fetch(`${API_BASE_URL}/meals`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`Failed to fetch meals: HTTP ${res.status}`);
-    const data = await res.json();
-    return data.map(apiMealToMeal);
-  } catch (error) {
-    console.warn("API unreachable, using fallback meals:", error);
-    return FALLBACK_MEALS;
-  }
-}
+//-------------------WENDY'S CHANGES-------------------//
+// async function fetchMealsFromApi(): Promise<Meal[]> {
+//   try {
+//     const controller = new AbortController();
+//     const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+//     const res = await fetch(`${API_BASE_URL}/meals`, { signal: controller.signal });
+//     clearTimeout(timeout);
+//     if (!res.ok) throw new Error(`Failed to fetch meals: HTTP ${res.status}`);
+//     const data = await res.json();
+//     return data.map(apiMealToMeal);
+//   } catch (error) {
+//     console.warn("API unreachable, using fallback meals:", error);
+//     return FALLBACK_MEALS;
+//   }
+// }
 
 export interface Nutrition {
   calories: number;
@@ -600,55 +735,92 @@ const RESIDENTS_DATABASE: Resident[] = [
 let ORDERS_DATABASE: Order[] = [];
 
 // ==================== MEAL SERVICE ====================
+//-------------------WENDY'S CHANGES-------------------//
 export const MealService = {
   getAllMeals: async (): Promise<Meal[]> => {
-    const meals = await fetchMealsFromApi();
-    return meals.filter((m) => m.isAvailable);
+    // const meals = await fetchMealsFromApi();
+    // return meals.filter((m) => m.isAvailable);
+    return await fetchAvailableMealsFromApi();
   },
 
   getMealById: async (id: number): Promise<Meal | undefined> => {
-    const meals = await fetchMealsFromApi();
+    // const meals = await fetchMealsFromApi();
+    const meals = await fetchAllMealsFromApi();
     return meals.find((m) => m.id === id);
   },
 
   getMealsByPeriod: async (
     period: Meal["mealPeriod"] | null
   ): Promise<Meal[]> => {
-    const meals = await fetchMealsFromApi();
-    // null = "All" tab — exclude Drinks and Sides from general tabs
-    if (!period) return meals.filter((m) => m.isAvailable && m.mealPeriod !== "Drinks" && m.mealPeriod !== "Sides");
+    // const meals = await fetchMealsFromApi();
+    // // null = "All" tab — exclude Drinks and Sides from general tabs
+    // if (!period) return meals.filter((m) => m.isAvailable && m.mealPeriod !== "Drinks" && m.mealPeriod !== "Sides");
 
-    if (period === "Drinks") {
-      return meals.filter((m) => m.isAvailable && m.mealPeriod === "Drinks");
-    }
+    // if (period === "Drinks") {
+    //   return meals.filter((m) => m.isAvailable && m.mealPeriod === "Drinks");
+    // }
 
-    if (period === "Sides") {
-      return meals.filter((m) => m.isAvailable && m.mealPeriod === "Sides");
-    }
+    // if (period === "Sides") {
+    //   return meals.filter((m) => m.isAvailable && m.mealPeriod === "Sides");
+    // }
 
-    return meals.filter((m) => {
-      if (!m.isAvailable) return false;
-      if (m.mealPeriod === "All Day") return true;
-      return m.mealPeriod === period;
+    // return meals.filter((m) => {
+    //   if (!m.isAvailable) return false;
+    //   if (m.mealPeriod === "All Day") return true;
+    //   return m.mealPeriod === period;
+    const meals = await fetchAvailableMealsFromApi();
+
+  if (!period) {
+    return meals.filter(
+      (m) => m.mealType !== "Beverage" && m.mealType !== "Side"
+    );
+  }
+
+  if (period === "Drinks") {
+    return meals.filter(
+      (m) => m.isAvailable && m.mealType === "Beverage"
+    );
+  }
+
+  if (period === "Sides") {
+    return meals.filter(
+      (m) => m.isAvailable && m.mealType === "Side"
+      );
+  }
+
+  return meals.filter((m) => {
+    if (!m.isAvailable) return false;
+
+    // exclude drinks and sides from meal tabs
+    if (m.mealType === "Beverage" || m.mealType === "Side") return false;
+
+    if (m.mealPeriod === "All Day") return true;
+    return m.mealPeriod === period;
     });
   },
 
   searchMeals: async (query: string): Promise<Meal[]> => {
-    const meals = await fetchMealsFromApi();
+    //const meals = await fetchMealsFromApi();
+    const meals = await fetchAvailableMealsFromApi();
     const lowerQuery = query.toLowerCase();
-
+    //--------------------WENDY'S CHANGES-------------------//
     return meals.filter(
       (m) =>
-        m.isAvailable &&
-        (m.name.toLowerCase().includes(lowerQuery) ||
-          m.description.toLowerCase().includes(lowerQuery) ||
-          m.ingredients.some((i) => i.toLowerCase().includes(lowerQuery)) ||
-          m.tags.some((t) => t.toLowerCase().includes(lowerQuery)))
+        // m.isAvailable &&
+        // (m.name.toLowerCase().includes(lowerQuery) ||
+        //   m.description.toLowerCase().includes(lowerQuery) ||
+        //   m.ingredients.some((i) => i.toLowerCase().includes(lowerQuery)) ||
+        //   m.tags.some((t) => t.toLowerCase().includes(lowerQuery)))
+         m.name.toLowerCase().includes(lowerQuery) ||
+        m.description.toLowerCase().includes(lowerQuery) ||
+        m.ingredients.some((i) => i.toLowerCase().includes(lowerQuery)) ||
+        m.tags.some((t) => t.toLowerCase().includes(lowerQuery))
     );
   },
-
+//-------------------WENDY'S CHANGES-------------------//
   getMealsByTag: async (tag: string): Promise<Meal[]> => {
-    const meals = await fetchMealsFromApi();
+    // const meals = await fetchMealsFromApi();
+    const meals = await fetchAvailableMealsFromApi();
     return meals.filter(
       (m) =>
         m.isAvailable &&
@@ -666,7 +838,8 @@ export const MealService = {
   },
 
   getSeasonalMeals: async (): Promise<Meal[]> => {
-    const meals = await fetchMealsFromApi();
+    // const meals = await fetchMealsFromApi();
+    const meals = await fetchAvailableMealsFromApi();
     return meals.filter((m) => m.isAvailable && m.isSeasonal);
   },
 };
