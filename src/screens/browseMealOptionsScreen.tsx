@@ -642,6 +642,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [specialNote, setSpecialNote] = useState('');
   const [availableDrinks, setAvailableDrinks] = useState<Meal[]>([]);
   const [selectedDrink, setSelectedDrink] = useState<Meal | null>(null);
+  const [availableSides, setAvailableSides] = useState<Meal[]>([]);
+  const [selectedSide, setSelectedSide] = useState<Meal | null>(null);
 
   // Use the cart context
   const { addToCart, getCartCount } = useCart();
@@ -694,9 +696,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       // mapServiceMeal imported from mealDisplayService.ts
       const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
 
-      // Also pre-load drinks for the add-drink option in meal detail modal
+      // Pre-load drinks and sides for the add-on pickers in meal detail modal
       const drinkServiceMeals = await MealService.getMealsByPeriod("Drinks");
       setAvailableDrinks(drinkServiceMeals.map(mapServiceMeal));
+      const sidesServiceMeals = await MealService.getMealsByPeriod("Sides");
+      setAvailableSides(sidesServiceMeals.map(mapServiceMeal));
 
       setRawServiceMeals(serviceMeals);
       setMeals(mapped);
@@ -742,6 +746,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setSelectedMeal(meal);
     setSpecialNote('');
     setSelectedDrink(null);
+    setSelectedSide(null);
     setShowMealDetail(true);
   };
 
@@ -751,6 +756,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
     if (selectedDrink) {
       addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+    }
+    if (selectedSide) {
+      addToCart({ ...selectedSide, id: parseInt(selectedSide.id) });
     }
     setShowMealDetail(false);
   };
@@ -1003,61 +1011,121 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                       maxLength={200}
                     />
 
-                    {/* Add a Drink — Picker dropdown */}
-                    {selectedMeal.meal_period !== 'Drinks' && availableDrinks.length > 0 && (
+                    {/* Add-on pickers: Drink & Side — horizontal row */}
+                    {selectedMeal.meal_period !== 'Drinks' && selectedMeal.meal_period !== 'Sides' && (availableDrinks.length > 0 || availableSides.length > 0) && (
                       <>
-                        <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>
-                          Add a drink? 🥤
-                        </Text>
-                        <View style={styles.drinkPickerWrap}>
-                          <Picker
-                            selectedValue={selectedDrink?.id ?? '__none__'}
-                            onValueChange={(val) => {
-                              if (val === '__none__') {
-                                setSelectedDrink(null);
-                              } else {
-                                const found = availableDrinks.find(d => d.id === val);
-                                setSelectedDrink(found ?? null);
-                              }
-                            }}
-                            style={styles.drinkPicker}
-                            itemStyle={styles.drinkPickerItem}
-                          >
-                            <Picker.Item label="— No drink —" value="__none__" />
-                            {availableDrinks.map(drink => {
-                              const ph = getMealPlaceholder(drink.name);
-                              return (
-                                <Picker.Item
-                                  key={drink.id}
-                                  label={`${ph.emoji}  ${drink.name}  ·  ${drink.kcal} kcal`}
-                                  value={drink.id}
-                                />
-                              );
-                            })}
-                          </Picker>
-                        </View>
-                        {selectedDrink && (
-                          <View style={styles.drinkSelectedRow}>
-                            <Text style={styles.drinkSelectedEmoji}>
-                              {getMealPlaceholder(selectedDrink.name).emoji}
-                            </Text>
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.drinkSelectedName, { fontSize: scaled(14) }]}>
-                                {selectedDrink.name}
+                        <View style={styles.addonRow}>
+                          {/* Drink picker */}
+                          {availableDrinks.length > 0 && (
+                            <View style={styles.addonCol}>
+                              <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
+                                Add a drink? 🥤
                               </Text>
-                              <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(12) }]}>
-                                {selectedDrink.kcal} kcal · Sodium: {selectedDrink.sodium_mg}mg · Protein: {selectedDrink.protein_g}g
-                              </Text>
+                              <View style={styles.drinkPickerWrap}>
+                                <Picker
+                                  selectedValue={selectedDrink?.id ?? '__none__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__none__') {
+                                      setSelectedDrink(null);
+                                    } else {
+                                      const found = availableDrinks.find(d => d.id === val);
+                                      setSelectedDrink(found ?? null);
+                                    }
+                                  }}
+                                  style={styles.drinkPicker}
+                                  itemStyle={styles.drinkPickerItem}
+                                >
+                                  <Picker.Item label="— No drink —" value="__none__" />
+                                  {availableDrinks.map(drink => {
+                                    const ph = getMealPlaceholder(drink.name);
+                                    return (
+                                      <Picker.Item
+                                        key={drink.id}
+                                        label={`${ph.emoji}  ${drink.name}  ·  ${drink.kcal} kcal`}
+                                        value={drink.id}
+                                      />
+                                    );
+                                  })}
+                                </Picker>
+                              </View>
+                              {selectedDrink && (
+                                <View style={styles.drinkSelectedRow}>
+                                  <Text style={styles.drinkSelectedEmoji}>
+                                    {getMealPlaceholder(selectedDrink.name).emoji}
+                                  </Text>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
+                                      {selectedDrink.name}
+                                    </Text>
+                                    <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(11) }]}>
+                                      {selectedDrink.kcal} kcal · {selectedDrink.sodium_mg}mg Na
+                                    </Text>
+                                  </View>
+                                </View>
+                              )}
                             </View>
-                          </View>
-                        )}
+                          )}
+
+                          {/* Side picker */}
+                          {availableSides.length > 0 && (
+                            <View style={styles.addonCol}>
+                              <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
+                                Add a side? 🍨
+                              </Text>
+                              <View style={styles.drinkPickerWrap}>
+                                <Picker
+                                  selectedValue={selectedSide?.id ?? '__none__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__none__') {
+                                      setSelectedSide(null);
+                                    } else {
+                                      const found = availableSides.find(s => s.id === val);
+                                      setSelectedSide(found ?? null);
+                                    }
+                                  }}
+                                  style={styles.drinkPicker}
+                                  itemStyle={styles.drinkPickerItem}
+                                >
+                                  <Picker.Item label="— No side —" value="__none__" />
+                                  {availableSides.map(side => {
+                                    const ph = getMealPlaceholder(side.name);
+                                    return (
+                                      <Picker.Item
+                                        key={side.id}
+                                        label={`${ph.emoji}  ${side.name}  ·  ${side.kcal} kcal`}
+                                        value={side.id}
+                                      />
+                                    );
+                                  })}
+                                </Picker>
+                              </View>
+                              {selectedSide && (
+                                <View style={styles.drinkSelectedRow}>
+                                  <Text style={styles.drinkSelectedEmoji}>
+                                    {getMealPlaceholder(selectedSide.name).emoji}
+                                  </Text>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
+                                      {selectedSide.name}
+                                    </Text>
+                                    <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(11) }]}>
+                                      {selectedSide.kcal} kcal · {selectedSide.sodium_mg}mg Na
+                                    </Text>
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
                       </>
                     )}
 
                     {/* Add to Cart Button */}
                     <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
                       <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
-                        {selectedDrink ? `Add to Cart + ${selectedDrink.name}` : 'Add to Cart'}
+                        {selectedDrink || selectedSide
+                          ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
+                          : 'Add to Cart'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1428,6 +1496,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '85%',
+    width: '100%',
     overflow: 'hidden',
   },
   detailImageWrap: {
@@ -1528,6 +1597,14 @@ const styles = StyleSheet.create({
   drinkSelectedMeta: {
     color: COLORS.textMid,
     marginTop: 2,
+  },
+  addonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  addonCol: {
+    flex: 1,
   },
   detailAddBtn: {
     backgroundColor: COLORS.secondary,
