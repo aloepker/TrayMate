@@ -29,19 +29,26 @@ const MEAL_EMOJIS: Record<string, string> = {
 };
 
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, updateOrderStatus, getOrdersForResident } = useCart();
+  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCurrentResidentId(route?.params?.residentId ?? null);
-  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident info from navigation params
   const residentId = route?.params?.residentId as string | undefined;
   const residentName = route?.params?.residentName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
+
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
+
+  // Fetch order history from backend when screen loads
+  useEffect(() => {
+    if (residentId) {
+      fetchOrderHistory(residentId);
+    }
+  }, [residentId]);
 
   // Only show orders for this specific resident
   const residentOrders = residentId ? getOrdersForResident(residentId) : orders;

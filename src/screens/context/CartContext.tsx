@@ -1,4 +1,11 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import {
+  placeOrderApi,
+  replaceOrderApi,
+  getOrderHistoryApi,
+  type MealOrderResponse,
+  type MealOrderWithMeals,
+} from '../../services/api';
 
 // Meal type definition
 type Meal = {
@@ -16,6 +23,7 @@ type Meal = {
 // Order type — a confirmed group of meals, scoped to a resident
 export type Order = {
   id: string;
+  backendId?: number;       // ID from backend /mealOrders
   residentId: string;
   items: Meal[];
   status: 'confirmed' | 'preparing' | 'ready' | 'completed';
@@ -33,9 +41,11 @@ type CartContextType = {
   getTotalNutrition: () => { calories: number; sodium: number; protein: number };
   // Orders
   orders: Order[];
-  placeOrder: (residentId?: string) => Order | null;
+  placeOrder: (residentId?: string, mealOfDay?: string) => Promise<{ order: Order | null; conflict?: MealOrderResponse }>;
+  replaceOrder: (backendOrderId: number, residentId: string, mealOfDay?: string) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
+  fetchOrderHistory: (userId: string) => Promise<void>;
 };
 
 // Create the context
@@ -77,22 +87,162 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const placeOrder = (residentId?: string): Order | null => {
-    if (cart.length === 0) return null;
+  /** Determine the dominant meal period from cart items */
+  const deriveMealOfDay = (): string => {
+    const periods = cart.map((m) => m.meal_period).filter((p) => p !== 'Drinks' && p !== 'Sides');
+    if (periods.length === 0) return 'Lunch'; // default
+    // Most frequent period wins
+    const counts: Record<string, number> = {};
+    periods.forEach((p) => { counts[p] = (counts[p] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  };
 
+  /** Build a local Order object from cart state */
+  const buildLocalOrder = (residentId: string, backendId?: number): Order => {
     const totals = getTotalNutrition();
-    const newOrder: Order = {
-      id: `order_${Date.now()}`,
-      residentId: residentId || 'unknown',
+    return {
+      id: backendId ? `backend_${backendId}` : `order_${Date.now()}`,
+      backendId,
+      residentId,
       items: [...cart],
       status: 'confirmed',
       placedAt: new Date(),
       totalNutrition: totals,
     };
+  };
 
-    setOrders((prev) => [newOrder, ...prev]);
-    setCart([]);
-    return newOrder;
+  /**
+   * Place an order — tries the backend first, falls back to local.
+   * Returns { order, conflict? }. If conflict is set, the caller should
+   * ask the user whether to replace the existing order.
+   */
+  const placeOrder = async (
+    residentId?: string,
+    mealOfDay?: string
+  ): Promise<{ order: Order | null; conflict?: MealOrderResponse }> => {
+    if (cart.length === 0) return { order: null };
+
+    const rid = residentId || 'unknown';
+    const meal = mealOfDay || deriveMealOfDay();
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const itemIds = cart.map((m) => String(m.id)).join(', ');
+
+    try {
+      const response = await placeOrderApi({
+        date: today,
+        mealOfDay: meal,
+        userId: rid,
+        mealItemsIdNumbers: itemIds,
+      });
+
+      // Success — backend returned 201
+      const newOrder = buildLocalOrder(rid, response.id);
+      setOrders((prev) => [newOrder, ...prev]);
+      setCart([]);
+      return { order: newOrder };
+    } catch (err: any) {
+      // Check for 409 conflict
+      const msg = err?.message || '';
+      if (msg.includes('Conflict')) {
+        // Try to parse the conflict data from the error
+        try {
+          const conflictData = JSON.parse(msg);
+          if (conflictData?.data?.id) {
+            return { order: null, conflict: conflictData.data };
+          }
+        } catch {
+          // Error message wasn't JSON — check if the raw response had conflict info
+        }
+        // Generic conflict — return a minimal conflict marker
+        return { order: null, conflict: { id: 0, date: today, mealOfDay: meal, userId: rid, status: 'pending', mealItemsIdNumbers: itemIds } };
+      }
+
+      // Network error or other failure — fall back to local-only order
+      console.warn('Backend order failed, saving locally:', msg);
+      const localOrder = buildLocalOrder(rid);
+      setOrders((prev) => [localOrder, ...prev]);
+      setCart([]);
+      return { order: localOrder };
+    }
+  };
+
+  /**
+   * Replace an existing backend order (after 409 conflict).
+   */
+  const replaceOrder = async (
+    backendOrderId: number,
+    residentId: string,
+    mealOfDay?: string
+  ): Promise<Order | null> => {
+    if (cart.length === 0) return null;
+
+    const rid = residentId || 'unknown';
+    const meal = mealOfDay || deriveMealOfDay();
+    const today = new Date().toISOString().slice(0, 10);
+    const itemIds = cart.map((m) => String(m.id)).join(', ');
+
+    try {
+      const response = await replaceOrderApi(backendOrderId, {
+        date: today,
+        mealOfDay: meal,
+        userId: rid,
+        mealItemsIdNumbers: itemIds,
+      });
+
+      const newOrder = buildLocalOrder(rid, response.id);
+      // Remove old order with same backend ID if present
+      setOrders((prev) => [newOrder, ...prev.filter((o) => o.backendId !== backendOrderId)]);
+      setCart([]);
+      return newOrder;
+    } catch (err: any) {
+      console.warn('Backend replace failed, saving locally:', err?.message);
+      const localOrder = buildLocalOrder(rid);
+      setOrders((prev) => [localOrder, ...prev]);
+      setCart([]);
+      return localOrder;
+    }
+  };
+
+  /**
+   * Fetch order history from backend and merge into local state.
+   */
+  const fetchOrderHistory = async (userId: string): Promise<void> => {
+    try {
+      const history = await getOrderHistoryApi(userId);
+      if (!history || history.length === 0) return;
+
+      const backendOrders: Order[] = history.map((entry) => ({
+        id: `backend_${entry.order.id}`,
+        backendId: entry.order.id,
+        residentId: entry.order.userId,
+        items: entry.meals.map((m) => ({
+          id: m.id,
+          name: m.name,
+          meal_period: (m.mealperiod?.split(',')[0]?.trim() || 'Lunch') as Meal['meal_period'],
+          description: m.description,
+          kcal: m.calories,
+          sodium_mg: m.sodium,
+          protein_g: m.protein,
+          tags: m.tags ? m.tags.split(',').map((t) => t.trim()) : [],
+        })),
+        status: entry.order.status === 'pending' ? 'confirmed' : (entry.order.status as Order['status']),
+        placedAt: new Date(entry.order.date),
+        totalNutrition: {
+          calories: entry.meals.reduce((sum, m) => sum + m.calories, 0),
+          sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),
+          protein: entry.meals.reduce((sum, m) => sum + m.protein, 0),
+        },
+      }));
+
+      // Merge: keep local orders that don't have a matching backendId
+      setOrders((prev) => {
+        const backendIds = new Set(backendOrders.map((o) => o.backendId));
+        const localOnly = prev.filter((o) => !o.backendId || !backendIds.has(o.backendId));
+        return [...backendOrders, ...localOnly];
+      });
+    } catch (err: any) {
+      console.warn('Failed to fetch order history:', err?.message);
+    }
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
@@ -116,8 +266,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         getTotalNutrition,
         orders,
         placeOrder,
+        replaceOrder,
         updateOrderStatus,
         getOrdersForResident,
+        fetchOrderHistory,
       }}
     >
       {children}
