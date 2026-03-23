@@ -18,7 +18,7 @@ import {
 
 const CartScreen = ({ navigation, route }: any) => {
   // Use the cart context
-  const { cart: cartItems, removeFromCart, placeOrder, getTotalNutrition } = useCart();
+  const { cart: cartItems, removeFromCart, placeOrder, replaceOrder, getTotalNutrition } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
 
@@ -32,18 +32,35 @@ const CartScreen = ({ navigation, route }: any) => {
   const residentName = route?.params?.residentName;
   const dietaryRestrictions = route?.params?.dietaryRestrictions;
 
-  const confirmOrder = () => {
-    // Save order scoped to this resident
-    const placed = placeOrder(residentId);
-    if (placed && notifications.orderUpdates) {
+  const confirmOrder = async () => {
+    const { order, conflict } = await placeOrder(residentId);
+
+    if (conflict && conflict.id > 0) {
+      // Backend returned 409 — ask user whether to replace existing order
+      Alert.alert(
+        'Order Already Exists',
+        `You already have a pending ${conflict.mealOfDay} order for ${conflict.date}. Replace it with this cart?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Replace Order',
+            onPress: async () => {
+              const replaced = await replaceOrder(conflict.id, residentId || 'unknown');
+              if (replaced && notifications.orderUpdates) {
+                Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
+              }
+              navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    if (order && notifications.orderUpdates) {
       Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
     }
-    // Navigate to upcoming meals with resident context
-    navigation.navigate('UpcomingMeals', {
-      residentId,
-      residentName,
-      dietaryRestrictions,
-    });
+    navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
   };
 
   const totals = getTotalNutrition();
