@@ -60,6 +60,7 @@ export type DisplayMeal = {
   protein_g: number;
   imageUrl?: string;
   tags?: string[];
+  isSeasonal?: boolean;
   /** Optional special note added by the user in the detail modal */
   specialNote?: string;
 };
@@ -199,4 +200,5 @@ export const mapServiceMeal = (m: ServiceMeal): DisplayMeal => ({
   protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
   imageUrl: m.imageUrl,
   tags: m.tags ?? [],
+  isSeasonal: m.isSeasonal ?? false,
 });
