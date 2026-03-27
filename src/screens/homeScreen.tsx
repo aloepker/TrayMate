@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,13 @@ import { ResidentService } from '../services/localDataService';
 
 const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount, getOrdersForResident } = useCart();
-  const { t, scaled, language, getTouchTargetSize, theme } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
+
+  // Activate this resident's settings when screen mounts
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident info from navigation params (set by admin dashboard)
   const residentId = route?.params?.residentId as string | undefined;
@@ -66,8 +71,8 @@ const HomeScreen = ({ navigation, route }: any) => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={[styles.greeting, { fontSize: scaled(16) }]}>{greeting},</Text>
-            <Text style={[styles.userName, { fontSize: scaled(28) }]}>{residentName}</Text>
+            <Text style={[styles.greeting, { fontSize: scaled(16), color: theme.textSecondary }]}>{greeting},</Text>
+            <Text style={[styles.userName, { fontSize: scaled(28), color: theme.textPrimary }]}>{residentName}</Text>
             {dietaryRestrictions.length > 0 && (
               <View style={styles.dietaryRow}>
                 {dietaryRestrictions.map((tag, i) => (
@@ -90,11 +95,11 @@ const HomeScreen = ({ navigation, route }: any) => {
         {activeOrders.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontSize: scaled(18) }]}>{t.upcomingMeals}</Text>
+              <Text style={[styles.sectionTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>{t.upcomingMeals}</Text>
               <TouchableOpacity
                 onPress={() => navWithResident('UpcomingMeals')}
               >
-                <Text style={[styles.seeAllText, { fontSize: scaled(14) }]}>{t.seeAll}</Text>
+                <Text style={[styles.seeAllText, { fontSize: scaled(14), color: theme.accent }]}>{t.seeAll}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView
@@ -119,7 +124,7 @@ const HomeScreen = ({ navigation, route }: any) => {
                 return (
                   <TouchableOpacity
                     key={order.id}
-                    style={styles.mealPreviewCard}
+                    style={[styles.mealPreviewCard, { backgroundColor: theme.surface }]}
                     onPress={() => navWithResident('UpcomingMeals')}
                     activeOpacity={0.8}
                   >
@@ -129,11 +134,11 @@ const HomeScreen = ({ navigation, route }: any) => {
                         { backgroundColor: statusColor },
                       ]}
                     />
-                    <Text style={styles.mealPreviewName} numberOfLines={1}>
+                    <Text style={[styles.mealPreviewName, { color: theme.textPrimary }]} numberOfLines={1}>
                       {firstItem ? translateMealName(firstItem.name, language) : 'Order'}
                     </Text>
                     {order.items.length > 1 && (
-                      <Text style={[styles.mealPreviewExtra, { fontSize: scaled(12) }]}>
+                      <Text style={[styles.mealPreviewExtra, { fontSize: scaled(12), color: theme.textSecondary }]}>
                         +{order.items.length - 1} more
                       </Text>
                     )}
@@ -161,10 +166,10 @@ const HomeScreen = ({ navigation, route }: any) => {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontSize: scaled(18), marginBottom: 14 }]}>{t.quickActions}</Text>
+          <Text style={[styles.sectionTitle, { fontSize: scaled(18), marginBottom: 14, color: theme.textPrimary }]}>{t.quickActions}</Text>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#FFF8E7' }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface }]}
             onPress={() => navWithResident('BrowseMealOptions')}
             activeOpacity={0.75}
             accessibilityRole="button"
@@ -173,14 +178,14 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Text style={styles.actionEmoji}>🍽</Text>
             </View>
             <View style={styles.actionTextBlock}>
-              <Text style={[styles.actionLabel, { fontSize: scaled(20) }]}>{t.browseMenu}</Text>
-              <Text style={[styles.actionSub, { fontSize: scaled(14) }]}>12 {t.mealsAvailable}</Text>
+              <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.browseMenu}</Text>
+              <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>12 {t.mealsAvailable}</Text>
             </View>
-            <Text style={styles.actionChevron}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#EBF5FF' }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface }]}
             onPress={() => navWithResident('UpcomingMeals')}
             activeOpacity={0.75}
             accessibilityRole="button"
@@ -189,16 +194,16 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Text style={styles.actionEmoji}>📋</Text>
             </View>
             <View style={styles.actionTextBlock}>
-              <Text style={[styles.actionLabel, { fontSize: scaled(20) }]}>{t.upcomingMeals}</Text>
-              <Text style={[styles.actionSub, { fontSize: scaled(14) }]}>
+              <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.upcomingMeals}</Text>
+              <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>
                 {activeOrders.length} {activeOrders.length === 1 ? t.activeOrders.split(' ')[0] : t.activeOrders.split(' ').slice(0, -1).join(' ')}
               </Text>
             </View>
-            <Text style={styles.actionChevron}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#F3EDFF' }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface }]}
             onPress={() => navWithResident('AIMealAssistant')}
             activeOpacity={0.75}
             accessibilityRole="button"
@@ -207,14 +212,14 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Text style={styles.actionEmoji}>👵</Text>
             </View>
             <View style={styles.actionTextBlock}>
-              <Text style={[styles.actionLabel, { fontSize: scaled(20) }]}>{t.grannyGBT}</Text>
-              <Text style={[styles.actionSub, { fontSize: scaled(14) }]}>{t.aiMealAssistant}</Text>
+              <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.grannyGBT}</Text>
+              <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.aiMealAssistant}</Text>
             </View>
-            <Text style={styles.actionChevron}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#EDFBF1' }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface }]}
             onPress={() => navWithResident('Cart')}
             activeOpacity={0.75}
             accessibilityRole="button"
@@ -223,12 +228,12 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Text style={styles.actionEmoji}>🛒</Text>
             </View>
             <View style={styles.actionTextBlock}>
-              <Text style={[styles.actionLabel, { fontSize: scaled(20) }]}>{t.myCart}</Text>
-              <Text style={[styles.actionSub, { fontSize: scaled(14) }]}>
+              <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.myCart}</Text>
+              <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>
                 {cartCount} {cartCount === 1 ? t.itemsReady.split(' ')[0] : t.itemsReady.split(' ').slice(0, -1).join(' ')}
               </Text>
             </View>
-            <Text style={styles.actionChevron}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

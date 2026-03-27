@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -30,7 +30,7 @@ const TEXT_SIZES: { key: TextSize; labelKey: 'small' | 'medium' | 'large' | 'ext
   { key: 'xlarge', labelKey: 'extraLarge', preview: 24 },
 ];
 
-function SettingsScreen({ navigation }: any) {
+function SettingsScreen({ navigation, route }: any) {
   const {
     language: selectedLanguage,
     setLanguage,
@@ -44,8 +44,16 @@ function SettingsScreen({ navigation }: any) {
     toggleNotification,
     theme,
     getTouchTargetSize,
+    setCurrentResidentId,
   } = useSettings();
   const touchTarget = getTouchTargetSize();
+  const hc = accessibility.highContrastMode;
+
+  // Activate this resident's settings when screen mounts
+  useEffect(() => {
+    const residentId = route?.params?.residentId ?? null;
+    setCurrentResidentId(residentId);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -70,14 +78,18 @@ function SettingsScreen({ navigation }: any) {
       >
         {/* ==================== LANGUAGE ==================== */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.language}</Text>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.language}</Text>
           <View style={styles.languageGrid}>
             {LANGUAGES.map((lang) => {
               const active = selectedLanguage === lang.name;
               return (
                 <TouchableOpacity
                   key={lang.code}
-                  style={[styles.languageCard, active && styles.languageCardActive]}
+                  style={[
+                    styles.languageCard,
+                    { backgroundColor: theme.surface, borderColor: theme.border },
+                    active && { backgroundColor: hc ? theme.accent : '#2A2A2A', borderColor: hc ? theme.accent : '#2A2A2A' },
+                  ]}
                   onPress={() => setLanguage(lang.name)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
@@ -86,8 +98,8 @@ function SettingsScreen({ navigation }: any) {
                   <Text
                     style={[
                       styles.languageText,
-                      { fontSize: scaled(17) },
-                      active && styles.languageTextActive,
+                      { fontSize: scaled(17), color: theme.textPrimary },
+                      active && { color: hc ? '#000000' : '#FFFFFF' },
                     ]}
                   >
                     {lang.name}
@@ -102,9 +114,9 @@ function SettingsScreen({ navigation }: any) {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionIcon}>🔤</Text>
-            <Text style={[styles.sectionTitle, { fontSize: scaled(14) }]}>{t.textSize}</Text>
+            <Text style={[styles.sectionTitle, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.textSize}</Text>
           </View>
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             {/* Preview text */}
             <Text style={[styles.previewText, { fontSize: scaled(16), color: theme.textPrimary }]}>
               Aa — {t.textSize}
@@ -116,15 +128,22 @@ function SettingsScreen({ navigation }: any) {
                 return (
                   <TouchableOpacity
                     key={size.key}
-                    style={[styles.textSizeButton, active && styles.textSizeButtonActive]}
+                    style={[
+                      styles.textSizeButton,
+                      { backgroundColor: theme.surface, borderColor: 'transparent' },
+                      active && {
+                        backgroundColor: hc ? theme.accent : '#E8DCC8',
+                        borderColor: hc ? theme.accent : '#717644',
+                      },
+                    ]}
                     onPress={() => setTextSize(size.key)}
                     activeOpacity={0.7}
                   >
                     <Text
                       style={[
                         styles.textSizePreview,
-                        { fontSize: size.preview },
-                        active && styles.textSizePreviewActive,
+                        { fontSize: size.preview, color: theme.textSecondary },
+                        active && { color: hc ? '#000000' : '#717644' },
                       ]}
                     >
                       A
@@ -132,7 +151,8 @@ function SettingsScreen({ navigation }: any) {
                     <Text
                       style={[
                         styles.textSizeLabel,
-                        active && styles.textSizeLabelActive,
+                        { color: theme.textSecondary },
+                        active && { color: hc ? '#000000' : '#717644' },
                       ]}
                     >
                       {t[size.labelKey]}
@@ -148,9 +168,9 @@ function SettingsScreen({ navigation }: any) {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionIcon}>👁</Text>
-            <Text style={[styles.sectionTitle, { fontSize: scaled(14) }]}>{t.accessibility}</Text>
+            <Text style={[styles.sectionTitle, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.accessibility}</Text>
           </View>
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <SettingSwitch
               label={t.highContrast}
               description={t.highContrastDesc}
@@ -185,16 +205,22 @@ function SettingsScreen({ navigation }: any) {
 
         {/* ==================== DIETARY (Read-Only) ==================== */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.dietaryRestrictions}</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.dietaryRestrictions}</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <View style={styles.pillContainer}>
-              <View style={styles.activePill}><Text style={[styles.activePillText, { fontSize: scaled(13) }]}>Low Sodium</Text></View>
-              <View style={styles.activePill}><Text style={[styles.activePillText, { fontSize: scaled(13) }]}>Heart Healthy</Text></View>
-              <View style={styles.activePill}><Text style={[styles.activePillText, { fontSize: scaled(13) }]}>No Shellfish</Text></View>
+              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
+                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>Low Sodium</Text>
+              </View>
+              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
+                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>Heart Healthy</Text>
+              </View>
+              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
+                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>No Shellfish</Text>
+              </View>
             </View>
-            <View style={styles.caregiverNotice}>
+            <View style={[styles.caregiverNotice, { backgroundColor: hc ? '#1A1A00' : '#FEF9F0' }]}>
               <Text style={styles.caregiverIcon}>🔒</Text>
-              <Text style={[styles.caregiverText, { fontSize: scaled(13) }]}>
+              <Text style={[styles.caregiverText, { fontSize: scaled(13), color: theme.textSecondary }]}>
                 {t.managedByCaregiver}
               </Text>
             </View>
@@ -203,8 +229,8 @@ function SettingsScreen({ navigation }: any) {
 
         {/* ==================== NOTIFICATIONS ==================== */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.notifications}</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.notifications}</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <SettingSwitch
               label={t.mealReminders}
               description={t.mealRemindersDesc}
@@ -239,7 +265,7 @@ function SettingsScreen({ navigation }: any) {
 
         {/* ==================== QUICK ACTIONS ==================== */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.quickActions}</Text>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.quickActions}</Text>
 
           <ActionRow
             icon="☰" bg="#E8DCC8"
@@ -273,8 +299,8 @@ function SettingsScreen({ navigation }: any) {
 
         {/* ==================== ACCOUNT ==================== */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14) }]}>{t.account}</Text>
-          <View style={styles.card}>
+          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
               onPress={() => Alert.alert(t.deliveryPrefs, 'Coming soon.')}
@@ -327,20 +353,24 @@ const SettingSwitch = ({
   fontSize: number;
   descFontSize: number;
   minHeight: number;
-}) => (
-  <View style={[styles.switchRow, { minHeight }]}>
-    <View style={styles.switchTextContainer}>
-      <Text style={[styles.switchLabel, { fontSize }]}>{label}</Text>
-      <Text style={[styles.switchDescription, { fontSize: descFontSize }]}>{description}</Text>
+}) => {
+  const { theme } = useSettings();
+  return (
+    <View style={[styles.switchRow, { minHeight }]}>
+      <View style={styles.switchTextContainer}>
+        <Text style={[styles.switchLabel, { fontSize, color: theme.textPrimary }]}>{label}</Text>
+        <Text style={[styles.switchDescription, { fontSize: descFontSize, color: theme.textSecondary }]}>{description}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        trackColor={{ false: theme.border, true: theme.accent }}
+        thumbColor={value ? (theme.background === '#111111' ? '#000000' : '#FFFFFF') : theme.surface}
+        ios_backgroundColor={theme.border}
+      />
     </View>
-    <Switch
-      value={value}
-      onValueChange={onToggle}
-      trackColor={{ false: '#E8E4DE', true: '#D4C5A9' }}
-      thumbColor={value ? '#717644' : '#FFFFFF'}
-    />
-  </View>
-);
+  );
+};
 
 // ---------- Reusable Action Row ----------
 
@@ -364,20 +394,23 @@ const ActionRow = ({
   descFontSize: number;
   isText?: boolean;
   minHeight: number;
-}) => (
-  <TouchableOpacity style={[styles.actionCard, { minHeight }]} onPress={onPress} activeOpacity={0.7}>
-    <View style={[styles.actionIcon, { backgroundColor: bg }]}>
-      <Text style={[styles.actionIconText, isText && { fontSize: 16, fontWeight: '700' as const }]}>
-        {icon}
-      </Text>
-    </View>
-    <View style={styles.actionContent}>
-      <Text style={[styles.actionTitle, { fontSize }]}>{title}</Text>
-      <Text style={[styles.actionDesc, { fontSize: descFontSize }]}>{desc}</Text>
-    </View>
-    <Text style={styles.chevron}>›</Text>
-  </TouchableOpacity>
-);
+}) => {
+  const { theme } = useSettings();
+  return (
+    <TouchableOpacity style={[styles.actionCard, { minHeight, backgroundColor: theme.surface }]} onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.actionIcon, { backgroundColor: bg }]}>
+        <Text style={[styles.actionIconText, isText && { fontSize: 16, fontWeight: '700' as const }]}>
+          {icon}
+        </Text>
+      </View>
+      <View style={styles.actionContent}>
+        <Text style={[styles.actionTitle, { fontSize, color: theme.textPrimary }]}>{title}</Text>
+        <Text style={[styles.actionDesc, { fontSize: descFontSize, color: theme.textSecondary }]}>{desc}</Text>
+      </View>
+      <Text style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>
+    </TouchableOpacity>
+  );
+};
 
 // ---------- Styles ----------
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,27 +18,49 @@ import {
 
 const CartScreen = ({ navigation, route }: any) => {
   // Use the cart context
-  const { cart: cartItems, removeFromCart, placeOrder, getTotalNutrition } = useCart();
-  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const { cart: cartItems, removeFromCart, placeOrder, replaceOrder, getTotalNutrition } = useCart();
+  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
+
+  // Activate this resident's settings when screen mounts
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident info from navigation params
   const residentId = route?.params?.residentId as string | undefined;
   const residentName = route?.params?.residentName;
   const dietaryRestrictions = route?.params?.dietaryRestrictions;
 
-  const confirmOrder = () => {
-    // Save order scoped to this resident
-    const placed = placeOrder(residentId);
-    if (placed && notifications.orderUpdates) {
+  const confirmOrder = async () => {
+    const { order, conflict } = await placeOrder(residentId);
+
+    if (conflict && conflict.id > 0) {
+      // Backend returned 409 — ask user whether to replace existing order
+      Alert.alert(
+        'Order Already Exists',
+        `You already have a pending ${conflict.mealOfDay} order for ${conflict.date}. Replace it with this cart?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Replace Order',
+            onPress: async () => {
+              const replaced = await replaceOrder(conflict.id, residentId || 'unknown');
+              if (replaced && notifications.orderUpdates) {
+                Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
+              }
+              navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    if (order && notifications.orderUpdates) {
       Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
     }
-    // Navigate to upcoming meals with resident context
-    navigation.navigate('UpcomingMeals', {
-      residentId,
-      residentName,
-      dietaryRestrictions,
-    });
+    navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
   };
 
   const totals = getTotalNutrition();
@@ -107,6 +129,13 @@ const CartScreen = ({ navigation, route }: any) => {
                 <Text style={[styles.cartItemDescription, { fontSize: scaled(14), color: theme.textSecondary }]}>
                   {translateMealDescription(item.description, language)}
                 </Text>
+
+                {item.specialNote ? (
+                  <View style={styles.specialNoteRow}>
+                    <Text style={styles.specialNoteIcon}>📝</Text>
+                    <Text style={[styles.specialNoteText, { fontSize: scaled(13) }]}>{item.specialNote}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.nutritionRow}>
                   <View style={styles.nutritionChip}>
@@ -292,6 +321,27 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginBottom: 12,
     lineHeight: 20,
+  },
+  specialNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  specialNoteIcon: {
+    fontSize: 13,
+  },
+  specialNoteText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+    fontStyle: 'italic',
   },
   nutritionRow: {
     flexDirection: 'row',

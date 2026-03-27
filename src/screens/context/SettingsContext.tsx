@@ -75,6 +75,7 @@ export type TranslationKeys = {
   lunch: string;
   dinner: string;
   beverages: string;
+  sides: string;
   tapToAdd: string;
   meals: string;
   // Cart
@@ -193,6 +194,7 @@ const EN: TranslationKeys = {
   lunch: 'Lunch',
   dinner: 'Dinner',
   beverages: 'Beverages',
+  sides: 'Sides',
   tapToAdd: 'Tap to add to order',
   meals: 'Meals',
   yourCart: 'Your Cart',
@@ -305,6 +307,7 @@ const ES: TranslationKeys = {
   lunch: 'Almuerzo',
   dinner: 'Cena',
   beverages: 'Bebidas',
+  sides: 'Acompañamientos',
   tapToAdd: 'Toque para agregar al pedido',
   meals: 'Comidas',
   yourCart: 'Tu Carrito',
@@ -417,6 +420,7 @@ const FR: TranslationKeys = {
   lunch: 'Déjeuner',
   dinner: 'Dîner',
   beverages: 'Boissons',
+  sides: 'Accompagnements',
   tapToAdd: 'Appuyez pour ajouter',
   meals: 'Repas',
   yourCart: 'Votre Panier',
@@ -529,6 +533,7 @@ const ZH: TranslationKeys = {
   lunch: '午餐',
   dinner: '晚餐',
   beverages: '饮品',
+  sides: '配菜',
   tapToAdd: '点击添加到订单',
   meals: '餐食',
   yourCart: '您的购物车',
@@ -606,6 +611,30 @@ const TEXT_SIZE_SCALES: Record<TextSize, number> = {
   xlarge: 1.4,
 };
 
+// ---------- Per-Resident Settings ----------
+
+type PerResidentSettings = {
+  language: Language;
+  textSize: TextSize;
+  accessibility: AccessibilitySettings;
+  notifications: NotificationSettings;
+};
+
+const DEFAULT_PER_RESIDENT: PerResidentSettings = {
+  language: 'English',
+  textSize: 'medium',
+  accessibility: {
+    highContrastMode: false,
+    largeTouchTargets: true,
+    screenReaderSupport: false,
+  },
+  notifications: {
+    mealReminders: true,
+    orderUpdates: true,
+    menuUpdates: false,
+  },
+};
+
 // ---------- Context Type ----------
 
 type SettingsContextType = {
@@ -631,43 +660,73 @@ type SettingsContextType = {
     success: string;
     danger: string;
   };
+  currentResidentId: string | null;
+  setCurrentResidentId: (id: string | null) => void;
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguage] = useState<Language>('English');
-  const [textSize, setTextSize] = useState<TextSize>('medium');
+  // Per-resident settings: each resident gets their own preferences
+  const [currentResidentId, setCurrentResidentIdState] = useState<string | null>(null);
+  const [residentSettings, setResidentSettings] = useState<Record<string, PerResidentSettings>>({});
+  const currentResidentIdRef = useRef<string | null>(null);
 
-  const [accessibility, setAccessibility] = useState<AccessibilitySettings>({
-    highContrastMode: false,
-    largeTouchTargets: true,
-    screenReaderSupport: false,
-  });
+  useEffect(() => {
+    currentResidentIdRef.current = currentResidentId;
+  }, [currentResidentId]);
 
-  const [notifications, setNotifications] = useState<NotificationSettings>({
-    mealReminders: true,
-    orderUpdates: true,
-    menuUpdates: false,
-  });
-  const prevA11yRef = useRef({
-    language,
-    textSize,
-    highContrastMode: accessibility.highContrastMode,
-    largeTouchTargets: accessibility.largeTouchTargets,
-  });
+  const setCurrentResidentId = useCallback((id: string | null) => {
+    setCurrentResidentIdState(id);
+  }, []);
+
+  // Derive active settings from the current resident (or global default)
+  const residentKey = currentResidentId ?? '__default__';
+  const currentSettings: PerResidentSettings = residentSettings[residentKey] ?? DEFAULT_PER_RESIDENT;
+  const { language, textSize, accessibility, notifications } = currentSettings;
+
+  // Update only the current resident's settings slice
+  const updateCurrentSettings = useCallback(
+    (updater: (prev: PerResidentSettings) => PerResidentSettings) => {
+      setResidentSettings(prev => {
+        const key = currentResidentIdRef.current ?? '__default__';
+        return { ...prev, [key]: updater(prev[key] ?? DEFAULT_PER_RESIDENT) };
+      });
+    },
+    [],
+  );
+
+  const setLanguage = useCallback(
+    (lang: Language) => updateCurrentSettings(prev => ({ ...prev, language: lang })),
+    [updateCurrentSettings],
+  );
+
+  const setTextSize = useCallback(
+    (size: TextSize) => updateCurrentSettings(prev => ({ ...prev, textSize: size })),
+    [updateCurrentSettings],
+  );
+
+  const toggleAccessibility = useCallback(
+    (key: keyof AccessibilitySettings) =>
+      updateCurrentSettings(prev => ({
+        ...prev,
+        accessibility: { ...prev.accessibility, [key]: !prev.accessibility[key] },
+      })),
+    [updateCurrentSettings],
+  );
+
+  const toggleNotification = useCallback(
+    (key: keyof NotificationSettings) =>
+      updateCurrentSettings(prev => ({
+        ...prev,
+        notifications: { ...prev.notifications, [key]: !prev.notifications[key] },
+      })),
+    [updateCurrentSettings],
+  );
 
   const t = useMemo(() => TRANSLATIONS[language], [language]);
   const fontScale = useMemo(() => TEXT_SIZE_SCALES[textSize], [textSize]);
   const scaled = useCallback((base: number) => Math.round(base * TEXT_SIZE_SCALES[textSize]), [textSize]);
-
-  const toggleAccessibility = useCallback((key: keyof AccessibilitySettings) => {
-    setAccessibility(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-
-  const toggleNotification = useCallback((key: keyof NotificationSettings) => {
-    setNotifications(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
 
   const getTouchTargetSize = useCallback(() => {
     return accessibility.largeTouchTargets ? 56 : 44;
@@ -698,6 +757,13 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
           },
     [accessibility.highContrastMode],
   );
+
+  const prevA11yRef = useRef({
+    language,
+    textSize,
+    highContrastMode: accessibility.highContrastMode,
+    largeTouchTargets: accessibility.largeTouchTargets,
+  });
 
   useEffect(() => {
     if (!accessibility.screenReaderSupport) {
@@ -750,6 +816,8 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         toggleNotification,
         getTouchTargetSize,
         theme,
+        currentResidentId,
+        setCurrentResidentId,
       }}
     >
       {children}

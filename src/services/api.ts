@@ -446,3 +446,129 @@ export async function deleteEntity(
     method: "DELETE",
   });
 }
+
+/* ========================= Meal Orders API ========================= */
+
+/**
+ * Shape returned by the backend for a single order.
+ */
+export type MealOrderResponse = {
+  id: number;
+  date: string;            // "YYYY-MM-DD"
+  mealOfDay: string;       // "Breakfast" | "Lunch" | "Dinner"
+  userId: string;
+  status: string;          // "pending", etc.
+  mealItemsIdNumbers: string; // comma-separated meal IDs, e.g. "3, 5, 6"
+};
+
+/**
+ * Backend meal item (returned inside order history / search).
+ */
+export type BackendMealItem = {
+  id: number;
+  name: string;
+  ingredients: string;
+  description: string;
+  imageUrl: string;
+  mealtype: string;
+  mealperiod: string;
+  timeRange: string;
+  allergenInfo: string;
+  tags: string;
+  available: boolean;
+  seasonal: boolean;
+  nutrition: string;
+  calories: number;
+  sodium: number;
+  protein: number;
+};
+
+/**
+ * Shape returned by history / search endpoints — order + resolved meals.
+ */
+export type MealOrderWithMeals = {
+  order: MealOrderResponse;
+  meals: BackendMealItem[];
+};
+
+/**
+ * Error body returned on 409 conflict.
+ */
+export type MealOrderConflict = {
+  errorCode: "PENDING_CONFLICT";
+  message: string;
+  data: MealOrderResponse;
+};
+
+/**
+ * 1) Place an order.
+ *    POST /mealOrders
+ *    Returns 201 on success, throws with 409 body on conflict.
+ */
+export async function placeOrderApi(payload: {
+  date: string;
+  mealOfDay: string;
+  userId: string;
+  status?: string;
+  mealItemsIdNumbers: string;
+}): Promise<MealOrderResponse> {
+  return request<MealOrderResponse>("/mealOrders", {
+    method: "POST",
+    body: JSON.stringify({
+      date: payload.date,
+      mealOfDay: payload.mealOfDay,
+      userId: payload.userId,
+      status: payload.status ?? "pending",
+      mealItemsIdNumbers: payload.mealItemsIdNumbers,
+    }),
+  });
+}
+
+/**
+ * 2) Replace an existing order.
+ *    PUT /mealOrders/{orderId}
+ */
+export async function replaceOrderApi(
+  orderId: number,
+  payload: {
+    date: string;
+    mealOfDay: string;
+    userId: string;
+    status?: string;
+    mealItemsIdNumbers: string;
+  }
+): Promise<MealOrderResponse> {
+  return request<MealOrderResponse>(`/mealOrders/${orderId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      date: payload.date,
+      mealOfDay: payload.mealOfDay,
+      userId: payload.userId,
+      status: payload.status ?? "pending",
+      mealItemsIdNumbers: payload.mealItemsIdNumbers,
+    }),
+  });
+}
+
+/**
+ * 3) Get a resident's order history.
+ *    GET /mealOrders/history/{userId}
+ */
+export async function getOrderHistoryApi(
+  userId: string
+): Promise<MealOrderWithMeals[]> {
+  return request<MealOrderWithMeals[]>(`/mealOrders/history/${userId}`);
+}
+
+/**
+ * 4) Get all orders for a given date and meal period.
+ *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD
+ */
+export async function searchOrdersApi(
+  mealOfDay: string,
+  date: string
+): Promise<MealOrderWithMeals[]> {
+  return request<MealOrderWithMeals[]>(
+    `/mealOrders/search?mealOfDay=${encodeURIComponent(mealOfDay)}&date=${encodeURIComponent(date)}`
+  );
+}
