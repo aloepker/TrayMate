@@ -197,20 +197,6 @@ export default function CaregiverDashboardScreen({
         </View>
 
         <View style={styles.topBarRight}>
-          {/* Kitchen messages bell */}
-          <Pressable
-            style={styles.bellBtn}
-            onPress={() => { setShowInboxModal(true); markAllRead(); }}
-            hitSlop={8}
-          >
-            <Feather name="bell" size={22} color="#3C3C3C" />
-            {unreadCount > 0 && (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
-          </Pressable>
-
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
