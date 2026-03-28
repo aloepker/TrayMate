@@ -51,8 +51,8 @@ export default function Login({ navigation }: any) {
         case "ROLE_CAREGIVER":
           navigation.replace("CaregiverDashboard");
           break;
-        case "ROLE_KITCHEN":
-          navigation.replace("Home");
+        case "ROLE_KITCHEN_STAFF":
+          navigation.replace("KitchenDashboard");
           break;
         default:
           navigation.replace("Home");
