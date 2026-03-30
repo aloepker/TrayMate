@@ -87,7 +87,7 @@ const CartScreen = ({ navigation, route }: any) => {
 
       {cartItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🛒</Text>
+          <Text style={styles.emptyIcon}>Cart Empty</Text>
           <Text style={[styles.emptyTitle, { fontSize: scaled(24) }]}>{t.cartEmpty}</Text>
           <Text style={[styles.emptyText, { fontSize: scaled(16) }]}>{t.cartEmptyDesc}</Text>
           <TouchableOpacity
@@ -126,26 +126,26 @@ const CartScreen = ({ navigation, route }: any) => {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={[styles.cartItemDescription, { fontSize: scaled(14), color: theme.textSecondary }]}>
+                <Text style={[styles.cartItemDescription, { fontSize: scaled(14), color: theme.textPrimary }]}>
                   {translateMealDescription(item.description, language)}
                 </Text>
 
                 {item.specialNote ? (
                   <View style={styles.specialNoteRow}>
-                    <Text style={styles.specialNoteIcon}>📝</Text>
+                    <Text style={styles.specialNoteIcon}>Note:</Text>
                     <Text style={[styles.specialNoteText, { fontSize: scaled(13) }]}>{item.specialNote}</Text>
                   </View>
                 ) : null}
 
                 <View style={styles.nutritionRow}>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>🔥 {item.kcal} {t.calories}</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.kcal} {t.calories}</Text>
                   </View>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>🧂 {item.sodium_mg} mg {t.sodium}</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.sodium_mg} mg {t.sodium}</Text>
                   </View>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>💪 {item.protein_g} g {t.protein}</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.protein_g} g {t.protein}</Text>
                   </View>
                 </View>
               </View>
@@ -153,7 +153,7 @@ const CartScreen = ({ navigation, route }: any) => {
 
             {/* Total Nutrition */}
             <View style={styles.totalsCard}>
-              <Text style={[styles.totalsTitle, { fontSize: scaled(20) }]}>✨ {t.totalNutrition}</Text>
+              <Text style={[styles.totalsTitle, { fontSize: scaled(20) }]}>{t.totalNutrition}</Text>
               <View style={styles.totalsGrid}>
                 <View style={styles.totalItem}>
                   <Text style={[styles.totalValue, { fontSize: scaled(34) }]}>{totals.calories}</Text>
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 2,
     fontSize: 14,
-    color: '#6b7280',
+    color: '#374151',
     fontWeight: '500',
   },
   scrollView: {
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   },
   cartItemDescription: {
     fontSize: 14,
-    color: '#4b5563',
+    color: '#111827',
     marginBottom: 12,
     lineHeight: 20,
   },
@@ -356,8 +356,8 @@ const styles = StyleSheet.create({
   },
   nutritionText: {
     fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '500',
+    color: '#111827',
+    fontWeight: '600',
   },
   totalsCard: {
     backgroundColor: '#FFF7E2',
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6b7280',
+    color: '#374151',
     textAlign: 'center',
   },
   bottomBar: {
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   },
   calorieCount: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#374151',
     fontWeight: '500',
   },
   confirmButton: {
