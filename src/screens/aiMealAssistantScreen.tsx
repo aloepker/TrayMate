@@ -6,11 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
 } from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
 import {
   MealService,
   ResidentService,
@@ -28,18 +30,18 @@ import { useSettings } from './context/SettingsContext';
 // ---------- TrayMate Color Palette ----------
 const COLORS = {
   primary: '#717644',
-  accent: '#f6a72d',
-  secondary: '#d27028',
-  neutral: '#cbc2b4',
-  support: '#b77f3f',
+  primaryLight: '#F4F3EE',
+  accent: '#717644',
   white: '#FFFFFF',
-  textDark: '#111827',
+  background: '#FAF9F6',
+  surface: '#FFFFFF',
+  textDark: '#1A1A1A',
   textMid: '#374151',
-  textLight: '#6B7280',
-  borderLight: '#E5E7EB',
-  surface: '#F3F4F6',
-  grannyPink: '#FDF2F8',
-  grannyRose: '#BE185D',
+  textLight: '#5C5C5C',
+  border: '#E8E6E1',
+  warmBg: '#FDF8F0',
+  warmBorder: '#E8DCC8',
+  success: '#2D6A4F',
 };
 
 // ---------- Meal Placeholder Map ----------
@@ -59,7 +61,7 @@ const MEAL_PLACEHOLDERS: Record<string, { bg: string; emoji: string }> = {
 };
 
 const getMealPlaceholder = (name: string) =>
-  MEAL_PLACEHOLDERS[name] || { bg: '#F3F4F6', emoji: '🍽' };
+  MEAL_PLACEHOLDERS[name] || { bg: COLORS.primaryLight, emoji: '🍽' };
 
 // ---------- Rich Text Renderer ----------
 // Parses **bold**, meal names (renders inline cards), and bullet points
@@ -197,12 +199,12 @@ const richStyles = StyleSheet.create({
   },
   mealCard: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.primaryLight,
     borderRadius: 14,
     marginVertical: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.border,
   },
   mealCardImage: {
     width: 72,
@@ -224,12 +226,12 @@ const richStyles = StyleSheet.create({
   },
   mealCardMeta: {
     fontSize: 14,
-    color: COLORS.textLight,
+    color: COLORS.textMid,
     marginBottom: 4,
   },
   mealCardNutrition: {
     fontSize: 13,
-    color: COLORS.support,
+    color: COLORS.primary,
     fontWeight: '600',
   },
   mealCardReason: {
@@ -454,24 +456,21 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { minHeight: touchTarget, minWidth: touchTarget }]}
         >
-          <View style={styles.backArrow}>
-            <View style={styles.backArrowLine1} />
-            <View style={styles.backArrowLine2} />
-          </View>
+          <Feather name="chevron-left" size={24} color={COLORS.white} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <View style={styles.headerTitleRow}>
-            <Text style={[styles.headerTitle, { fontSize: scaled(24) }]}>{t.grannyGBT}</Text>
+            <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.grannyGBT}</Text>
             <View style={[styles.aiBadge, aiMode === 'ai' ? styles.aiBadgeOn : aiMode === 'offline' ? styles.aiBadgeOff : styles.aiBadgeConnecting]}>
-              <Text style={[styles.aiBadgeText, { fontSize: scaled(13) }]}>
-                {aiMode === 'ai' ? '✨ AI' : aiMode === 'offline' ? '💤 Offline' : '⏳'}
+              <Text style={[styles.aiBadgeText, { fontSize: scaled(11) }]}>
+                {aiMode === 'ai' ? 'AI' : aiMode === 'offline' ? 'Offline' : '...'}
               </Text>
             </View>
           </View>
-          <Text style={[styles.headerSubtitle, { fontSize: scaled(16) }]}>{t.mealAdvisorFor} {residentName}</Text>
+          <Text style={[styles.headerSubtitle, { fontSize: scaled(14) }]}>{t.mealAdvisorFor} {residentName}</Text>
         </View>
         <View style={styles.headerIconContainer}>
-          <Text style={styles.headerIcon}>👵</Text>
+          <Image source={require('../styles/pictures/grandma.png')} style={styles.headerIconImage} resizeMode="contain" />
         </View>
       </View>
 
@@ -489,7 +488,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
             {message.role === 'assistant' && (
               <View style={styles.assistantAvatarRow}>
                 <View style={styles.assistantAvatar}>
-                  <Text style={styles.assistantAvatarText}>👵</Text>
+                  <Image source={require('../styles/pictures/grandma.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
                 </View>
                 <Text style={[styles.assistantLabel, { fontSize: scaled(14) }]}>{t.grannyGBT}</Text>
               </View>
@@ -528,7 +527,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
           <View>
             <View style={styles.assistantAvatarRow}>
               <View style={styles.assistantAvatar}>
-                <Text style={styles.assistantAvatarText}>👵</Text>
+                <Image source={require('../styles/pictures/grandma.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
               </View>
               <Text style={[styles.assistantLabel, { fontSize: scaled(14) }]}>{t.grannyGBT}</Text>
             </View>
@@ -585,7 +584,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
             accessibilityRole="button"
             accessibilityLabel="Send message"
           >
-            <Text style={[styles.sendButtonText, { fontSize: scaled(22) }]}>➤</Text>
+            <Feather name="send" size={22} color={COLORS.white} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -604,42 +603,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.primary,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 16,
   },
   backButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-  },
-  backArrow: {
-    width: 12,
-    height: 12,
-    marginLeft: 2,
-  },
-  backArrowLine1: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 12,
-    height: 2,
-    backgroundColor: COLORS.white,
-    borderRadius: 1,
-    transform: [{ rotate: '-45deg' }, { translateX: -1 }, { translateY: 2 }],
-  },
-  backArrowLine2: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: 12,
-    height: 2,
-    backgroundColor: COLORS.white,
-    borderRadius: 1,
-    transform: [{ rotate: '45deg' }, { translateX: -1 }, { translateY: -2 }],
   },
   headerTextContainer: {
     flex: 1,
@@ -681,16 +655,17 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: COLORS.accent,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerIcon: {
-    fontSize: 28,
+  headerIconImage: {
+    width: 34,
+    height: 34,
   },
   messagesContainer: {
     flex: 1,
-    backgroundColor: COLORS.neutral,
+    backgroundColor: COLORS.background,
   },
   messagesContent: {
     padding: 16,
@@ -706,17 +681,16 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
-  },
-  assistantAvatarText: {
-    fontSize: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   assistantLabel: {
     fontWeight: '700',
-    color: COLORS.support,
+    color: COLORS.primary,
   },
   messageBubble: {
     maxWidth: '92%',
@@ -728,13 +702,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.border,
     borderBottomLeftRadius: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -750,19 +719,19 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   typingText: {
-    color: COLORS.support,
+    color: COLORS.primary,
     fontStyle: 'italic',
   },
   quickQuestionsContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.primaryLight,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: COLORS.border,
   },
   quickQuestionsLabel: {
     fontWeight: '700',
-    color: COLORS.support,
+    color: COLORS.primary,
     marginBottom: 10,
   },
   quickQuestionsRow: {
@@ -773,9 +742,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 20,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.border,
   },
   quickQuestionText: {
     color: COLORS.textMid,
@@ -788,31 +757,30 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: COLORS.border,
     gap: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.primaryLight,
     borderRadius: 24,
     paddingHorizontal: 20,
     paddingVertical: 14,
     color: COLORS.textDark,
     fontSize: 18,
     maxHeight: 140,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   sendButton: {
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
     backgroundColor: '#D1D5DB',
-  },
-  sendButtonText: {
-    color: COLORS.white,
   },
 });
