@@ -4,7 +4,7 @@ import { AccessibilityInfo } from 'react-native';
 // ---------- Types ----------
 
 export type Language = 'English' | 'Español' | 'Français' | '中文';
-export type TextSize = 'small' | 'medium' | 'large' | 'xlarge';
+export type TextSize = 'large' | 'xlarge' | 'xxlarge';
 
 export type AccessibilitySettings = {
   highContrastMode: boolean;
@@ -49,10 +49,9 @@ export type TranslationKeys = {
   deliveryPrefs: string;
   supportHelp: string;
   logOut: string;
-  small: string;
-  medium: string;
   large: string;
   extraLarge: string;
+  xxlarge: string;
   // Home
   goodMorning: string;
   goodAfternoon: string;
@@ -75,7 +74,9 @@ export type TranslationKeys = {
   lunch: string;
   dinner: string;
   beverages: string;
+  desserts: string;
   sides: string;
+  seasonal: string;
   tapToAdd: string;
   meals: string;
   // Cart
@@ -170,10 +171,9 @@ const EN: TranslationKeys = {
   deliveryPrefs: 'Delivery Preferences',
   supportHelp: 'Support & Help',
   logOut: 'Log Out',
-  small: 'Small',
-  medium: 'Medium',
   large: 'Large',
   extraLarge: 'Extra Large',
+  xxlarge: 'Extra Extra Large',
   goodMorning: 'Good Morning',
   goodAfternoon: 'Good Afternoon',
   goodEvening: 'Good Evening',
@@ -194,7 +194,9 @@ const EN: TranslationKeys = {
   lunch: 'Lunch',
   dinner: 'Dinner',
   beverages: 'Beverages',
+  desserts: 'Desserts',
   sides: 'Sides',
+  seasonal: 'Seasonal',
   tapToAdd: 'Tap to add to order',
   meals: 'Meals',
   yourCart: 'Your Cart',
@@ -283,10 +285,9 @@ const ES: TranslationKeys = {
   deliveryPrefs: 'Preferencias de Entrega',
   supportHelp: 'Soporte y Ayuda',
   logOut: 'Cerrar Sesión',
-  small: 'Pequeño',
-  medium: 'Mediano',
   large: 'Grande',
   extraLarge: 'Extra Grande',
+  xxlarge: 'Extra Extra Grande',
   goodMorning: 'Buenos Días',
   goodAfternoon: 'Buenas Tardes',
   goodEvening: 'Buenas Noches',
@@ -307,7 +308,9 @@ const ES: TranslationKeys = {
   lunch: 'Almuerzo',
   dinner: 'Cena',
   beverages: 'Bebidas',
+  desserts: 'Postres',
   sides: 'Acompañamientos',
+  seasonal: 'De Temporada',
   tapToAdd: 'Toque para agregar al pedido',
   meals: 'Comidas',
   yourCart: 'Tu Carrito',
@@ -396,10 +399,9 @@ const FR: TranslationKeys = {
   deliveryPrefs: 'Préférences de Livraison',
   supportHelp: 'Support et Aide',
   logOut: 'Déconnexion',
-  small: 'Petit',
-  medium: 'Moyen',
   large: 'Grand',
   extraLarge: 'Très Grand',
+  xxlarge: 'Très Très Grand',
   goodMorning: 'Bonjour',
   goodAfternoon: 'Bon Après-midi',
   goodEvening: 'Bonsoir',
@@ -420,7 +422,9 @@ const FR: TranslationKeys = {
   lunch: 'Déjeuner',
   dinner: 'Dîner',
   beverages: 'Boissons',
+  desserts: 'Desserts',
   sides: 'Accompagnements',
+  seasonal: 'Saisonnier',
   tapToAdd: 'Appuyez pour ajouter',
   meals: 'Repas',
   yourCart: 'Votre Panier',
@@ -509,10 +513,9 @@ const ZH: TranslationKeys = {
   deliveryPrefs: '配送偏好',
   supportHelp: '支持与帮助',
   logOut: '退出登录',
-  small: '小',
-  medium: '中',
   large: '大',
   extraLarge: '特大',
+  xxlarge: '超大',
   goodMorning: '早上好',
   goodAfternoon: '下午好',
   goodEvening: '晚上好',
@@ -533,7 +536,9 @@ const ZH: TranslationKeys = {
   lunch: '午餐',
   dinner: '晚餐',
   beverages: '饮品',
+  desserts: '甜点',
   sides: '配菜',
+  seasonal: '时令',
   tapToAdd: '点击添加到订单',
   meals: '餐食',
   yourCart: '您的购物车',
@@ -605,10 +610,9 @@ const TRANSLATIONS: Record<Language, TranslationKeys> = {
 // ---------- Text Size Scales ----------
 
 const TEXT_SIZE_SCALES: Record<TextSize, number> = {
-  small: 0.85,
-  medium: 1.0,
   large: 1.2,
   xlarge: 1.4,
+  xxlarge: 1.6,
 };
 
 // ---------- Per-Resident Settings ----------
@@ -622,7 +626,7 @@ type PerResidentSettings = {
 
 const DEFAULT_PER_RESIDENT: PerResidentSettings = {
   language: 'English',
-  textSize: 'medium',
+  textSize: 'large',
   accessibility: {
     highContrastMode: false,
     largeTouchTargets: true,
