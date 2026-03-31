@@ -9,6 +9,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -57,16 +58,17 @@ function SettingsScreen({ navigation, route }: any) {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { minHeight: touchTarget, justifyContent: 'center' }]}
           accessibilityLabel={accessibility.screenReaderSupport ? t.back : undefined}
           accessibilityRole="button"
         >
-          <Text style={[styles.backText, { fontSize: scaled(16), color: theme.accent }]}>{t.back}</Text>
+          <Feather name="chevron-left" size={22} color={theme.accent} />
+          <Text style={[styles.backText, { fontSize: scaled(16), color: theme.accent }]}>{t.back.replace(/^[←↩⬅]\s*/, '')}</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontSize: scaled(24), color: theme.textPrimary }]}>{t.settings}</Text>
+        <Text style={[styles.headerTitle, { fontSize: scaled(22), color: theme.textPrimary }]}>{t.settings}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -112,7 +114,7 @@ function SettingsScreen({ navigation, route }: any) {
         {/* ==================== TEXT SIZE ==================== */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionIcon}>🔤</Text>
+            <Feather name="type" size={16} color={theme.textSecondary} />
             <Text style={[styles.sectionTitle, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.textSize}</Text>
           </View>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
@@ -166,7 +168,7 @@ function SettingsScreen({ navigation, route }: any) {
         {/* ==================== ACCESSIBILITY ==================== */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionIcon}>👁</Text>
+            <Feather name="eye" size={16} color={theme.textSecondary} />
             <Text style={[styles.sectionTitle, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.accessibility}</Text>
           </View>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
@@ -218,7 +220,7 @@ function SettingsScreen({ navigation, route }: any) {
               </View>
             </View>
             <View style={[styles.caregiverNotice, { backgroundColor: hc ? '#1A1A00' : '#FEF9F0' }]}>
-              <Text style={styles.caregiverIcon}>🔒</Text>
+              <Feather name="lock" size={14} color="#8A7A5A" style={{ marginTop: 2 }} />
               <Text style={[styles.caregiverText, { fontSize: scaled(13), color: theme.textSecondary }]}>
                 {t.managedByCaregiver}
               </Text>
@@ -267,28 +269,28 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.quickActions}</Text>
 
           <ActionRow
-            icon="☰" bg="#E8DCC8"
+            featherIcon="book-open" bg="#E8DCC8"
             title={t.browseMenus} desc={t.browseMenusDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
             onPress={() => navigation.navigate('BrowseMealOptions')}
           />
           <ActionRow
-            icon="⟲" bg="#D8E4D0"
+            featherIcon="rotate-ccw" bg="#D8E4D0"
             title={t.orderHistory} desc={t.orderHistoryDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
             onPress={() => navigation.navigate('UpcomingMeals')}
           />
           <ActionRow
-            icon="🕐" bg="#F6D7B8"
+            featherIcon="calendar" bg="#F6D7B8"
             title={t.upcomingMeals} desc={t.upcomingMealsDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
             onPress={() => navigation.navigate('UpcomingMeals')}
           />
           <ActionRow
-            icon="AI" bg="#E8DCC8" isText
+            featherIcon="message-circle" bg="#E8DCC8"
             title={t.aiAssistant} desc={t.aiAssistantDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
@@ -306,7 +308,7 @@ function SettingsScreen({ navigation, route }: any) {
               accessibilityRole="button"
             >
               <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.deliveryPrefs}</Text>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
             <View style={styles.divider} />
 
@@ -316,7 +318,7 @@ function SettingsScreen({ navigation, route }: any) {
               accessibilityRole="button"
             >
               <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.supportHelp}</Text>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
             <View style={styles.divider} />
 
@@ -374,39 +376,35 @@ const SettingSwitch = ({
 // ---------- Reusable Action Row ----------
 
 const ActionRow = ({
-  icon,
+  featherIcon,
   bg,
   title,
   desc,
   onPress,
   fontSize,
   descFontSize,
-  isText,
   minHeight,
 }: {
-  icon: string;
+  featherIcon: string;
   bg: string;
   title: string;
   desc: string;
   onPress: () => void;
   fontSize: number;
   descFontSize: number;
-  isText?: boolean;
   minHeight: number;
 }) => {
   const { theme } = useSettings();
   return (
     <TouchableOpacity style={[styles.actionCard, { minHeight, backgroundColor: theme.surface }]} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.actionIcon, { backgroundColor: bg }]}>
-        <Text style={[styles.actionIconText, isText && { fontSize: 16, fontWeight: '700' as const }]}>
-          {icon}
-        </Text>
+        <Feather name={featherIcon} size={20} color="#717644" />
       </View>
       <View style={styles.actionContent}>
         <Text style={[styles.actionTitle, { fontSize, color: theme.textPrimary }]}>{title}</Text>
         <Text style={[styles.actionDesc, { fontSize: descFontSize, color: theme.textSecondary }]}>{desc}</Text>
       </View>
-      <Text style={[styles.chevron, { color: theme.textSecondary }]}>›</Text>
+      <Feather name="chevron-right" size={20} color={theme.textSecondary} />
     </TouchableOpacity>
   );
 };
@@ -424,15 +422,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: PAD,
-    paddingBottom: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E4DE',
+    marginBottom: 8,
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
     paddingVertical: 8,
     paddingRight: 12,
   },
   backText: {
     color: '#717644',
     fontWeight: '600',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   headerTitle: {
     fontWeight: '700',

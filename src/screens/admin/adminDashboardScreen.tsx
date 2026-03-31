@@ -479,7 +479,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     }
                     hitSlop={10}
                   >
-                    <Text style={styles.cartBtnIcon}>🛒</Text>
+                    <Feather name="shopping-cart" size={16} color="#717644" />
                     <Text style={styles.cartBtnText}>Select Resident</Text>
                   </Pressable>
 
