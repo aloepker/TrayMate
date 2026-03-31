@@ -32,10 +32,11 @@ export default function Login({ navigation }: any) {
 
   const navigateByRole = (role: string) => {
     switch (role) {
-      case "ROLE_ADMIN":     navigation.replace("AdminDashboard"); break;
-      case "ROLE_CAREGIVER": navigation.replace("CaregiverDashboard"); break;
-      case "ROLE_KITCHEN":   navigation.replace("Home"); break;
-      default:               navigation.replace("Home");
+      case "ROLE_ADMIN":        navigation.replace("AdminDashboard"); break;
+      case "ROLE_CAREGIVER":    navigation.replace("CaregiverDashboard"); break;
+      case "ROLE_KITCHEN":      navigation.replace("KitchenBoard"); break;
+      case "ROLE_KITCHEN_STAFF":navigation.replace("KitchenDashboard"); break;
+      default:                  navigation.replace("Home");
     }
   };
 
