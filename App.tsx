@@ -18,6 +18,7 @@ import SettingsScreen from './src/screens/SettingsScreens';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
 import KitchenBoardScreen from './src/screens/kitchen/kitchenBoardScreen';
+import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboard';
 
 //Caregiver dashboard screen
 import CaregiverDashboardScreen from './src/screens/caregiver/caregiverDashboardScreen';
@@ -48,6 +49,7 @@ export default function App() {
               <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
               <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
               <Stack.Screen name="KitchenBoard" component={KitchenBoardScreen} />
+              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </CartProvider>
