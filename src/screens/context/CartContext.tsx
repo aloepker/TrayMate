@@ -4,7 +4,6 @@ import {
   replaceOrderApi,
   getOrderHistoryApi,
   type MealOrderResponse,
-  type MealOrderWithMeals,
 } from '../../services/api';
 
 // Meal type definition
@@ -141,24 +140,26 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       setCart([]);
       return { order: newOrder };
     } catch (err: any) {
-      // Check for 409 conflict
-      const msg = err?.message || '';
-      if (msg.includes('Conflict')) {
-        // Try to parse the conflict data from the error
-        try {
-          const conflictData = JSON.parse(msg);
-          if (conflictData?.data?.id) {
-            return { order: null, conflict: conflictData.data };
-          }
-        } catch {
-          // Error message wasn't JSON — check if the raw response had conflict info
+      if (err?.status === 409) {
+        const conflictData = err?.data?.data ?? err?.data;
+        if (conflictData?.id) {
+          return { order: null, conflict: conflictData };
         }
-        // Generic conflict — return a minimal conflict marker
-        return { order: null, conflict: { id: 0, date: today, mealOfDay: meal, userId: rid, status: 'pending', mealItemsIdNumbers: itemIds } };
+        return {
+          order: null,
+          conflict: {
+            id: 0,
+            date: today,
+            mealOfDay: meal,
+            userId: rid,
+            status: 'pending',
+            mealItemsIdNumbers: itemIds,
+          },
+        };
       }
 
       // Network error or other failure — fall back to local-only order
-      console.warn('Backend order failed, saving locally:', msg);
+      console.warn('Backend order failed, saving locally:', err?.message);
       const localOrder = buildLocalOrder(rid);
       setOrders((prev) => [localOrder, ...prev]);
       setCart([]);

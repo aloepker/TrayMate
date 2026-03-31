@@ -58,8 +58,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       data?.error ||
       (typeof data === "string" ? data : "") ||
       `Request failed (${res.status})`;
-
-    throw new Error(message);
+    const error = new Error(message) as Error & {
+      status?: number;
+      data?: any;
+    };
+    error.status = res.status;
+    error.data = data;
+    throw error;
   }
 
   return data as T;
