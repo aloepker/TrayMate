@@ -15,7 +15,6 @@ import { useSettings } from './context/SettingsContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
 
-<<<<<<< Updated upstream
 // ── Warm olive palette (matches browse meals, cart, settings) ─────────────────
 const COLORS = {
   primary:      '#717644',
@@ -27,17 +26,6 @@ const COLORS = {
   warmBorder:   '#DDD0B8',
   text:         '#1A1A1A',
   textMuted:    '#5C5C5C',
-=======
-const COLORS = {
-  primary: '#717644',
-  primaryLight: '#F4F3EE',
-  surface: '#FFFFFF',
-  background: '#FAF9F6',
-  border: '#E8E6E1',
-  text: '#1A1A1A',
-  textMuted: '#5C5C5C',
-  warmBorder: '#E8DCC8',
->>>>>>> Stashed changes
 };
 
 function UpcomingMealsScreen({ navigation, route }: any) {
@@ -55,15 +43,8 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   useEffect(() => {
-<<<<<<< Updated upstream
     if (residentId) fetchOrderHistory(residentId);
   }, [residentId]);
-=======
-    if (residentId) {
-      fetchOrderHistory(residentId);
-    }
-  }, [fetchOrderHistory, residentId]);
->>>>>>> Stashed changes
 
   const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
 
@@ -74,46 +55,29 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   > = {
     confirmed: {
       label: t.confirmed,
-<<<<<<< Updated upstream
       color: COLORS.primary,
       bg:    COLORS.primaryLight,
-=======
-      color: '#1d4ed8',
-      bg: '#dbeafe',
->>>>>>> Stashed changes
       featherIcon: 'check-circle',
       progress: 0.25,
     },
     preparing: {
       label: t.preparing,
       color: '#b45309',
-<<<<<<< Updated upstream
       bg:    '#fef3c7',
-=======
-      bg: '#fef3c7',
->>>>>>> Stashed changes
       featherIcon: 'clock',
       progress: 0.5,
     },
     ready: {
       label: t.ready,
       color: '#15803d',
-<<<<<<< Updated upstream
       bg:    '#dcfce7',
-=======
-      bg: '#dcfce7',
->>>>>>> Stashed changes
       featherIcon: 'check-circle',
       progress: 0.75,
     },
     completed: {
       label: t.completed,
       color: '#166534',
-<<<<<<< Updated upstream
       bg:    '#bbf7d0',
-=======
-      bg: '#bbf7d0',
->>>>>>> Stashed changes
       featherIcon: 'check-circle',
       progress: 1.0,
     },
@@ -139,13 +103,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
 
   const activeOrders    = residentOrders.filter((o) => o.status !== 'completed');
   const completedOrders = residentOrders.filter((o) => o.status === 'completed');
-  const backLabel = t.back?.replace(/^[\s\u2190\u21A9\u2B05]+/, '') || 'Back';
 
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
       <View style={styles.header}>
-<<<<<<< Updated upstream
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { minHeight: touchTarget }]}
@@ -157,24 +119,12 @@ function UpcomingMealsScreen({ navigation, route }: any) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.upcomingMeals}</Text>
-=======
-        <TouchableOpacity onPress={handleBack} style={[styles.backButton, { minHeight: touchTarget }]}>
-          <Feather name="chevron-left" size={22} color={COLORS.primary} />
-          <Text style={[styles.backText, { fontSize: scaled(16) }]}>{backLabel}</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { fontSize: scaled(24) }]}>{t.upcomingMeals}</Text>
->>>>>>> Stashed changes
         </View>
         <TouchableOpacity
           style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
           onPress={() => navigation.navigate('Settings')}
         >
-<<<<<<< Updated upstream
           <Feather name="settings" size={20} color={COLORS.primary} />
-=======
-          <Feather name="settings" size={22} color={COLORS.primary} />
->>>>>>> Stashed changes
         </TouchableOpacity>
       </View>
 
@@ -187,28 +137,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           /* ── Empty state ── */
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconWrap}>
-<<<<<<< Updated upstream
               <Feather name="calendar" size={44} color={COLORS.primary} />
             </View>
             <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
             <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.noUpcomingDesc}</Text>
-=======
-              <Feather name="calendar" size={48} color={COLORS.primary} />
-            </View>
-            <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
-            <Text style={[styles.emptyText, { fontSize: scaled(15), lineHeight: scaled(22) }]}>
-              {t.noUpcomingDesc}
-            </Text>
->>>>>>> Stashed changes
             <TouchableOpacity
               style={styles.browseButton}
               onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
             >
-<<<<<<< Updated upstream
               <Feather name="book-open" size={17} color="#FFF" />
-=======
-              <Feather name="book-open" size={18} color="#FFFFFF" />
->>>>>>> Stashed changes
               <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </View>
@@ -217,14 +154,10 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {/* Meal reminder banner */}
             {notifications.mealReminders && activeOrders.length > 0 && (
               <View style={styles.reminderBanner}>
-<<<<<<< Updated upstream
                 <Feather name="bell" size={14} color="#92400E" />
                 <Text style={[styles.reminderText, { fontSize: scaled(13) }]}>
                   {t.mealReminders}: {t.mealRemindersDesc}
                 </Text>
-=======
-                <Text style={[styles.reminderText, { fontSize: scaled(13) }]}>{t.mealReminders}: {t.mealRemindersDesc}</Text>
->>>>>>> Stashed changes
               </View>
             )}
 
@@ -270,26 +203,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                                     isCurrent && styles.progressDotCurrent,
                                   ]}
                                 >
-<<<<<<< Updated upstream
                                   {isActive && (
                                     <Feather name="check" size={9} color="#FFF" />
                                   )}
-=======
-                                  {isActive && <Feather name="check" size={11} color="#FFFFFF" />}
->>>>>>> Stashed changes
                                 </View>
                                 <Text
                                   style={[
                                     styles.progressStepLabel,
                                     { fontSize: scaled(10) },
-<<<<<<< Updated upstream
                                     isCurrent && { color: statusInfo.color, fontWeight: '700' },
-=======
-                                    isCurrent && styles.progressStepLabelCurrent,
-                                    isCurrent && {
-                                      color: statusInfo.color,
-                                    },
->>>>>>> Stashed changes
                                   ]}
                                 >
                                   {step}
@@ -306,31 +228,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <Text style={[styles.orderLabel, { fontSize: scaled(13) }]}>
                             {formatDate(order.placedAt)} · {formatTime(order.placedAt)}
                           </Text>
-<<<<<<< Updated upstream
                           <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
                             <Feather name={statusInfo.featherIcon} size={11} color={statusInfo.color} />
                             <Text style={[styles.statusText, { fontSize: scaled(12), color: statusInfo.color }]}>
-=======
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: statusInfo.bg },
-                            ]}
-                          >
-                            <Feather name={statusInfo.featherIcon} size={12} color={statusInfo.color} />
-                            <Text
-                              style={[
-                                styles.statusText,
-                                { fontSize: scaled(12) },
-                                { color: statusInfo.color },
-                              ]}
-                            >
->>>>>>> Stashed changes
                               {statusInfo.label}
                             </Text>
                           </View>
                         </View>
-<<<<<<< Updated upstream
                         <Feather
                           name={expanded ? 'chevron-down' : 'chevron-right'}
                           size={20}
@@ -346,19 +250,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <View key={`${item.id}-${idx}`} style={styles.mealRow}>
                             {img ? (
                               <Image source={img} style={styles.mealThumb} />
-=======
-                        <Feather name={expanded ? 'chevron-down' : 'chevron-right'} size={22} color={COLORS.textMuted} />
-                      </View>
-
-                      {/* Meal items list */}
-                      {order.items.map((item, idx) => {
-                        const mealImg = getMealImage(item.name);
-                        const ph = getMealPlaceholder(item.name);
-                        return (
-                          <View key={`${item.id}-${idx}`} style={styles.mealRow}>
-                            {mealImg ? (
-                              <Image source={mealImg} style={styles.mealThumb} />
->>>>>>> Stashed changes
                             ) : (
                               <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
                                 <Feather name="coffee" size={18} color={COLORS.primary} />
@@ -373,13 +264,9 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                               </Text>
                             </View>
                             <View style={styles.mealCalBadge}>
-<<<<<<< Updated upstream
                               <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>
                                 {item.kcal} kcal
                               </Text>
-=======
-                              <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>{item.kcal} kcal</Text>
->>>>>>> Stashed changes
                             </View>
                           </View>
                         );
@@ -421,20 +308,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                     <View style={styles.completedHeader}>
                       <View style={styles.completedBadge}>
                         <Feather name="check-circle" size={12} color="#166534" />
-<<<<<<< Updated upstream
                         <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>{t.completed}</Text>
-=======
-                        <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>
-                          {t.completed}
-                        </Text>
->>>>>>> Stashed changes
                       </View>
                       <Text style={[styles.completedTime, { fontSize: scaled(13) }]}>
                         {formatDate(order.placedAt)}
                       </Text>
                     </View>
                     {order.items.map((item, idx) => {
-<<<<<<< Updated upstream
                       const img = getMealImage(item.name);
                       return (
                         <View key={`${item.id}-${idx}`} style={styles.completedRow}>
@@ -442,19 +322,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             <Image source={img} style={styles.completedThumb} />
                           ) : (
                             <View style={styles.completedThumbPlaceholder}>
-=======
-                      const mealImg = getMealImage(item.name);
-                      const ph = getMealPlaceholder(item.name);
-                      return (
-                        <View
-                          key={`${item.id}-${idx}`}
-                          style={styles.completedRow}
-                        >
-                          {mealImg ? (
-                            <Image source={mealImg} style={styles.completedThumb} />
-                          ) : (
-                            <View style={[styles.completedThumbPlaceholder, { backgroundColor: ph.bg }]}>
->>>>>>> Stashed changes
                               <Feather name="coffee" size={14} color={COLORS.primary} />
                             </View>
                           )}
@@ -464,10 +331,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         </View>
                       );
                     })}
-<<<<<<< Updated upstream
-=======
-                    {/* Completion bar */}
->>>>>>> Stashed changes
                     <View style={styles.completionBar}>
                       <View style={styles.completionFill} />
                     </View>
@@ -485,11 +348,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
               activeOpacity={0.8}
             >
-<<<<<<< Updated upstream
               <Feather name="book-open" size={20} color="#FFF" />
-=======
-              <Feather name="book-open" size={18} color="#FFFFFF" />
->>>>>>> Stashed changes
               <Text style={[styles.browseMenuText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </>
@@ -511,14 +370,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< Updated upstream
     paddingHorizontal: 16,
     paddingTop: 8,
-=======
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
->>>>>>> Stashed changes
     paddingBottom: 14,
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
@@ -526,7 +379,6 @@ const styles = StyleSheet.create({
   },
   backButton: {
     flexDirection: 'row',
-<<<<<<< Updated upstream
     alignItems: 'center',
     gap: 4,
     paddingRight: 8,
@@ -564,34 +416,6 @@ const styles = StyleSheet.create({
   // Reminder banner
   reminderBanner: {
     flexDirection: 'row',
-=======
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingRight: 8,
-  },
-  backText: {
-    fontSize: 16,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
->>>>>>> Stashed changes
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#FEF3C7',
@@ -601,13 +425,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
-<<<<<<< Updated upstream
   reminderText: {
     color: '#92400E',
     fontWeight: '600',
-=======
-  scrollView: {
->>>>>>> Stashed changes
     flex: 1,
   },
 
@@ -620,16 +440,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 10,
     marginTop: 4,
-  },
-  reminderBanner: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  reminderText: {
-    color: '#92400E',
-    fontWeight: '600',
   },
 
   // Empty state
@@ -647,21 +457,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-<<<<<<< Updated upstream
-=======
-    paddingTop: 80,
-    paddingHorizontal: 40,
-  },
-  emptyIconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: COLORS.primaryLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
->>>>>>> Stashed changes
     marginBottom: 16,
   },
   emptyTitle: {
@@ -682,11 +477,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-<<<<<<< Updated upstream
     backgroundColor: COLORS.primary,
-=======
-    backgroundColor: '#717644',
->>>>>>> Stashed changes
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 14,
@@ -747,9 +538,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
-  progressStepLabelCurrent: {
-    fontWeight: '700',
-  },
 
   // Order meta row
   mealHeader: {
@@ -763,7 +551,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< Updated upstream
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
@@ -772,29 +559,6 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 12, fontWeight: '700' },
 
   // Meal rows
-=======
-    gap: 10,
-    flex: 1,
-  },
-  orderLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A8A8A',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  // Meal rows within an order
->>>>>>> Stashed changes
   mealRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -803,15 +567,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
-<<<<<<< Updated upstream
   mealThumb: { width: 56, height: 56, borderRadius: 14 },
-=======
-  mealThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-  },
->>>>>>> Stashed changes
   mealThumbPlaceholder: {
     width: 56,
     height: 56,
@@ -819,7 +575,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-<<<<<<< Updated upstream
   mealRowInfo: { flex: 1 },
   mealName: { fontSize: 16, fontWeight: '600', color: COLORS.text },
   mealPeriod: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
@@ -830,33 +585,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
-=======
-  mealRowInfo: {
-    flex: 1,
-  },
-  mealName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  mealPeriod: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  mealCal: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  mealCalBadge: {
-    backgroundColor: COLORS.primaryLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
->>>>>>> Stashed changes
   },
   mealCal: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
@@ -903,11 +631,7 @@ const styles = StyleSheet.create({
   completedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< Updated upstream
     gap: 5,
-=======
-    gap: 6,
->>>>>>> Stashed changes
     backgroundColor: '#bbf7d0',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -921,7 +645,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 5,
   },
-<<<<<<< Updated upstream
   completedThumb: { width: 38, height: 38, borderRadius: 10 },
   completedThumbPlaceholder: {
     width: 38,
@@ -930,24 +653,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-=======
-  completedThumb: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-  },
-  completedThumbPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  completedMealName: {
-    fontSize: 15,
-    color: COLORS.textMuted,
-    flex: 1,
->>>>>>> Stashed changes
   },
   completedMealName: { fontSize: 15, color: COLORS.textMuted, flex: 1 },
   completionBar: {
@@ -982,15 +687,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-<<<<<<< Updated upstream
   browseMenuText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
-=======
-  browseMenuText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
->>>>>>> Stashed changes
 });
 
 export default UpcomingMealsScreen;
