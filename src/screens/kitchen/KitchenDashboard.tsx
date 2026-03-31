@@ -21,11 +21,12 @@ import { getMealImage, getMealPlaceholder } from "../../services/mealDisplayServ
 // ─── Palette (matches app-wide theme) ─────────────────────────────────────────
 const C = {
   primary:      "#717644",
-  primaryLight: "#F4F3EE",
-  background:   "#FAF9F6",
-  surface:      "#FFFFFF",
-  border:       "#E8E6E1",
-  warmBorder:   "#E8DCC8",
+  primaryLight: "#F0EFE6",
+  background:   "#F5F3EE",   // warm parchment — page bg
+  surface:      "#FDFCF9",   // slightly off-white — cards & sheets
+  inputBg:      "#EFEDE7",   // deeper warm — input fields & dropdowns
+  border:       "#E2DFD8",
+  warmBorder:   "#DDD0B8",
   text:         "#1A1A1A",
   textMuted:    "#5C5C5C",
   accent:       "#f6a72d",
@@ -959,7 +960,7 @@ const modal = StyleSheet.create({
     marginTop: 14,
   },
   input: {
-    backgroundColor: C.background,
+    backgroundColor: C.inputBg,
     borderWidth: 1,
     borderColor: C.border,
     borderRadius: 12,
@@ -972,7 +973,7 @@ const modal = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: C.background,
+    backgroundColor: C.inputBg,
     borderWidth: 1,
     borderColor: C.border,
     borderRadius: 12,
@@ -992,7 +993,7 @@ const modal = StyleSheet.create({
     justifyContent: "center",
   },
   dropdownList: {
-    backgroundColor: C.surface,
+    backgroundColor: C.inputBg,
     borderWidth: 1,
     borderColor: C.border,
     borderRadius: 14,
@@ -1005,6 +1006,7 @@ const modal = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
+    backgroundColor: C.inputBg,
   },
   dropdownItemActive: {
     backgroundColor: C.primaryLight,
