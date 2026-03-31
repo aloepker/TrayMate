@@ -37,7 +37,7 @@ const C = {
   warningBg:    "#fef3c7",
 };
 
-type MealPeriod = "Breakfast" | "Lunch" | "Dinner";
+type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
 type Status = "pending" | "preparing" | "ready";
 
 interface ApiOrder {
@@ -56,6 +56,20 @@ interface ApiOrder {
   }>;
 }
 
+// ─── Period option config ──────────────────────────────────────────────────────
+const PERIOD_OPTIONS: {
+  value: MealPeriod;
+  label: string;
+  icon: "sun" | "coffee" | "moon" | "layers" | "droplet";
+  color: string;
+}[] = [
+  { value: "Breakfast", label: "Breakfast", icon: "sun",      color: "#b45309" },
+  { value: "Lunch",     label: "Lunch",     icon: "coffee",   color: "#1d4ed8" },
+  { value: "Dinner",    label: "Dinner",    icon: "moon",     color: "#7c3aed" },
+  { value: "Sides",     label: "Side Dish", icon: "layers",   color: "#15803d" },
+  { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
+];
+
 // ─── Seasonal Meal Modal ───────────────────────────────────────────────────────
 interface SeasonalModalProps {
   visible: boolean;
@@ -68,73 +82,109 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
   const [description, setDescription] = useState("");
   const [period, setPeriod] = useState<MealPeriod>("Breakfast");
   const [tag, setTag] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const handleAdd = () => {
     if (!name.trim()) { Alert.alert("Required", "Please enter a meal name."); return; }
     onAdd({ name: name.trim(), description: description.trim(), period, tag: tag.trim() });
-    setName(""); setDescription(""); setPeriod("Breakfast"); setTag("");
+    setName(""); setDescription(""); setPeriod("Breakfast"); setTag(""); setDropdownOpen(false);
     onClose();
   };
+
+  const selected = PERIOD_OPTIONS.find((o) => o.value === period)!;
 
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={modal.overlay}>
-        <View style={modal.sheet}>
-          <View style={modal.header}>
-            <Text style={modal.title}>Add Seasonal Meal</Text>
-            <TouchableOpacity onPress={onClose} style={modal.closeBtn}>
-              <Feather name="x" size={22} color={C.textMuted} />
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled">
+          <View style={modal.sheet}>
+            <View style={modal.header}>
+              <Text style={modal.title}>Add Seasonal Item</Text>
+              <TouchableOpacity onPress={onClose} style={modal.closeBtn}>
+                <Feather name="x" size={22} color={C.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={modal.label}>Name *</Text>
+            <TextInput
+              style={modal.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Spring Berry Parfait"
+              placeholderTextColor="#ABABAB"
+            />
+
+            <Text style={modal.label}>Description</Text>
+            <TextInput
+              style={[modal.input, { height: 72, textAlignVertical: "top" }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Short description of the seasonal item"
+              placeholderTextColor="#ABABAB"
+              multiline
+            />
+
+            {/* ── Category dropdown ── */}
+            <Text style={modal.label}>Category</Text>
+            <TouchableOpacity
+              style={modal.dropdown}
+              onPress={() => setDropdownOpen((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={[modal.dropdownDot, { backgroundColor: selected.color + "22" }]}>
+                  <Feather name={selected.icon} size={15} color={selected.color} />
+                </View>
+                <Text style={modal.dropdownValue}>{selected.label}</Text>
+              </View>
+              <Feather
+                name={dropdownOpen ? "chevron-up" : "chevron-down"}
+                size={18}
+                color={C.textMuted}
+              />
+            </TouchableOpacity>
+
+            {dropdownOpen && (
+              <View style={modal.dropdownList}>
+                {PERIOD_OPTIONS.map((opt, idx) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      modal.dropdownItem,
+                      period === opt.value && modal.dropdownItemActive,
+                      idx < PERIOD_OPTIONS.length - 1 && modal.dropdownItemBorder,
+                    ]}
+                    onPress={() => { setPeriod(opt.value); setDropdownOpen(false); }}
+                  >
+                    <View style={[modal.dropdownDot, { backgroundColor: opt.color + "22" }]}>
+                      <Feather name={opt.icon} size={15} color={opt.color} />
+                    </View>
+                    <Text style={[modal.dropdownItemText, period === opt.value && { color: C.primary, fontWeight: "700" }]}>
+                      {opt.label}
+                    </Text>
+                    {period === opt.value && (
+                      <Feather name="check" size={16} color={C.primary} style={{ marginLeft: "auto" }} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={modal.label}>Tag (optional)</Text>
+            <TextInput
+              style={modal.input}
+              value={tag}
+              onChangeText={setTag}
+              placeholder="e.g. Spring Special, Limited Time"
+              placeholderTextColor="#ABABAB"
+            />
+
+            <TouchableOpacity style={modal.addBtn} onPress={handleAdd}>
+              <Feather name="plus-circle" size={18} color="#FFF" />
+              <Text style={modal.addBtnText}>Add Seasonal Item</Text>
             </TouchableOpacity>
           </View>
-
-          <Text style={modal.label}>Meal Name *</Text>
-          <TextInput
-            style={modal.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Spring Berry Parfait"
-            placeholderTextColor="#ABABAB"
-          />
-
-          <Text style={modal.label}>Description</Text>
-          <TextInput
-            style={[modal.input, { height: 72, textAlignVertical: "top" }]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Short description of the seasonal dish"
-            placeholderTextColor="#ABABAB"
-            multiline
-          />
-
-          <Text style={modal.label}>Meal Period</Text>
-          <View style={modal.periodRow}>
-            {(["Breakfast", "Lunch", "Dinner"] as MealPeriod[]).map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[modal.periodBtn, period === p && modal.periodBtnActive]}
-                onPress={() => setPeriod(p)}
-              >
-                <Text style={[modal.periodBtnText, period === p && modal.periodBtnTextActive]}>
-                  {p}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={modal.label}>Seasonal Tag (optional)</Text>
-          <TextInput
-            style={modal.input}
-            value={tag}
-            onChangeText={setTag}
-            placeholder="e.g. Spring Special, Limited Time"
-            placeholderTextColor="#ABABAB"
-          />
-
-          <TouchableOpacity style={modal.addBtn} onPress={handleAdd}>
-            <Feather name="plus-circle" size={18} color="#FFF" />
-            <Text style={modal.addBtnText}>Add Seasonal Meal</Text>
-          </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -918,30 +968,55 @@ const modal = StyleSheet.create({
     fontSize: 15,
     color: C.text,
   },
-  periodRow: {
+  dropdown: {
     flexDirection: "row",
-    gap: 8,
-  },
-  periodBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
     alignItems: "center",
-    backgroundColor: C.primaryLight,
+    justifyContent: "space-between",
+    backgroundColor: C.background,
     borderWidth: 1,
     borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  periodBtnActive: {
-    backgroundColor: C.primary,
-    borderColor: C.primary,
+  dropdownValue: {
+    fontSize: 15,
+    color: C.text,
+    fontWeight: "500",
   },
-  periodBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
+  dropdownDot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownList: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    marginTop: 4,
+    overflow: "hidden",
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  dropdownItemActive: {
+    backgroundColor: C.primaryLight,
+  },
+  dropdownItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  dropdownItemText: {
+    fontSize: 14,
     color: C.textMuted,
-  },
-  periodBtnTextActive: {
-    color: "#FFF",
+    fontWeight: "500",
   },
   addBtn: {
     flexDirection: "row",
