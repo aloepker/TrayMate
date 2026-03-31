@@ -16,8 +16,6 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import Feather from "react-native-vector-icons/Feather";
-import { useKitchenMessages } from "../context/KitchenMessageContext";
-
 /**
  * FILE PATHS
  */
@@ -49,19 +47,11 @@ interface AdminDashboardProps {
 type DeleteKind = "resident" | "caregiver" | "kitchen";
 
 export default function AdminDashboard({ navigation }: AdminDashboardProps) {
-  const { messages, unreadCount, sendMessage, markAllRead } = useKitchenMessages();
-
   // ---- Core Data State ----
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // ---- Kitchen Messaging ----
-  const [showComposeModal, setShowComposeModal] = useState(false);
-  const [composeResident, setComposeResident] = useState<Resident | null>(null);
-  const [messageText, setMessageText] = useState('');
-  const [showInboxModal, setShowInboxModal] = useState(false);
 
   // ---- Add Caregiver Modal State ----
   const [showAddCaregiver, setShowAddCaregiver] = useState(false);
@@ -327,28 +317,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
   };
 
-  const openCompose = (resident: Resident) => {
-    setComposeResident(resident);
-    setMessageText('');
-    setShowComposeModal(true);
-  };
-
-  const handleSendKitchenMessage = () => {
-    if (!composeResident || !messageText.trim()) return;
-    sendMessage({
-      residentId: composeResident.id,
-      residentName: composeResident.name,
-      residentRoom: composeResident.room ?? '--',
-      fromRole: 'admin',
-      fromName: 'Admin',
-      text: messageText.trim(),
-    });
-    setShowComposeModal(false);
-    setMessageText('');
-    setComposeResident(null);
-    Alert.alert('Sent', 'Message sent to the kitchen.');
-  };
-
   return (
     <SafeAreaView style={styles.page}>
       <StatusBar barStyle="dark-content" />
@@ -367,18 +335,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
         <View style={styles.topBarRight}>
-          <Pressable
-            style={styles.bellBtn}
-            onPress={() => { setShowInboxModal(true); markAllRead(); }}
-            hitSlop={8}
-          >
-            <Feather name="bell" size={22} color="#3C3C3C" />
-            {unreadCount > 0 && (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
-          </Pressable>
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -527,13 +483,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     <Text style={styles.cartBtnText}>Select Resident</Text>
                   </Pressable>
 
-                  <Pressable
-                    style={styles.msgKitchenBtn}
-                    onPress={() => openCompose(r)}
-                    hitSlop={10}
-                  >
-                    <Text style={styles.msgKitchenText}>📩 Kitchen</Text>
-                  </Pressable>
                 </View>
               </View>
             ))}
@@ -736,70 +685,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         </View>
       </Modal>
 
-      {/* Compose Kitchen Message Modal (Admin) */}
-      <Modal visible={showComposeModal} transparent animationType="slide" onRequestClose={() => setShowComposeModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }} />
-        <View style={styles.composeSheet}>
-          <Text style={styles.modalTitle}>Message Kitchen</Text>
-          {composeResident && (
-            <Text style={styles.composeResident}>For: {composeResident.name} — Room {composeResident.room || '--'}</Text>
-          )}
-          <TextInput
-            style={styles.composeInput}
-            placeholder="Type your message for the kitchen…"
-            placeholderTextColor="#9CA3AF"
-            value={messageText}
-            onChangeText={setMessageText}
-            multiline
-            maxLength={300}
-            autoFocus
-          />
-          <Pressable
-            style={styles.modalPrimaryBtn}
-            onPress={handleSendKitchenMessage}
-          >
-            <Text style={styles.modalPrimaryText}>Send to Kitchen</Text>
-          </Pressable>
-          <Pressable onPress={() => setShowComposeModal(false)}>
-            <Text style={styles.modalCancel}>Cancel</Text>
-          </Pressable>
-        </View>
-      </Modal>
-
-      {/* Inbox Modal */}
-      <Modal visible={showInboxModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.inboxCard}>
-            <View style={styles.inboxHeader}>
-              <Text style={styles.modalTitle}>Kitchen Messages</Text>
-              <Pressable onPress={() => setShowInboxModal(false)} hitSlop={8}>
-                <Feather name="x" size={22} color="#111827" />
-              </Pressable>
-            </View>
-            <ScrollView style={{ maxHeight: 380 }}>
-              {messages.length === 0 ? (
-                <Text style={styles.inboxEmpty}>No messages sent yet.</Text>
-              ) : (
-                messages.map(m => (
-                  <View key={m.id} style={styles.inboxItem}>
-                    <View style={styles.inboxItemHeader}>
-                      <Text style={styles.inboxResident}>{m.residentName} · Room {m.residentRoom}</Text>
-                      <Text style={styles.inboxTime}>
-                        {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                    <Text style={styles.inboxMessage}>{m.text}</Text>
-                    <Text style={styles.inboxFrom}>From: {m.fromRole === 'admin' ? 'Admin' : 'Caregiver'}</Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-            <Pressable onPress={() => setShowInboxModal(false)}>
-              <Text style={[styles.modalCancel, { marginTop: 12 }]}>Close</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

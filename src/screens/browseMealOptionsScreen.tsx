@@ -220,7 +220,8 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "lunch", value: "Lunch" },
   { key: "dinner", value: "Dinner" },
   { key: "beverages", value: "Drinks" },
-  { key: "sides", value: "Sides" },
+  { key: "desserts", value: "Sides" },
+  { key: "seasonal", value: null },
 ];
 
 // ---------- AI Chat Component ----------
@@ -676,13 +677,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   // Fetch meals from API (async)
-  const loadMenu = useCallback(async (period: PeriodOption["value"]) => {
+  const loadMenu = useCallback(async (period: PeriodOption["value"], periodKey?: string) => {
     setMenuLoading(true);
     setError("");
 
     try {
-      // Pull from API-backed localDataService (async)
-      let serviceMeals = await MealService.getMealsByPeriod(period);
+      // Seasonal tab: fetch all meals then filter to seasonal only
+      let serviceMeals = periodKey === 'seasonal'
+        ? await MealService.getSeasonalMeals()
+        : await MealService.getMealsByPeriod(period);
 
       // Filter out meals that are unsafe for this resident's dietary restrictions
       const resId = residentId || ResidentService.getDefaultResident().id;
@@ -729,17 +732,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Load menu and recommendation when component mounts or period changes
   useEffect(() => {
-    loadMenu(selectedPeriod.value);
+    loadMenu(selectedPeriod.value, selectedPeriod.key);
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadMenu(selectedPeriod.value);
+    await loadMenu(selectedPeriod.value, selectedPeriod.key);
     await loadRecommendation();
     setRefreshing(false);
-  }, [selectedPeriod.value, loadMenu, loadRecommendation]);
+  }, [selectedPeriod.value, selectedPeriod.key, loadMenu, loadRecommendation]);
 
   // Open meal detail modal
   const openMealDetail = (meal: Meal) => {
@@ -783,7 +786,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           {mealImg ? (
             <Image source={{ uri: item.imageUrl }} style={styles.mealRealImage} resizeMode="cover" />
           ) : (
-          <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+            <Image source={require('../styles/pictures/grandma.png')} style={{ width: 60, height: 60, opacity: 0.3 }} resizeMode="contain" />
           )}
           <View style={styles.mealImageOverlay}>
             <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
@@ -941,11 +944,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       ) : (
         <FlatList
-          key={`meal-list-cols-1`}
+          key={`meal-list-cols-2`}
           data={meals}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMeal}
-          numColumns={1}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
@@ -998,7 +1002,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     {mealImg ? (
                       <Image source={{ uri: selectedMeal.imageUrl }} style={styles.detailRealImage} resizeMode="cover" />
                     ) : (
-                      <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
+                      <Image source={require('../styles/pictures/grandma.png')} style={{ width: 80, height: 80, opacity: 0.3 }} resizeMode="contain" />
                     )}
                   </View>
                   {/* Info */}
@@ -1031,7 +1035,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                           {availableDrinks.length > 0 && (
                             <View style={styles.addonCol}>
                               <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
-                                Add a drink? 🥤
+                                Add a drink?
                               </Text>
                               <View style={styles.drinkPickerWrap}>
                                 <Picker
@@ -1053,7 +1057,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                     return (
                                       <Picker.Item
                                         key={drink.id}
-                                        label={`${ph.emoji}  ${drink.name}  ·  ${drink.kcal} kcal`}
+                                        label={`${drink.name}  ·  ${drink.kcal} kcal`}
                                         value={drink.id}
                                       />
                                     );
@@ -1062,9 +1066,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                               </View>
                               {selectedDrink && (
                                 <View style={styles.drinkSelectedRow}>
-                                  <Text style={styles.drinkSelectedEmoji}>
-                                    {getMealPlaceholder(selectedDrink.name).emoji}
-                                  </Text>
                                   <View style={{ flex: 1 }}>
                                     <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
                                       {selectedDrink.name}
@@ -1082,7 +1083,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                           {availableSides.length > 0 && (
                             <View style={styles.addonCol}>
                               <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
-                                Add a side? 🍨
+                                Add a side?
                               </Text>
                               <View style={styles.drinkPickerWrap}>
                                 <Picker
@@ -1104,7 +1105,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                     return (
                                       <Picker.Item
                                         key={side.id}
-                                        label={`${ph.emoji}  ${side.name}  ·  ${side.kcal} kcal`}
+                                        label={`${side.name}  ·  ${side.kcal} kcal`}
                                         value={side.id}
                                       />
                                     );
@@ -1113,9 +1114,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                               </View>
                               {selectedSide && (
                                 <View style={styles.drinkSelectedRow}>
-                                  <Text style={styles.drinkSelectedEmoji}>
-                                    {getMealPlaceholder(selectedSide.name).emoji}
-                                  </Text>
                                   <View style={{ flex: 1 }}>
                                     <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
                                       {selectedSide.name}
@@ -1319,11 +1317,16 @@ const styles = StyleSheet.create({
     paddingBottom: 160,
     paddingHorizontal: 16,
   },
+  gridRow: {
+    justifyContent: 'space-between',
+  },
   card: {
     flex: 1,
+    maxWidth: '48.5%',
     backgroundColor: COLORS.white,
     borderRadius: 18,
     marginTop: 14,
+    marginHorizontal: 4,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 10,
@@ -1352,15 +1355,15 @@ const styles = StyleSheet.create({
   },
   mealImageOverlay: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.38)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    top: 10,
+    right: 10,
+    backgroundColor: '#D27028',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
   },
   mealImageLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
   },

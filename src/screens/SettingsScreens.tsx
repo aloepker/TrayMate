@@ -23,11 +23,10 @@ const LANGUAGES: { code: string; name: Language }[] = [
   { code: 'zh', name: '中文' },
 ];
 
-const TEXT_SIZES: { key: TextSize; labelKey: 'small' | 'medium' | 'large' | 'extraLarge'; preview: number }[] = [
-  { key: 'small', labelKey: 'small', preview: 13 },
-  { key: 'medium', labelKey: 'medium', preview: 16 },
+const TEXT_SIZES: { key: TextSize; labelKey: 'large' | 'extraLarge' | 'xxlarge'; preview: number }[] = [
   { key: 'large', labelKey: 'large', preview: 20 },
   { key: 'xlarge', labelKey: 'extraLarge', preview: 24 },
+  { key: 'xxlarge', labelKey: 'xxlarge', preview: 28 },
 ];
 
 function SettingsScreen({ navigation, route }: any) {
