@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { translateMealName } from '../services/mealLocalization';
@@ -175,7 +176,7 @@ const HomeScreen = ({ navigation, route }: any) => {
             accessibilityRole="button"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#F6C94E' }]}>
-              <Text style={styles.actionEmoji}>🍽</Text>
+              <Feather name="book-open" size={24} color="#FFFFFF" />
             </View>
             <View style={styles.actionTextBlock}>
               <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.browseMenu}</Text>
@@ -191,7 +192,7 @@ const HomeScreen = ({ navigation, route }: any) => {
             accessibilityRole="button"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#5AAAEC' }]}>
-              <Text style={styles.actionEmoji}>📋</Text>
+              <Feather name="calendar" size={24} color="#FFFFFF" />
             </View>
             <View style={styles.actionTextBlock}>
               <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.upcomingMeals}</Text>
@@ -209,7 +210,7 @@ const HomeScreen = ({ navigation, route }: any) => {
             accessibilityRole="button"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#A47DE8' }]}>
-              <Text style={styles.actionEmoji}>👵</Text>
+              <Feather name="message-circle" size={24} color="#FFFFFF" />
             </View>
             <View style={styles.actionTextBlock}>
               <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.grannyGBT}</Text>
@@ -225,7 +226,7 @@ const HomeScreen = ({ navigation, route }: any) => {
             accessibilityRole="button"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#4CAF7D' }]}>
-              <Text style={styles.actionEmoji}>🛒</Text>
+              <Feather name="shopping-cart" size={24} color="#FFFFFF" />
             </View>
             <View style={styles.actionTextBlock}>
               <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.myCart}</Text>

@@ -15,9 +15,9 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Alert,
 } from "react-native";
 import { StatusBar } from "react-native";
+import Feather from "react-native-vector-icons/Feather";
 import { useCart } from "./context/CartContext";
 import { useSettings } from './context/SettingsContext';
 
@@ -25,9 +25,7 @@ import { useSettings } from './context/SettingsContext';
 import {
   COLORS,
   DisplayMeal,
-  MEAL_PLACEHOLDER_COLORS,
   getMealPlaceholder,
-  MEAL_IMAGES,
   getMealImage,
   mapServiceMeal,
 } from '../services/mealDisplayService';
@@ -631,11 +629,11 @@ const AIAssistantChat = ({
 
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
-  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
-  const [rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
+  const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
@@ -864,14 +862,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           <Text style={[styles.title, { fontSize: scaled(32) }]}>{t.availableMenus}</Text>
           <Text style={[styles.subtitle, { fontSize: scaled(17) }]}>{t.orderingFor} {residentName}</Text>
         </View>
-        <TouchableOpacity
-          onPress={goToSettings}
-          style={styles.settingsButton}
-          accessibilityLabel="Settings"
-          accessibilityRole="button"
-        >
-          <Text style={[styles.settingsButtonText, { color: theme.accent }]}>⚙️</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Period Tabs */}
@@ -961,19 +951,37 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         />
       )}
 
-      <View style={styles.floatingActions}>
-        <TouchableOpacity
-          style={[styles.floatingGrannyButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-          onPress={() => setShowAIChat(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.floatingGrannyEmoji}>👵</Text>
-        </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.floatingGrannyButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+        onPress={() => setShowAIChat(true)}
+        activeOpacity={0.85}
+      >
+        <Image source={require('../styles/pictures/grandma.png')} style={styles.floatingGrannyImage} resizeMode="contain" />
+      </TouchableOpacity>
+
+      <View style={styles.floatingTopActions}>
         {getCartCount() > 0 && (
-          <TouchableOpacity style={styles.floatingCartButton} onPress={goToCart} activeOpacity={0.85}>
-            <Text style={[styles.floatingCartText, { fontSize: scaled(16) }]}>🛒 {getCartCount()}</Text>
+          <TouchableOpacity
+            style={[styles.floatingCartButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+            onPress={goToCart}
+            accessibilityLabel="Cart"
+            activeOpacity={0.85}
+          >
+            <Feather name="shopping-cart" size={20} color="#FFFFFF" />
+            <View style={styles.headerCartBadge}>
+              <Text style={styles.headerCartBadgeText}>{getCartCount()}</Text>
+            </View>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          onPress={goToSettings}
+          style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+          accessibilityLabel="Settings"
+          accessibilityRole="button"
+          activeOpacity={0.85}
+        >
+          <Feather name="settings" size={22} color={theme.accent} />
+        </TouchableOpacity>
       </View>
 
       {/* Meal Detail Modal */}
@@ -983,9 +991,26 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         animationType="slide"
         onRequestClose={() => setShowMealDetail(false)}
       >
-        <TouchableOpacity style={styles.detailBackdrop} activeOpacity={1} onPress={() => setShowMealDetail(false)} />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.detailSheet}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.detailModalRoot}>
+          <TouchableOpacity style={styles.detailBackdrop} activeOpacity={1} onPress={() => setShowMealDetail(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.detailSheetWrap}>
+            <View style={styles.detailSheet}>
+              <View style={styles.detailSheetHandle} />
+              <View style={styles.detailSheetHeader}>
+                <Text style={styles.detailSheetLabel}>Customize order</Text>
+                <TouchableOpacity
+                  style={styles.detailCloseButton}
+                  onPress={() => setShowMealDetail(false)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="x" size={20} color={COLORS.textMid} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.detailScrollContent}
+              >
             {selectedMeal && (() => {
               const ph = getMealPlaceholder(selectedMeal.name);
               //const mealImg = getMealImage(selectedMeal.name);
@@ -1052,16 +1077,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   itemStyle={styles.drinkPickerItem}
                                 >
                                   <Picker.Item label="— No drink —" value="__none__" />
-                                  {availableDrinks.map(drink => {
-                                    const ph = getMealPlaceholder(drink.name);
-                                    return (
-                                      <Picker.Item
-                                        key={drink.id}
-                                        label={`${drink.name}  ·  ${drink.kcal} kcal`}
-                                        value={drink.id}
-                                      />
-                                    );
-                                  })}
+                                  {availableDrinks.map(drink => (
+                                    <Picker.Item
+                                      key={drink.id}
+                                      label={`${drink.name}  ·  ${drink.kcal} kcal`}
+                                      value={drink.id}
+                                    />
+                                  ))}
                                 </Picker>
                               </View>
                               {selectedDrink && (
@@ -1100,16 +1122,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   itemStyle={styles.drinkPickerItem}
                                 >
                                   <Picker.Item label="— No side —" value="__none__" />
-                                  {availableSides.map(side => {
-                                    const ph = getMealPlaceholder(side.name);
-                                    return (
-                                      <Picker.Item
-                                        key={side.id}
-                                        label={`${side.name}  ·  ${side.kcal} kcal`}
-                                        value={side.id}
-                                      />
-                                    );
-                                  })}
+                                  {availableSides.map(side => (
+                                    <Picker.Item
+                                      key={side.id}
+                                      label={`${side.name}  ·  ${side.kcal} kcal`}
+                                      value={side.id}
+                                    />
+                                  ))}
                                 </Picker>
                               </View>
                               {selectedSide && (
@@ -1129,21 +1148,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                         </View>
                       </>
                     )}
-
-                    {/* Add to Cart Button */}
-                    <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
-                      <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
-                        {selectedDrink || selectedSide
-                          ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
-                          : 'Add to Cart'}
-                      </Text>
-                    </TouchableOpacity>
                   </View>
                 </>
               );
             })()}
-          </ScrollView>
-        </KeyboardAvoidingView>
+              </ScrollView>
+              <View style={styles.detailFooter}>
+                <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
+                  <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
+                    {selectedDrink || selectedSide
+                      ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
+                      : 'Add to Cart'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* AI Assistant Chat Modal */}
@@ -1225,6 +1246,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flex: 1,
+    paddingRight: 72,
   },
   title: {
     fontSize: 32,
@@ -1237,52 +1259,93 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 22,
   },
-  floatingActions: {
-    position: 'absolute',
-    right: 16,
-    bottom: 22,
-    zIndex: 10,
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    alignItems: 'flex-end',
   },
-  floatingGrannyButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  headerCartButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 7,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
-  floatingGrannyEmoji: {
-    fontSize: 25,
-  },
-  floatingCartButton: {
-    backgroundColor: COLORS.secondary,
-    borderRadius: 18,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    minWidth: 84,
+  headerCartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  floatingCartText: {
-    fontSize: 16,
+  headerCartBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  floatingGrannyButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 22,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  floatingGrannyImage: {
+    width: 38,
+    height: 38,
+  },
+  floatingTopActions: {
+    position: 'absolute',
+    top: 18,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    zIndex: 12,
+  },
+  floatingCartButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  floatingSettingsButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   tabs: {
     flexDirection: 'row',
@@ -1503,16 +1566,68 @@ const styles = StyleSheet.create({
   },
   // Meal Detail Modal
   detailBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  detailModalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    justifyContent: 'flex-end',
+  },
+  detailSheetWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    position: 'relative',
   },
   detailSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '85%',
+    height: '82%',
     width: '100%',
     overflow: 'hidden',
+    marginBottom: 0,
+    paddingBottom: 0,
+  },
+  detailSheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  detailSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailSheetLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMid,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  detailCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailScrollContent: {
+    paddingBottom: 20,
   },
   detailImageWrap: {
     height: 220,
@@ -1621,13 +1736,19 @@ const styles = StyleSheet.create({
   addonCol: {
     flex: 1,
   },
+  detailFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: COLORS.white,
+  },
   detailAddBtn: {
     backgroundColor: COLORS.secondary,
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 8,
     shadowColor: COLORS.secondary,
     shadowOpacity: 0.3,
     shadowRadius: 8,
