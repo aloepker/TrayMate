@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
-  FlatList,
   Alert,
   Image,
 } from "react-native";
@@ -17,14 +16,16 @@ import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealImage, getMealPlaceholder } from "../../services/mealDisplayService";
+import { clearAuth, getAuthToken } from "../../services/storage";
+import { getResidents, Resident as ApiResident } from "../../services/api";
 
-// ─── Palette (matches app-wide theme) ─────────────────────────────────────────
+// ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
   primary:      "#717644",
   primaryLight: "#F0EFE6",
-  background:   "#F5F3EE",   // warm parchment — page bg
-  surface:      "#FDFCF9",   // slightly off-white — cards & sheets
-  inputBg:      "#EFEDE7",   // deeper warm — input fields & dropdowns
+  background:   "#F5F3EE",
+  surface:      "#FDFCF9",
+  inputBg:      "#EFEDE7",
   border:       "#E2DFD8",
   warmBorder:   "#DDD0B8",
   text:         "#1A1A1A",
@@ -57,7 +58,7 @@ interface ApiOrder {
   }>;
 }
 
-// ─── Period option config ──────────────────────────────────────────────────────
+// ─── Period options ────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS: {
   value: MealPeriod;
   label: string;
@@ -70,6 +71,19 @@ const PERIOD_OPTIONS: {
   { value: "Sides",     label: "Side Dish", icon: "layers",   color: "#15803d" },
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
 ];
+
+// (Resident lookup now done inside the component via findResident() using live backend data)
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const formatTime = (date: Date) => {
+  const d = new Date(date);
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - d.getTime()) / 60000);
+  if (diff < 1) return "Just now";
+  if (diff < 60) return `${diff}m ago`;
+  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+};
 
 // ─── Seasonal Meal Modal ───────────────────────────────────────────────────────
 interface SeasonalModalProps {
@@ -97,7 +111,10 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={modal.overlay}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={modal.sheet}>
             <View style={modal.header}>
               <Text style={modal.title}>Add Seasonal Item</Text>
@@ -125,7 +142,6 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
               multiline
             />
 
-            {/* ── Category dropdown ── */}
             <Text style={modal.label}>Category</Text>
             <TouchableOpacity
               style={modal.dropdown}
@@ -160,7 +176,12 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
                     <View style={[modal.dropdownDot, { backgroundColor: opt.color + "22" }]}>
                       <Feather name={opt.icon} size={15} color={opt.color} />
                     </View>
-                    <Text style={[modal.dropdownItemText, period === opt.value && { color: C.primary, fontWeight: "700" }]}>
+                    <Text
+                      style={[
+                        modal.dropdownItemText,
+                        period === opt.value && { color: C.primary, fontWeight: "700" },
+                      ]}
+                    >
                       {opt.label}
                     </Text>
                     {period === opt.value && (
@@ -191,7 +212,94 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
   );
 };
 
-// ─── Message Panel ─────────────────────────────────────────────────────────────
+// ─── Compose Message Modal ─────────────────────────────────────────────────────
+interface ComposeModalProps {
+  visible: boolean;
+  resident: { id: string; name: string; room: string; restrictions: string[] } | null;
+  onClose: () => void;
+  onSend: (text: string) => void;
+}
+
+const ComposeMessageModal: React.FC<ComposeModalProps> = ({
+  visible, resident, onClose, onSend,
+}) => {
+  const [text, setText] = useState("");
+
+  const handleSend = () => {
+    if (!text.trim()) { Alert.alert("Required", "Please type a message first."); return; }
+    onSend(text.trim());
+    setText("");
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={modal.overlay}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={modal.sheet}>
+            {/* Header */}
+            <View style={modal.header}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={modal.title}>Message Resident</Text>
+                {resident ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={compose.roomPill}>
+                      <Feather name="home" size={11} color={C.primary} />
+                      <Text style={compose.roomPillText}>{resident.room ? `Room ${resident.room}` : "No room"}</Text>
+                    </View>
+                    <Text style={compose.recipientName}>{resident.name}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <TouchableOpacity onPress={onClose} style={modal.closeBtn}>
+                <Feather name="x" size={22} color={C.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Dietary summary for context */}
+            {resident && resident.restrictions.length > 0 && (
+              <View style={compose.restrictionSummary}>
+                <Feather name="info" size={13} color={C.warning} />
+                <Text style={compose.restrictionSummaryText}>
+                  Resident notes: {resident.restrictions.join(", ")}
+                </Text>
+              </View>
+            )}
+
+            <Text style={modal.label}>Message</Text>
+            <TextInput
+              style={[modal.input, { height: 100, textAlignVertical: "top" }]}
+              value={text}
+              onChangeText={setText}
+              placeholder="Type your message to the resident or caregiver..."
+              placeholderTextColor="#ABABAB"
+              multiline
+              autoFocus
+            />
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 18 }}>
+              <TouchableOpacity
+                style={[modal.addBtn, { flex: 1, backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border }]}
+                onPress={onClose}
+              >
+                <Text style={[modal.addBtnText, { color: C.textMuted }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[modal.addBtn, { flex: 2 }]} onPress={handleSend}>
+                <Feather name="send" size={16} color="#FFF" />
+                <Text style={modal.addBtnText}>Send Message</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+// ─── Inbox Panel Modal ─────────────────────────────────────────────────────────
 interface MessagePanelProps {
   visible: boolean;
   onClose: () => void;
@@ -200,16 +308,6 @@ interface MessagePanelProps {
   markAllRead: () => void;
   unreadCount: number;
 }
-
-const formatTime = (date: Date) => {
-  const d = new Date(date);
-  const now = new Date();
-  const diff = Math.floor((now.getTime() - d.getTime()) / 60000);
-  if (diff < 1) return "Just now";
-  if (diff < 60) return `${diff}m ago`;
-  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
-  return d.toLocaleDateString([], { month: "short", day: "numeric" });
-};
 
 const MessagePanel: React.FC<MessagePanelProps> = ({
   visible, onClose, messages, markRead, markAllRead, unreadCount,
@@ -272,7 +370,11 @@ const MessagePanel: React.FC<MessagePanelProps> = ({
                 </View>
                 <Text style={msgPanel.msgText}>{msg.text}</Text>
                 <View style={msgPanel.fromRow}>
-                  <Feather name={msg.fromRole === "admin" ? "shield" : "heart"} size={11} color={C.textMuted} />
+                  <Feather
+                    name={msg.fromRole === "kitchen" ? "tool" : msg.fromRole === "admin" ? "shield" : "heart"}
+                    size={11}
+                    color={C.textMuted}
+                  />
                   <Text style={msgPanel.fromText}>from {msg.fromName} · {msg.fromRole}</Text>
                 </View>
               </TouchableOpacity>
@@ -284,7 +386,7 @@ const MessagePanel: React.FC<MessagePanelProps> = ({
   </Modal>
 );
 
-// ─── Seasonal Meal added locally ───────────────────────────────────────────────
+// ─── Seasonal entry ────────────────────────────────────────────────────────────
 interface SeasonalEntry {
   id: string;
   name: string;
@@ -294,24 +396,74 @@ interface SeasonalEntry {
 }
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
-const KitchenDashboardScreen: React.FC = () => {
-  const { messages, unreadCount, markRead, markAllRead } = useKitchenMessages();
+const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
+  const { messages, unreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
 
   const [orders, setOrders] = useState<ApiOrder[]>([]);
   const [activeTab, setActiveTab] = useState<MealPeriod>("Breakfast");
   const [loading, setLoading] = useState(true);
 
+  // Backend residents — used to match order.userId → room + name
+  const [backendResidents, setBackendResidents] = useState<ApiResident[]>([]);
+
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
 
-  // ── fetch orders from backend ──
+  // Compose message state
+  const [composeResident, setComposeResident] = useState<{ id: string; name: string; room: string; restrictions: string[] } | null>(null);
+  const [showCompose, setShowCompose] = useState(false);
+
+  // ── Fetch backend residents once on mount ────────────────────────────────
+  useEffect(() => {
+    getResidents()
+      .then(setBackendResidents)
+      .catch(() => setBackendResidents([]));
+  }, []);
+
+  // ── Match an order's userId to a backend resident ────────────────────────
+  const findResident = useCallback((userId: string): ApiResident | undefined => {
+    if (!userId) return undefined;
+    const lower = userId.toLowerCase();
+    // 1. exact id match
+    const byId = backendResidents.find((r) => r.id === userId);
+    if (byId) return byId;
+    // 2. exact name match (backend userId might be fullName)
+    const byName = backendResidents.find((r) => r.name.toLowerCase() === lower);
+    if (byName) return byName;
+    // 3. partial / email prefix match
+    const byPartial = backendResidents.find(
+      (r) => lower.includes(r.name.toLowerCase().split(" ")[0]) ||
+             r.name.toLowerCase().includes(lower),
+    );
+    return byPartial;
+  }, [backendResidents]);
+
+  // ── Logout ───────────────────────────────────────────────────────────────
+  const handleLogout = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          await clearAuth();
+          navigation?.replace("Login");
+        },
+      },
+    ]);
+  };
+
+  // Fetch orders
   const fetchOrders = async (meal: MealPeriod) => {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
     try {
+      const token = await getAuthToken();
       const url = `https://traymate-auth.onrender.com/mealOrders/search?mealOfDay=${meal}&date=${today}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       const data = await response.json();
       setOrders(Array.isArray(data) ? data : []);
     } catch {
@@ -326,9 +478,32 @@ const KitchenDashboardScreen: React.FC = () => {
   const handleStatusChange = (id: number, status: Status) => {
     setOrders((prev) =>
       prev.map((item) =>
-        item.order.id === id ? { ...item, order: { ...item.order, status } } : item
+        item.order.id === id ? { ...item, order: { ...item.order, status } } : item,
       )
     );
+  };
+
+  const openCompose = (userId: string) => {
+    const r = findResident(userId);
+    setComposeResident(r ? {
+      id: r.id,
+      name: r.name,
+      room: r.room,
+      restrictions: [...r.dietaryRestrictions, ...r.foodAllergies],
+    } : { id: userId, name: userId, room: "", restrictions: [] });
+    setShowCompose(true);
+  };
+
+  const handleSendMessage = (text: string) => {
+    if (!composeResident) return;
+    sendMessage({
+      residentId: composeResident.id,
+      residentName: composeResident.name,
+      residentRoom: composeResident.room,
+      fromRole: "kitchen",
+      fromName: "Kitchen Staff",
+      text,
+    });
   };
 
   const counts = {
@@ -339,10 +514,7 @@ const KitchenDashboardScreen: React.FC = () => {
   };
 
   const addSeasonalMeal = (meal: Omit<SeasonalEntry, "id">) => {
-    setSeasonalMeals((prev) => [
-      ...prev,
-      { ...meal, id: `seasonal_${Date.now()}` },
-    ]);
+    setSeasonalMeals((prev) => [...prev, { ...meal, id: `seasonal_${Date.now()}` }]);
   };
 
   const removeSeasonalMeal = (id: string) => {
@@ -351,15 +523,15 @@ const KitchenDashboardScreen: React.FC = () => {
 
   const tabSeasonalMeals = seasonalMeals.filter((m) => m.period === activeTab);
 
-  // Status chip styling
-  const statusStyle = (s: Status) => {
-    if (s === "pending")   return { bg: C.warningBg,  text: C.warning,  icon: "clock"         as const };
-    if (s === "preparing") return { bg: "#FEE2E2",    text: C.danger,   icon: "loader"        as const };
-    return                        { bg: C.successBg,  text: C.success,  icon: "check-circle"  as const };
+  const statusStyle = (st: Status) => {
+    if (st === "pending")   return { bg: C.warningBg, text: C.warning, icon: "clock"        as const };
+    if (st === "preparing") return { bg: "#FEE2E2",   text: C.danger,  icon: "loader"       as const };
+    return                         { bg: C.successBg, text: C.success, icon: "check-circle" as const };
   };
 
   return (
     <SafeAreaView style={s.page}>
+
       {/* ── Header ── */}
       <View style={s.header}>
         <View>
@@ -369,38 +541,28 @@ const KitchenDashboardScreen: React.FC = () => {
           </Text>
         </View>
         <View style={s.headerRight}>
-          {/* Seasonal meal button */}
-          <TouchableOpacity
-            style={s.seasonalBtn}
-            onPress={() => setShowSeasonalModal(true)}
-          >
+          <TouchableOpacity style={s.seasonalBtn} onPress={() => setShowSeasonalModal(true)}>
             <Feather name="plus" size={16} color={C.primary} />
             <Text style={s.seasonalBtnText}>Seasonal</Text>
           </TouchableOpacity>
-
-          {/* Messages bell */}
-          <TouchableOpacity
-            style={s.bellBtn}
-            onPress={() => setShowMessages(true)}
-          >
+          <TouchableOpacity style={s.bellBtn} onPress={() => setShowMessages(true)}>
             <Feather name="bell" size={22} color={C.primary} />
             {unreadCount > 0 && (
               <View style={s.bellBadge}>
-                <Text style={s.bellBadgeText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
+                <Text style={s.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
               </View>
             )}
+          </TouchableOpacity>
+          {/* Logout */}
+          <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
+            <Feather name="log-out" size={18} color={C.danger} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={s.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Meal Period Tabs ── */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── Tabs ── */}
         <View style={s.tabs}>
           {(["Breakfast", "Lunch", "Dinner"] as MealPeriod[]).map((tab) => (
             <TouchableOpacity
@@ -413,20 +575,18 @@ const KitchenDashboardScreen: React.FC = () => {
                 size={15}
                 color={activeTab === tab ? "#FFF" : C.textMuted}
               />
-              <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
-                {tab}
-              </Text>
+              <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>{tab}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ── Summary Cards ── */}
+        {/* ── Summary ── */}
         <View style={s.summaryRow}>
           {[
-            { label: "Total",     value: counts.total,     icon: "layers"       as const, color: C.primary  },
-            { label: "Pending",   value: counts.pending,   icon: "clock"        as const, color: C.warning  },
-            { label: "Preparing", value: counts.preparing, icon: "loader"       as const, color: C.danger   },
-            { label: "Ready",     value: counts.ready,     icon: "check-circle" as const, color: C.success  },
+            { label: "Total",     value: counts.total,     icon: "layers"       as const, color: C.primary },
+            { label: "Pending",   value: counts.pending,   icon: "clock"        as const, color: C.warning },
+            { label: "Preparing", value: counts.preparing, icon: "loader"       as const, color: C.danger  },
+            { label: "Ready",     value: counts.ready,     icon: "check-circle" as const, color: C.success },
           ].map(({ label, value, icon, color }) => (
             <View key={label} style={s.summaryCard}>
               <Feather name={icon} size={18} color={color} />
@@ -436,7 +596,7 @@ const KitchenDashboardScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* ── Seasonal Meals for this period ── */}
+        {/* ── Seasonal specials ── */}
         {tabSeasonalMeals.length > 0 && (
           <View style={s.seasonalSection}>
             <View style={s.sectionTitleRow}>
@@ -451,14 +611,9 @@ const KitchenDashboardScreen: React.FC = () => {
                     <Text style={s.seasonalTagText}>{meal.tag || "Seasonal"}</Text>
                   </View>
                   <Text style={s.seasonalName}>{meal.name}</Text>
-                  {meal.description ? (
-                    <Text style={s.seasonalDesc}>{meal.description}</Text>
-                  ) : null}
+                  {meal.description ? <Text style={s.seasonalDesc}>{meal.description}</Text> : null}
                 </View>
-                <TouchableOpacity
-                  style={s.seasonalRemove}
-                  onPress={() => removeSeasonalMeal(meal.id)}
-                >
+                <TouchableOpacity style={s.seasonalRemove} onPress={() => removeSeasonalMeal(meal.id)}>
                   <Feather name="trash-2" size={16} color={C.danger} />
                 </TouchableOpacity>
               </View>
@@ -466,7 +621,7 @@ const KitchenDashboardScreen: React.FC = () => {
           </View>
         )}
 
-        {/* ── Orders List ── */}
+        {/* ── Orders ── */}
         <View style={s.sectionTitleRow}>
           <Feather name="clipboard" size={14} color={C.primary} />
           <Text style={s.sectionTitle}>Orders · {activeTab}</Text>
@@ -485,36 +640,102 @@ const KitchenDashboardScreen: React.FC = () => {
         ) : (
           orders.map((item) => {
             const st = statusStyle(item.order.status);
+            // Use backend residents fetched on mount for accurate room + name
+            const resident = findResident(item.order.userId);
+            // Combine all dietary info from backend
+            const allRestrictions = resident
+              ? [...resident.foodAllergies, ...resident.dietaryRestrictions, ...resident.medicalConditions]
+                  .filter(Boolean)
+              : [];
+
             return (
               <View key={item.order.id} style={s.card}>
-                {/* Card header */}
+
+                {/* Olive left accent stripe */}
+                <View style={s.cardAccent} />
+
+                {/* ── Card header ── */}
                 <View style={s.cardHeader}>
-                  <View style={{ gap: 2 }}>
-                    <Text style={s.orderId}>Order #{item.order.id}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Feather name="user" size={13} color={C.textMuted} />
-                      <Text style={s.userId}>{item.order.userId}</Text>
+                  <View style={{ flex: 1, gap: 6 }}>
+
+                    {/* Order ID + status pill */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <Text style={s.orderId}>Order #{item.order.id}</Text>
+                      <View style={[s.statusPill, { backgroundColor: st.bg }]}>
+                        <Feather name={st.icon} size={12} color={st.text} />
+                        <Text style={[s.statusPillText, { color: st.text }]}>
+                          {item.order.status.toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={[s.statusPill, { backgroundColor: st.bg }]}>
-                    <Feather name={st.icon} size={12} color={st.text} />
-                    <Text style={[s.statusPillText, { color: st.text }]}>
-                      {item.order.status.toUpperCase()}
-                    </Text>
+
+                    {/* Resident row: room + name from backend */}
+                    <View style={s.residentRow}>
+                      {resident ? (
+                        <>
+                          <View style={s.roomBadge}>
+                            <Feather name="home" size={12} color={C.primary} />
+                            <Text style={s.roomBadgeText}>
+                              {resident.room ? `Room ${resident.room}` : "No room"}
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                            <Feather name="user" size={13} color={C.textMuted} />
+                            <Text style={s.residentName}>{resident.name}</Text>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                          <Feather name="user" size={13} color={C.textMuted} />
+                          <Text style={s.userId}>{item.order.userId}</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Dietary/allergy badges from backend data */}
+                    {allRestrictions.length > 0 && (
+                      <View style={s.restrictionRow}>
+                        {allRestrictions.map((restriction, idx) => {
+                          // Classify: food allergies → red, medical → purple, dietary → green
+                          const isAllergy = resident && resident.foodAllergies.includes(restriction);
+                          const isMedical = resident && resident.medicalConditions.includes(restriction);
+                          const bg = isAllergy ? "#FEE2E2" : isMedical ? "#EDE9FE" : "#DCFCE7";
+                          const border = isAllergy ? "#FECACA" : isMedical ? "#C4B5FD" : "#86EFAC";
+                          const color = isAllergy ? "#991b1b" : isMedical ? "#5B21B6" : "#14532D";
+                          const icon: "alert-triangle" | "activity" | "heart" =
+                            isAllergy ? "alert-triangle" : isMedical ? "activity" : "heart";
+                          return (
+                            <View
+                              key={idx}
+                              style={[s.restrictionBadge, { backgroundColor: bg, borderColor: border }]}
+                            >
+                              <Feather name={icon} size={10} color={color} />
+                              <Text style={[s.restrictionText, { color }]}>
+                                {restriction}{isAllergy ? " ⚠" : ""}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 </View>
 
-                {/* Meals in this order */}
+                {/* ── Meals in this order ── */}
                 {item.meals.map((meal) => {
-                  const img = getMealImage(meal.name);
-                  const ph  = getMealPlaceholder(meal.name);
+                  // Try local bundled image first, then backend imageUrl, then placeholder
+                  const localImg = getMealImage(meal.name);
+                  const ph = getMealPlaceholder(meal.name);
+                  const hasUri = !localImg && !!(meal as any).imageUrl;
                   return (
                     <View key={meal.id} style={s.mealRow}>
-                      {img ? (
-                        <Image source={img} style={s.mealThumb} />
+                      {localImg ? (
+                        <Image source={localImg} style={s.mealThumb} />
+                      ) : hasUri ? (
+                        <Image source={{ uri: (meal as any).imageUrl }} style={s.mealThumb} />
                       ) : (
                         <View style={[s.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
-                          <Feather name="coffee" size={16} color={C.primary} />
+                          <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
@@ -533,53 +754,54 @@ const KitchenDashboardScreen: React.FC = () => {
                   );
                 })}
 
-                {/* Status toggle buttons */}
-                <View style={s.statusRow}>
-                  {(["pending", "preparing", "ready"] as Status[]).map((status) => {
-                    const active = item.order.status === status;
-                    const st2 = statusStyle(status);
-                    return (
-                      <TouchableOpacity
-                        key={status}
-                        style={[
-                          s.statusBtn,
-                          active
-                            ? { backgroundColor: C.primary }
-                            : { backgroundColor: C.primaryLight, borderColor: C.border },
-                        ]}
-                        onPress={() => handleStatusChange(item.order.id, status)}
-                      >
-                        <Feather
-                          name={st2.icon}
-                          size={12}
-                          color={active ? "#FFF" : C.textMuted}
-                        />
-                        <Text
+                {/* ── Action row: status toggles + message ── */}
+                <View style={s.actionRow}>
+                  {/* Status toggle buttons */}
+                  <View style={s.statusRow}>
+                    {(["pending", "preparing", "ready"] as Status[]).map((status) => {
+                      const active = item.order.status === status;
+                      const st2 = statusStyle(status);
+                      return (
+                        <TouchableOpacity
+                          key={status}
                           style={[
-                            s.statusBtnText,
-                            { color: active ? "#FFF" : C.textMuted },
+                            s.statusBtn,
+                            active
+                              ? { backgroundColor: C.primary }
+                              : { backgroundColor: C.primaryLight, borderColor: C.border },
                           ]}
+                          onPress={() => handleStatusChange(item.order.id, status)}
                         >
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                          <Feather name={st2.icon} size={12} color={active ? "#FFF" : C.textMuted} />
+                          <Text style={[s.statusBtnText, { color: active ? "#FFF" : C.textMuted }]}>
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Message button */}
+                  <TouchableOpacity
+                    style={s.msgBtn}
+                    onPress={() => openCompose(item.order.userId)}
+                  >
+                    <Feather name="message-circle" size={16} color={C.primary} />
+                  </TouchableOpacity>
                 </View>
+
               </View>
             );
           })
         )}
       </ScrollView>
 
-      {/* ── Seasonal Meal Modal ── */}
+      {/* ── Modals ── */}
       <SeasonalMealModal
         visible={showSeasonalModal}
         onClose={() => setShowSeasonalModal(false)}
         onAdd={addSeasonalMeal}
       />
-
-      {/* ── Message Panel ── */}
       <MessagePanel
         visible={showMessages}
         onClose={() => setShowMessages(false)}
@@ -587,6 +809,12 @@ const KitchenDashboardScreen: React.FC = () => {
         markRead={markRead}
         markAllRead={markAllRead}
         unreadCount={unreadCount}
+      />
+      <ComposeMessageModal
+        visible={showCompose}
+        resident={composeResident}
+        onClose={() => setShowCompose(false)}
+        onSend={handleSendMessage}
       />
     </SafeAreaView>
   );
@@ -609,22 +837,9 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: C.text,
-    letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontSize: 13,
-    color: C.textMuted,
-    marginTop: 2,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  headerTitle: { fontSize: 22, fontWeight: "700", color: C.text, letterSpacing: -0.3 },
+  headerSub:   { fontSize: 13, color: C.textMuted, marginTop: 2 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   seasonalBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -636,46 +851,34 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.warmBorder,
   },
-  seasonalBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: C.primary,
-  },
+  seasonalBtnText: { fontSize: 13, fontWeight: "600", color: C.primary },
   bellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: C.surface,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
+  },
+  bellBadge: {
+    position: "absolute", top: 6, right: 6,
+    backgroundColor: C.danger,
+    borderRadius: 8, minWidth: 16, height: 16,
+    alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFF" },
+  logoutBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.dangerBg,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: C.border,
-  },
-  bellBadge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    backgroundColor: C.danger,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  bellBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#FFF",
+    borderColor: "#FECACA",
   },
 
   // Tabs
-  tabs: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 16,
-    marginBottom: 16,
-  },
+  tabs: { flexDirection: "row", gap: 8, marginTop: 16, marginBottom: 16 },
   tab: {
     flex: 1,
     flexDirection: "row",
@@ -688,25 +891,12 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  tabActive: {
-    backgroundColor: C.primary,
-    borderColor: C.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: C.textMuted,
-  },
-  tabTextActive: {
-    color: "#FFF",
-  },
+  tabActive:     { backgroundColor: C.primary, borderColor: C.primary },
+  tabText:       { fontSize: 14, fontWeight: "600", color: C.textMuted },
+  tabTextActive: { color: "#FFF" },
 
   // Summary
-  summaryRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 20,
-  },
+  summaryRow: { flexDirection: "row", gap: 8, marginBottom: 20 },
   summaryCard: {
     flex: 1,
     backgroundColor: C.surface,
@@ -717,75 +907,37 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  summaryLabel: {
-    fontSize: 11,
-    color: C.textMuted,
-    fontWeight: "500",
-  },
+  summaryValue: { fontSize: 20, fontWeight: "700" },
+  summaryLabel: { fontSize: 11, color: C.textMuted, fontWeight: "500" },
 
   // Section title
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
-  },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: C.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 13, fontWeight: "700",
+    color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.5,
   },
 
-  // Seasonal section
-  seasonalSection: {
-    marginBottom: 20,
-  },
+  // Seasonal
+  seasonalSection: { marginBottom: 20 },
   seasonalCard: {
     backgroundColor: C.surface,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: C.warmBorder,
-    flexDirection: "row",
-    alignItems: "center",
+    borderRadius: 14, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: C.warmBorder,
+    flexDirection: "row", alignItems: "center",
   },
   seasonalCardLeft: { flex: 1, gap: 4 },
   seasonalTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    flexDirection: "row", alignItems: "center", gap: 4,
     alignSelf: "flex-start",
     backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
   },
-  seasonalTagText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: C.warning,
-  },
-  seasonalName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: C.text,
-  },
-  seasonalDesc: {
-    fontSize: 13,
-    color: C.textMuted,
-  },
+  seasonalTagText: { fontSize: 11, fontWeight: "700", color: C.warning },
+  seasonalName:   { fontSize: 15, fontWeight: "600", color: C.text },
+  seasonalDesc:   { fontSize: 13, color: C.textMuted },
   seasonalRemove: {
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: C.dangerBg,
-    marginLeft: 10,
+    padding: 8, borderRadius: 10,
+    backgroundColor: C.dangerBg, marginLeft: 10,
   },
 
   // Order cards
@@ -801,39 +953,72 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    overflow: "hidden",
+  },
+  cardAccent: {
+    position: "absolute",
+    left: 0, top: 0, bottom: 0,
+    width: 4,
+    backgroundColor: C.primary,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    opacity: 0.7,
   },
   cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  orderId: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: C.text,
-  },
-  userId: {
-    fontSize: 13,
-    color: C.textMuted,
-  },
-  statusPill: {
+
+  // Resident identity
+  residentRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  roomBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.primaryLight,
+    borderWidth: 1,
+    borderColor: C.warmBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 20,
   },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
+  roomBadgeText: { fontSize: 12, fontWeight: "700", color: C.primary },
+  residentName:  { fontSize: 13, fontWeight: "600", color: C.text },
+  orderId:       { fontSize: 15, fontWeight: "700", color: C.text },
+  userId:        { fontSize: 13, color: C.textMuted },
 
-  // Meal row within a card
+  statusPill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+  },
+  statusPillText: { fontSize: 11, fontWeight: "700" },
+
+  // Dietary restriction badges
+  restrictionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 2,
+  },
+  restrictionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  restrictionText: { fontSize: 11, fontWeight: "600" },
+
+  // Meal rows
   mealRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -842,46 +1027,24 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  mealThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-  },
+  mealThumb: { width: 52, height: 52, borderRadius: 12 },
   mealThumbPlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 52, height: 52, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
   },
-  mealName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: C.text,
-  },
-  mealDesc: {
-    fontSize: 12,
-    color: C.textMuted,
-    marginTop: 2,
-  },
-  allergenRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  allergenText: {
-    fontSize: 12,
-    color: C.danger,
-    fontWeight: "500",
-  },
+  mealName: { fontSize: 14, fontWeight: "600", color: C.text },
+  mealDesc: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+  allergenRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  allergenText: { fontSize: 12, color: C.danger, fontWeight: "500" },
 
-  // Status toggle row
-  statusRow: {
+  // Action row
+  actionRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginTop: 12,
   },
+  statusRow: { flex: 1, flexDirection: "row", gap: 6 },
   statusBtn: {
     flex: 1,
     flexDirection: "row",
@@ -892,272 +1055,153 @@ const s = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
   },
-  statusBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  // Empty state
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 48,
-    gap: 10,
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  statusBtnText: { fontSize: 12, fontWeight: "600" },
+  msgBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: C.primaryLight,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.warmBorder,
+  },
+
+  // Empty state
+  emptyState: { alignItems: "center", paddingVertical: 48, gap: 10 },
+  emptyIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: C.primaryLight,
+    alignItems: "center", justifyContent: "center",
     marginBottom: 4,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: C.text,
-  },
-  emptyDesc: {
-    fontSize: 14,
-    color: C.textMuted,
-    textAlign: "center",
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: C.text },
+  emptyDesc:  { fontSize: 14, color: C.textMuted, textAlign: "center" },
 });
 
 // ─── Modal Styles ──────────────────────────────────────────────────────────────
 const modal = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 36,
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
+    flexDirection: "row", justifyContent: "space-between",
+    alignItems: "flex-start", marginBottom: 20,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: C.text,
-  },
-  closeBtn: {
-    padding: 4,
-  },
+  title:    { fontSize: 18, fontWeight: "700", color: C.text },
+  closeBtn: { padding: 4, marginTop: 2 },
   label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: C.textMuted,
-    marginBottom: 6,
-    marginTop: 14,
+    fontSize: 13, fontWeight: "600", color: C.textMuted,
+    marginBottom: 6, marginTop: 14,
   },
   input: {
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: C.text,
+    backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 15, color: C.text,
   },
   dropdown: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13,
   },
-  dropdownValue: {
-    fontSize: 15,
-    color: C.text,
-    fontWeight: "500",
-  },
+  dropdownValue: { fontSize: 15, color: C.text, fontWeight: "500" },
   dropdownDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 30, height: 30, borderRadius: 15,
+    alignItems: "center", justifyContent: "center",
   },
   dropdownList: {
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 14,
-    marginTop: 4,
-    overflow: "hidden",
+    backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border,
+    borderRadius: 14, marginTop: 4, overflow: "hidden",
   },
   dropdownItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    backgroundColor: C.inputBg,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 14, paddingVertical: 13, backgroundColor: C.inputBg,
   },
-  dropdownItemActive: {
-    backgroundColor: C.primaryLight,
-  },
-  dropdownItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: C.textMuted,
-    fontWeight: "500",
-  },
+  dropdownItemActive:  { backgroundColor: C.primaryLight },
+  dropdownItemBorder:  { borderBottomWidth: 1, borderBottomColor: C.border },
+  dropdownItemText:    { fontSize: 14, color: C.textMuted, fontWeight: "500" },
   addBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: C.primary,
-    paddingVertical: 15,
-    borderRadius: 14,
-    marginTop: 22,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, backgroundColor: C.primary, paddingVertical: 15,
+    borderRadius: 14, marginTop: 22,
   },
-  addBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#FFF",
+  addBtnText: { fontSize: 15, fontWeight: "700", color: "#FFF" },
+});
+
+// ─── Compose-specific styles ───────────────────────────────────────────────────
+const compose = StyleSheet.create({
+  roomPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: C.primaryLight, borderWidth: 1, borderColor: C.warmBorder,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20,
+  },
+  roomPillText:     { fontSize: 12, fontWeight: "700", color: C.primary },
+  recipientName:    { fontSize: 13, color: C.textMuted, fontWeight: "500" },
+  restrictionSummary: {
+    flexDirection: "row", alignItems: "flex-start", gap: 6,
+    backgroundColor: C.warningBg, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "#FDE68A",
+    marginBottom: 4,
+  },
+  restrictionSummaryText: {
+    flex: 1, fontSize: 13, color: C.warning, fontWeight: "500",
   },
 });
 
 // ─── Message Panel Styles ──────────────────────────────────────────────────────
 const msgPanel = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: 36,
-    maxHeight: "75%",
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 36, maxHeight: "75%",
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    flexDirection: "row", justifyContent: "space-between",
+    alignItems: "center", marginBottom: 16,
+    paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  title: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: C.text,
-  },
+  title:       { fontSize: 17, fontWeight: "700", color: C.text },
   badge: {
-    backgroundColor: C.danger,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: C.danger, borderRadius: 10,
+    minWidth: 20, height: 20,
+    alignItems: "center", justifyContent: "center",
     paddingHorizontal: 4,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#FFF",
-  },
-  closeBtn: { padding: 4 },
-  markAllText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: C.primary,
-  },
-  empty: {
-    alignItems: "center",
-    paddingVertical: 40,
-    gap: 10,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: C.textMuted,
-  },
+  badgeText:   { fontSize: 11, fontWeight: "700", color: "#FFF" },
+  closeBtn:    { padding: 4 },
+  markAllText: { fontSize: 13, fontWeight: "600", color: C.primary },
+  empty:       { alignItems: "center", paddingVertical: 40, gap: 10 },
+  emptyText:   { fontSize: 15, color: C.textMuted },
   msgCard: {
-    backgroundColor: C.background,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 6,
+    backgroundColor: C.background, borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: C.border, gap: 6,
   },
-  msgCardUnread: {
-    backgroundColor: "#F0F4E8",
-    borderColor: C.warmBorder,
-  },
+  msgCardUnread: { backgroundColor: "#F0F4E8", borderColor: C.warmBorder },
   msgTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start",
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: C.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
   },
-  residentName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: C.text,
-  },
-  room: {
-    fontSize: 12,
-    color: C.textMuted,
-  },
-  timestamp: {
-    fontSize: 11,
-    color: C.textMuted,
-  },
+  residentName: { fontSize: 14, fontWeight: "700", color: C.text },
+  room:         { fontSize: 12, color: C.textMuted },
+  timestamp:    { fontSize: 11, color: C.textMuted },
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: C.primary,
-    alignSelf: "flex-end",
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: C.primary, alignSelf: "flex-end",
   },
-  msgText: {
-    fontSize: 14,
-    color: C.text,
-    lineHeight: 20,
-  },
-  fromRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  fromText: {
-    fontSize: 12,
-    color: C.textMuted,
-    fontStyle: "italic",
-  },
+  msgText:  { fontSize: 14, color: C.text, lineHeight: 20 },
+  fromRow:  { flexDirection: "row", alignItems: "center", gap: 4 },
+  fromText: { fontSize: 12, color: C.textMuted, fontStyle: "italic" },
 });
 
 export default KitchenDashboardScreen;
