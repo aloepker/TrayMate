@@ -29,7 +29,7 @@ const COLORS = {
 };
 
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory } = useCart();
+  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory, clearAllOrders } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -43,8 +43,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   useEffect(() => {
-    if (residentId) fetchOrderHistory(residentId);
-  }, [residentId]);
+    if (!residentId) return;
+    fetchOrderHistory(residentId);
+    const unsub = navigation.addListener('focus', () => fetchOrderHistory(residentId));
+    return unsub;
+  }, [residentId, navigation]);
 
   const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
 
@@ -120,12 +123,27 @@ function UpcomingMealsScreen({ navigation, route }: any) {
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.upcomingMeals}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-          onPress={() => navigation.navigate('Settings')}
-        >
-          <Feather name="settings" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          {residentOrders.length > 0 && (
+            <TouchableOpacity
+              style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+              onPress={() => {
+                Alert.alert('Clear Orders', 'Remove all cached orders from this device?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Clear', style: 'destructive', onPress: clearAllOrders },
+                ]);
+              }}
+            >
+              <Feather name="trash-2" size={18} color="#C53030" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Feather name="settings" size={20} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
