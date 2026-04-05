@@ -7,7 +7,7 @@ export type KitchenMessage = {
   residentId: string;
   residentName: string;
   residentRoom: string;
-  fromRole: 'caregiver' | 'admin';
+  fromRole: 'caregiver' | 'admin' | 'kitchen';
   fromName: string;
   text: string;
   timestamp: Date;

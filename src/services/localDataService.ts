@@ -167,7 +167,7 @@ async function fetchDrinksFromApi(): Promise<Meal[]> {
     return Array.isArray(data) ? data.map(apiMealToMeal) : [];
   } catch (error) {
     console.warn("Backend /menu/period/drinks unreachable, using fallback drinks:", error);
-    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealType === "Beverage");
+    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealPeriod === "Drinks");
   }
 }
 
@@ -177,7 +177,7 @@ async function fetchSidesFromApi(): Promise<Meal[]> {
     return Array.isArray(data) ? data.map(apiMealToMeal) : [];
   } catch (error) {
     console.warn("Backend /menu/period/sides unreachable, using fallback sides:", error);
-    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealType === "Side");
+    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealPeriod === "Sides");
   }
 }
 // Fallback meals for when the API is unreachable
