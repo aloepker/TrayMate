@@ -1,7 +1,8 @@
 import EncryptedStorage from "react-native-encrypted-storage";
 
 const TOKEN_KEY = "auth_token";
-const ROLE_KEY = "user_role";
+const ROLE_KEY  = "user_role";
+const EMAIL_KEY = "user_email";
 
 export async function setAuth(token: string, role: string) {
   try {
@@ -20,10 +21,27 @@ export async function getAuthToken(): Promise<string | null> {
   }
 }
 
+export async function setUserEmail(email: string): Promise<void> {
+  try {
+    await EncryptedStorage.setItem(EMAIL_KEY, email);
+  } catch (error) {
+    console.error("Storage Error (email):", error);
+  }
+}
+
+export async function getUserEmail(): Promise<string | null> {
+  try {
+    return await EncryptedStorage.getItem(EMAIL_KEY);
+  } catch (error) {
+    return null;
+  }
+}
+
 export async function clearAuth() {
   try {
     await EncryptedStorage.removeItem(TOKEN_KEY);
     await EncryptedStorage.removeItem(ROLE_KEY);
+    await EncryptedStorage.removeItem(EMAIL_KEY);
   } catch (error) {
     console.error("Clear Storage Error:", error);
   }

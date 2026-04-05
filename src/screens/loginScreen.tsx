@@ -1,4 +1,4 @@
-import { setAuth } from "../services/storage";
+import { setAuth, setUserEmail } from "../services/storage";
 import React, { useState } from "react";
 import {
   View,
@@ -58,6 +58,7 @@ export default function Login({ navigation }: any) {
       }
 
       await setAuth(data.token, data.role);
+      await setUserEmail(email.trim().toLowerCase());
       navigateByRole(data.role);
     } catch (err: any) {
       // Network unreachable — try mock credentials
@@ -66,6 +67,7 @@ export default function Login({ navigation }: any) {
         const mock = MOCK_USERS[key];
         if (mock) {
           await setAuth(mock.token, mock.role);
+          await setUserEmail(key);
           navigateByRole(mock.role);
           return;
         }
