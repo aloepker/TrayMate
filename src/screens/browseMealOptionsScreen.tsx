@@ -212,6 +212,28 @@ type PeriodOption = {
   value: Meal["meal_period"] | null;
 };
 
+// ── Per-period header themes ──────────────────────────────────────────────────
+const PERIOD_THEMES: Record<string, {
+  bg: string;           // header background
+  titleColor: string;   // main title text
+  subColor: string;     // subtitle + date text
+  tabActiveBg: string;  // active tab pill background
+  tabActiveText: string;
+  tabInactiveBg: string;
+  tabInactiveText: string;
+  icon: string;         // decorative emoji in corner
+  buttonBg: string;     // floating action button bg
+  buttonBorder: string;
+}> = {
+  allDay:     { bg: '#FFFFFF',  titleColor: '#111827', subColor: '#6B7280', tabActiveBg: '#717644', tabActiveText: '#FFF', tabInactiveBg: 'rgba(0,0,0,0.05)', tabInactiveText: '#374151', icon: '🍽', buttonBg: '#FFFFFF', buttonBorder: 'rgba(113,118,68,0.25)' },
+  breakfast:  { bg: '#FEF3C7', titleColor: '#78350F', subColor: '#92400E', tabActiveBg: '#D97706', tabActiveText: '#FFF', tabInactiveBg: 'rgba(217,119,6,0.12)', tabInactiveText: '#92400E', icon: '🌅', buttonBg: '#FFFBEB', buttonBorder: 'rgba(217,119,6,0.3)' },
+  lunch:      { bg: '#ECFDF5', titleColor: '#064E3B', subColor: '#065F46', tabActiveBg: '#059669', tabActiveText: '#FFF', tabInactiveBg: 'rgba(5,150,105,0.1)',  tabInactiveText: '#065F46', icon: '☀️', buttonBg: '#F0FDF4', buttonBorder: 'rgba(5,150,105,0.25)' },
+  dinner:     { bg: '#1E1B4B', titleColor: '#E0E7FF', subColor: '#A5B4FC', tabActiveBg: '#6366F1', tabActiveText: '#FFF', tabInactiveBg: 'rgba(165,180,252,0.15)', tabInactiveText: '#C7D2FE', icon: '🌙', buttonBg: '#2E2A5B', buttonBorder: 'rgba(165,180,252,0.3)' },
+  beverages:  { bg: '#E0F2FE', titleColor: '#0C4A6E', subColor: '#075985', tabActiveBg: '#0284C7', tabActiveText: '#FFF', tabInactiveBg: 'rgba(2,132,199,0.1)',  tabInactiveText: '#075985', icon: '🥤', buttonBg: '#F0F9FF', buttonBorder: 'rgba(2,132,199,0.25)' },
+  desserts:   { bg: '#FDF2F8', titleColor: '#701A75', subColor: '#86198F', tabActiveBg: '#C026D3', tabActiveText: '#FFF', tabInactiveBg: 'rgba(192,38,211,0.1)', tabInactiveText: '#86198F', icon: '🍰', buttonBg: '#FFF0FB', buttonBorder: 'rgba(192,38,211,0.25)' },
+  seasonal:   { bg: '#F0FDF4', titleColor: '#14532D', subColor: '#166534', tabActiveBg: '#16A34A', tabActiveText: '#FFF', tabInactiveBg: 'rgba(22,163,74,0.1)',  tabInactiveText: '#166534', icon: '🌸', buttonBg: '#F0FDF4', buttonBorder: 'rgba(22,163,74,0.25)' },
+};
+
 const PERIOD_KEYS: PeriodOption[] = [
   { key: "allDay", value: null },
   { key: "breakfast", value: "Breakfast" },
@@ -681,6 +703,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
+  const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
   const [meals, setMeals] = useState<Meal[]>([]);
   const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
@@ -916,21 +939,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   const listHeader = (
-    <View style={styles.header}>
+    <View style={[styles.header, { backgroundColor: pt.bg }]}>
+      {/* Decorative period icon — top right of header */}
+      <Text style={styles.headerIcon}>{pt.icon}</Text>
+
       {/* Back Button & Title */}
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
           <View style={styles.backArrow}>
-            <View style={styles.backArrowLine1} />
-            <View style={styles.backArrowLine2} />
+            <View style={[styles.backArrowLine1, { backgroundColor: pt.titleColor }]} />
+            <View style={[styles.backArrowLine2, { backgroundColor: pt.titleColor }]} />
           </View>
         </TouchableOpacity>
         <View style={styles.titleContainer}>
-          <Text style={[styles.title, { fontSize: scaled(32) }]}>{t.availableMenus}</Text>
-          <Text style={[styles.subtitle, { fontSize: scaled(17) }]}>{t.orderingFor} {residentName}</Text>
+          <Text style={[styles.title, { fontSize: scaled(32), color: pt.titleColor }]}>{t.availableMenus}</Text>
+          <Text style={[styles.subtitle, { fontSize: scaled(17), color: pt.subColor }]}>{t.orderingFor} {residentName}</Text>
         </View>
       </View>
 
@@ -942,10 +968,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           return (
             <TouchableOpacity
               key={period.key}
-              style={[styles.tab, isActive && styles.tabActive]}
+              style={[
+                styles.tab,
+                { backgroundColor: isActive ? pt.tabActiveBg : pt.tabInactiveBg },
+                isActive && { borderColor: pt.tabActiveBg },
+              ]}
               onPress={() => setSelectedPeriod(period)}
             >
-              <Text style={[styles.tabText, { fontSize: scaled(16) }, isActive && styles.tabTextActive]}>
+              <Text style={[
+                styles.tabText,
+                { fontSize: scaled(16) },
+                { color: isActive ? pt.tabActiveText : pt.tabInactiveText },
+              ]}>
                 {label}
               </Text>
             </TouchableOpacity>
@@ -1048,21 +1082,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[styles.floatingUpcomingBtn, { minHeight: touchTarget, minWidth: touchTarget }]}
+          style={[styles.floatingUpcomingBtn, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
           onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
           accessibilityLabel="My Orders"
           activeOpacity={0.85}
         >
-          <Feather name="calendar" size={20} color={COLORS.primary} />
+          <Feather name="calendar" size={20} color={pt.tabActiveBg} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={goToSettings}
-          style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+          style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
           accessibilityLabel="Settings"
           accessibilityRole="button"
           activeOpacity={0.85}
         >
-          <Feather name="settings" size={20} color={COLORS.primary} />
+          <Feather name="settings" size={20} color={pt.tabActiveBg} />
         </TouchableOpacity>
       </View>
 
@@ -1273,7 +1307,15 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingHorizontal: 22,
     paddingBottom: 22,
-    backgroundColor: COLORS.white,
+    overflow: 'hidden',
+  },
+  headerIcon: {
+    position: 'absolute',
+    top: 10,
+    right: 80,
+    fontSize: 72,
+    opacity: 0.12,
+    zIndex: 0,
   },
   titleRow: {
     flexDirection: 'row',
