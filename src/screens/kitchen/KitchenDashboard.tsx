@@ -484,28 +484,21 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     <SafeAreaView style={s.page}>
       {/* ── Header ── */}
       <View style={s.header}>
-        <View>
-          <Text style={s.headerTitle}>Kitchen Dashboard</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerTitle}>Kitchen</Text>
           <Text style={s.headerSub}>
             {new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}
           </Text>
         </View>
         <View style={s.headerRight}>
           {/* Seasonal meal button */}
-          <TouchableOpacity
-            style={s.seasonalBtn}
-            onPress={() => setShowSeasonalModal(true)}
-          >
-            <Feather name="plus" size={16} color={C.primary} />
-            <Text style={s.seasonalBtnText}>Seasonal</Text>
+          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowSeasonalModal(true)}>
+            <Feather name="plus-circle" size={20} color={C.primary} />
           </TouchableOpacity>
 
           {/* Messages bell */}
-          <TouchableOpacity
-            style={s.bellBtn}
-            onPress={() => setShowMessages(true)}
-          >
-            <Feather name="bell" size={22} color={C.primary} />
+          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowMessages(true)}>
+            <Feather name="bell" size={20} color={C.primary} />
             {unreadCount > 0 && (
               <View style={s.bellBadge}>
                 <Text style={s.bellBadgeText}>
@@ -516,8 +509,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </TouchableOpacity>
 
           {/* Logout */}
-          <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
-            <Feather name="log-out" size={18} color={C.danger} />
+          <TouchableOpacity style={[s.headerIconBtn, s.logoutBtn]} onPress={handleLogout}>
+            <Feather name="log-out" size={20} color={C.danger} />
           </TouchableOpacity>
         </View>
       </View>
@@ -788,18 +781,18 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
     backgroundColor: C.surface,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "800",
     color: C.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
   headerSub: {
     fontSize: 13,
@@ -811,58 +804,41 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  seasonalBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: C.primaryLight,
-    borderWidth: 1,
-    borderColor: C.warmBorder,
-  },
-  seasonalBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: C.primary,
-  },
-  bellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: C.surface,
+  headerIconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.border,
+    borderWidth: 1.5,
+    borderColor: "rgba(113,118,68,0.22)",
+    shadowColor: "#717644",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   bellBadge: {
     position: "absolute",
-    top: 6,
-    right: 6,
+    top: 7,
+    right: 7,
     backgroundColor: C.danger,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
+    borderRadius: 7,
+    minWidth: 14,
+    height: 14,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 3,
   },
   bellBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     color: "#FFF",
   },
   logoutBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    borderColor: "rgba(197,48,48,0.25)",
     backgroundColor: C.dangerBg,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#FECACA",
   },
 
   // Tabs
