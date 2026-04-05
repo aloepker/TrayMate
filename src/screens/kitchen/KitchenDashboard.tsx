@@ -94,6 +94,15 @@ interface ApiOrder {
   }>;
 }
 
+// ─── Period accent colours (pill badge per meal row) ──────────────────────────
+const PERIOD_ACCENT: Record<string, { color: string; light: string; icon: string }> = {
+  Breakfast: { color: "#b45309", light: "#FEF3C7", icon: "sun"     },
+  Lunch:     { color: "#1d4ed8", light: "#DBEAFE", icon: "coffee"  },
+  Dinner:    { color: "#7c3aed", light: "#EDE9FE", icon: "moon"    },
+  Sides:     { color: "#15803d", light: "#DCFCE7", icon: "layers"  },
+  Drinks:    { color: "#0e7490", light: "#CFFAFE", icon: "droplet" },
+};
+
 // ─── Period option config ──────────────────────────────────────────────────────
 const PERIOD_OPTIONS: {
   value: MealPeriod;
@@ -108,24 +117,45 @@ const PERIOD_OPTIONS: {
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
 ];
 
-// ─── Seasonal Meal Modal ───────────────────────────────────────────────────────
+// ─── Seasonal Meal Modal (expanded with nutrition + dietary fields) ────────────
 interface SeasonalModalProps {
   visible: boolean;
   onClose: () => void;
   onAdd: (meal: { name: string; description: string; period: MealPeriod; tag: string }) => void;
 }
 
+const DIETARY_OPTIONS = [
+  "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
+  "Low Sodium", "Low Sugar", "Nut-Free", "Halal",
+];
+
 const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onAdd }) => {
-  const [name, setName] = useState("");
+  const [name, setName]               = useState("");
   const [description, setDescription] = useState("");
-  const [period, setPeriod] = useState<MealPeriod>("Breakfast");
-  const [tag, setTag] = useState("");
+  const [period, setPeriod]           = useState<MealPeriod>("Breakfast");
+  const [tag, setTag]                 = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // Nutrition
+  const [calories, setCalories]   = useState("");
+  const [sodium, setSodium]       = useState("");
+  const [protein, setProtein]     = useState("");
+  // Dietary restrictions (multi-select)
+  const [dietary, setDietary]     = useState<string[]>([]);
+  // Photo URL
+  const [photoUrl, setPhotoUrl]   = useState("");
+
+  const toggleDietary = (item: string) =>
+    setDietary((prev) => prev.includes(item) ? prev.filter((d) => d !== item) : [...prev, item]);
 
   const handleAdd = () => {
     if (!name.trim()) { Alert.alert("Required", "Please enter a meal name."); return; }
-    onAdd({ name: name.trim(), description: description.trim(), period, tag: tag.trim() });
-    setName(""); setDescription(""); setPeriod("Breakfast"); setTag(""); setDropdownOpen(false);
+    // Build tag from explicit tag + dietary selections
+    const allTags = [tag.trim(), ...dietary].filter(Boolean).join(", ");
+    onAdd({ name: name.trim(), description: description.trim(), period, tag: allTags });
+    // Reset all fields
+    setName(""); setDescription(""); setPeriod("Breakfast"); setTag("");
+    setCalories(""); setSodium(""); setProtein("");
+    setDietary([]); setPhotoUrl(""); setDropdownOpen(false);
     onClose();
   };
 
@@ -137,13 +167,16 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled">
           <View style={modal.sheet}>
             <View style={modal.header}>
-              <Text style={modal.title}>Add Seasonal Item</Text>
+              <Text style={modal.title}>Add Meal to Menu</Text>
               <TouchableOpacity onPress={onClose} style={modal.closeBtn}>
                 <Feather name="x" size={22} color={C.textMuted} />
               </TouchableOpacity>
             </View>
 
-            <Text style={modal.label}>Name *</Text>
+            {/* ── Basic info ── */}
+            <Text style={modal.sectionLabel}>BASIC INFO</Text>
+
+            <Text style={modal.label}>Meal Name *</Text>
             <TextInput
               style={modal.input}
               value={name}
@@ -157,13 +190,13 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
               style={[modal.input, { height: 72, textAlignVertical: "top" }]}
               value={description}
               onChangeText={setDescription}
-              placeholder="Short description of the seasonal item"
+              placeholder="Short description of the meal"
               placeholderTextColor="#ABABAB"
               multiline
             />
 
-            {/* ── Category dropdown ── */}
-            <Text style={modal.label}>Category</Text>
+            {/* ── Meal period dropdown ── */}
+            <Text style={modal.label}>Meal Period</Text>
             <TouchableOpacity
               style={modal.dropdown}
               onPress={() => setDropdownOpen((v) => !v)}
@@ -208,18 +241,95 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
               </View>
             )}
 
-            <Text style={modal.label}>Tag (optional)</Text>
+            {/* ── Nutrition ── */}
+            <Text style={modal.sectionLabel}>NUTRITION</Text>
+            <View style={modal.nutritionRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={modal.label}>Calories</Text>
+                <TextInput
+                  style={modal.input}
+                  value={calories}
+                  onChangeText={setCalories}
+                  placeholder="e.g. 320"
+                  placeholderTextColor="#ABABAB"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={modal.label}>Sodium (mg)</Text>
+                <TextInput
+                  style={modal.input}
+                  value={sodium}
+                  onChangeText={setSodium}
+                  placeholder="e.g. 540"
+                  placeholderTextColor="#ABABAB"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={modal.label}>Protein (g)</Text>
+                <TextInput
+                  style={modal.input}
+                  value={protein}
+                  onChangeText={setProtein}
+                  placeholder="e.g. 22"
+                  placeholderTextColor="#ABABAB"
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            {/* ── Dietary restrictions ── */}
+            <Text style={modal.sectionLabel}>DIETARY RESTRICTIONS</Text>
+            <View style={modal.chipRow}>
+              {DIETARY_OPTIONS.map((item) => {
+                const active = dietary.includes(item);
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    style={[modal.chip, active && modal.chipActive]}
+                    onPress={() => toggleDietary(item)}
+                  >
+                    {active && <Feather name="check" size={11} color="#FFF" />}
+                    <Text style={[modal.chipText, active && modal.chipTextActive]}>{item}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* ── Photo URL ── */}
+            <Text style={modal.sectionLabel}>PHOTO</Text>
+            <Text style={modal.label}>Image URL (optional)</Text>
+            <TextInput
+              style={modal.input}
+              value={photoUrl}
+              onChangeText={setPhotoUrl}
+              placeholder="https://example.com/meal.jpg"
+              placeholderTextColor="#ABABAB"
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            {photoUrl.trim() ? (
+              <Image
+                source={{ uri: photoUrl.trim() }}
+                style={modal.photoPreview}
+                resizeMode="cover"
+              />
+            ) : null}
+
+            {/* ── Tag ── */}
+            <Text style={modal.label}>Additional Tag (optional)</Text>
             <TextInput
               style={modal.input}
               value={tag}
               onChangeText={setTag}
-              placeholder="e.g. Spring Special, Limited Time"
+              placeholder="e.g. Chef's Special, Limited Time"
               placeholderTextColor="#ABABAB"
             />
 
             <TouchableOpacity style={modal.addBtn} onPress={handleAdd}>
               <Feather name="plus-circle" size={18} color="#FFF" />
-              <Text style={modal.addBtnText}>Add Seasonal Item</Text>
+              <Text style={modal.addBtnText}>Add Meal to Menu</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -331,6 +441,209 @@ interface SeasonalEntry {
 }
 
 
+// ─── Support Modal ─────────────────────────────────────────────────────────────
+const SUPPORT_TEMPLATES = [
+  {
+    id: "equipment",
+    icon: "tool",
+    title: "Equipment Issue",
+    description: "Report a broken or malfunctioning piece of kitchen equipment.",
+    template: "🔧 Equipment Issue\n\nEquipment: \nLocation: \nIssue Description: \nUrgency: [ ] Low  [ ] Medium  [ ] High",
+  },
+  {
+    id: "supply",
+    icon: "package",
+    title: "Supply Request",
+    description: "Request ingredients, supplies, or restock items.",
+    template: "📦 Supply Request\n\nItem(s) Needed: \nQuantity: \nNeeded By: \nNotes: ",
+  },
+  {
+    id: "allergy",
+    icon: "alert-triangle",
+    title: "Allergy Concern",
+    description: "Report an allergy concern or cross-contamination risk.",
+    template: "⚠️ Allergy Concern\n\nResident Name: \nAllergen: \nDescription: \nAction Taken: ",
+  },
+  {
+    id: "special",
+    icon: "star",
+    title: "Special Diet Request",
+    description: "Submit a special dietary modification for a resident.",
+    template: "🍽️ Special Diet Request\n\nResident Name: \nRoom #: \nDietary Need: \nMeal Affected: \nNotes: ",
+  },
+  {
+    id: "feedback",
+    icon: "message-square",
+    title: "General Feedback",
+    description: "Share feedback or a suggestion with the kitchen team.",
+    template: "💬 General Feedback\n\nSubject: \nDetails: \nSubmitted by: ",
+  },
+];
+
+const SupportModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ visible, onClose }) => {
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  const template = SUPPORT_TEMPLATES.find((t) => t.id === selectedTemplate);
+
+  const handleSelectTemplate = (id: string) => {
+    const tmpl = SUPPORT_TEMPLATES.find((t) => t.id === id)!;
+    setSelectedTemplate(id);
+    setMessage(tmpl.template);
+  };
+
+  const handleSend = () => {
+    Alert.alert("Submitted", "Your support request has been sent to the admin team.");
+    setSelectedTemplate(null);
+    setMessage("");
+    onClose();
+  };
+
+  const handleClose = () => {
+    setSelectedTemplate(null);
+    setMessage("");
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <View style={support.overlay}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled">
+          <View style={support.sheet}>
+            <View style={support.header}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Feather name="help-circle" size={20} color={C.primary} />
+                <Text style={support.title}>
+                  {selectedTemplate ? template?.title : "Support Center"}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={handleClose} style={support.closeBtn}>
+                <Feather name="x" size={22} color={C.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {!selectedTemplate ? (
+              <>
+                <Text style={support.subtitle}>
+                  Select a request type to get started:
+                </Text>
+                {SUPPORT_TEMPLATES.map((tmpl) => (
+                  <TouchableOpacity
+                    key={tmpl.id}
+                    style={support.templateCard}
+                    onPress={() => handleSelectTemplate(tmpl.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={support.templateIcon}>
+                      <Feather name={tmpl.icon as any} size={20} color={C.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={support.templateTitle}>{tmpl.title}</Text>
+                      <Text style={support.templateDesc}>{tmpl.description}</Text>
+                    </View>
+                    <Feather name="chevron-right" size={18} color={C.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={support.backRow}
+                  onPress={() => { setSelectedTemplate(null); setMessage(""); }}
+                >
+                  <Feather name="chevron-left" size={16} color={C.primary} />
+                  <Text style={support.backText}>All Templates</Text>
+                </TouchableOpacity>
+                <Text style={support.templateDescLarge}>{template?.description}</Text>
+                <Text style={support.label}>Message</Text>
+                <TextInput
+                  style={support.messageInput}
+                  value={message}
+                  onChangeText={setMessage}
+                  multiline
+                  placeholderTextColor="#ABABAB"
+                />
+                <TouchableOpacity style={support.sendBtn} onPress={handleSend}>
+                  <Feather name="send" size={17} color="#FFF" />
+                  <Text style={support.sendBtnText}>Submit Request</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+const support = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    minHeight: 360,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  title: { fontSize: 19, fontWeight: "800", color: C.text },
+  subtitle: { fontSize: 14, color: C.textMuted, marginBottom: 16 },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.inputBg, alignItems: "center", justifyContent: "center",
+  },
+  templateCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.inputBg,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  templateIcon: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center",
+  },
+  templateTitle: { fontSize: 15, fontWeight: "700", color: C.text, marginBottom: 2 },
+  templateDesc: { fontSize: 12, color: C.textMuted, lineHeight: 17 },
+  backRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 12 },
+  backText: { fontSize: 14, color: C.primary, fontWeight: "600" },
+  templateDescLarge: { fontSize: 14, color: C.textMuted, marginBottom: 16, lineHeight: 20 },
+  label: { fontSize: 13, fontWeight: "700", color: C.text, marginBottom: 8 },
+  messageInput: {
+    backgroundColor: C.inputBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+    fontSize: 14,
+    color: C.text,
+    minHeight: 180,
+    textAlignVertical: "top",
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  sendBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C.primary,
+    borderRadius: 14,
+    paddingVertical: 15,
+  },
+  sendBtnText: { fontSize: 15, fontWeight: "700", color: "#FFF" },
+});
+
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
   const { messages, unreadCount, markRead, markAllRead } = useKitchenMessages();
@@ -345,6 +658,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
 
   // ── load token + email + residents on mount ──
   useEffect(() => {
@@ -506,6 +820,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 </Text>
               </View>
             )}
+          </TouchableOpacity>
+
+          {/* Support */}
+          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowSupport(true)}>
+            <Feather name="help-circle" size={20} color={C.primary} />
           </TouchableOpacity>
 
           {/* Logout */}
@@ -695,6 +1014,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 {/* ── Meals ── */}
                 {item.meals.map((meal, idx) => {
                   const ph = getMealPlaceholder(meal.name);
+                  const pa = PERIOD_ACCENT[activeTab] ?? PERIOD_ACCENT["Breakfast"];
                   return (
                     <View key={meal.id} style={[s.mealRow, idx > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
                       {meal.imageUrl ? (
@@ -705,7 +1025,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         </View>
                       )}
                       <View style={{ flex: 1, gap: 3 }}>
-                        <Text style={s.mealName}>{meal.name}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <Text style={s.mealName}>{meal.name}</Text>
+                          <View style={[s.periodPill, { backgroundColor: pa.light, borderColor: pa.color }]}>
+                            <Feather name={pa.icon as any} size={9} color={pa.color} />
+                            <Text style={[s.periodPillText, { color: pa.color }]}>{activeTab}</Text>
+                          </View>
+                        </View>
                         {meal.description ? (
                           <Text style={s.mealDesc} numberOfLines={2}>{meal.description}</Text>
                         ) : null}
@@ -765,6 +1091,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         markRead={markRead}
         markAllRead={markAllRead}
         unreadCount={unreadCount}
+      />
+
+      {/* ── Support Modal ── */}
+      <SupportModal
+        visible={showSupport}
+        onClose={() => setShowSupport(false)}
       />
 
     </SafeAreaView>
@@ -1092,6 +1424,19 @@ const s = StyleSheet.create({
     color: C.danger,
     fontWeight: "600",
   },
+  periodPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  periodPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
 
   // Status 2×2 grid
   statusGrid: {
@@ -1252,6 +1597,57 @@ const modal = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#FFF",
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: C.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  nutritionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.inputBg,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  chipActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  chipText: {
+    fontSize: 13,
+    color: C.textMuted,
+    fontWeight: "500",
+  },
+  chipTextActive: {
+    color: "#FFF",
+    fontWeight: "700",
+  },
+  photoPreview: {
+    width: "100%",
+    height: 140,
+    borderRadius: 12,
+    marginTop: 10,
+    marginBottom: 4,
+    backgroundColor: C.inputBg,
   },
 });
 

@@ -212,6 +212,16 @@ type PeriodOption = {
   value: Meal["meal_period"] | null;
 };
 
+// ── Period accent colours (for card left strip) ───────────────────────────────
+const PERIOD_ACCENT: Record<string, { color: string; light: string }> = {
+  Breakfast: { color: '#C47A2A', light: '#FEF3C7' },
+  Lunch:     { color: '#2D7A52', light: '#DCFCE7' },
+  Dinner:    { color: '#4F4FA8', light: '#EEF2FF' },
+  Drinks:    { color: '#2A6FA8', light: '#E0F2FE' },
+  Sides:     { color: '#7A3A6A', light: '#FCE7F3' },
+  'All Day': { color: '#717644', light: '#F0EFE6' },
+};
+
 // ── Per-period header themes ──────────────────────────────────────────────────
 const PERIOD_THEMES: Record<string, {
   bg: string;
@@ -847,6 +857,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const ph = getMealPlaceholder(item.name);
     const mealImg = !!item.imageUrl;
     const available = isWithinTimeRange(item.time_range, item.meal_period);
+    const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
     return (
       <TouchableOpacity
         style={[
@@ -879,13 +890,16 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           {!available && (
             <View style={styles.imageFrost} />
           )}
-          <View style={styles.mealImageOverlay}>
-            <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
+        </View>
+        {/* Coloured left accent strip */}
+        <View style={[styles.periodStrip, { backgroundColor: accent.color }]} />
+        <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
+          {/* Period pill next to meal title */}
+          <View style={[styles.periodPill, { backgroundColor: accent.light, borderColor: accent.color }]}>
+            <Text style={[styles.periodPillText, { color: accent.color }]}>
               {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
-        </View>
-        <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
           <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
             {translateMealName(item.name, language)}
           </Text>
@@ -1569,19 +1583,30 @@ const styles = StyleSheet.create({
   mealImageEmoji: {
     fontSize: 56,
   },
-  mealImageOverlay: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#D27028',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
   mealImageLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  periodStrip: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    zIndex: 2,
+  },
+  periodPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+  },
+  periodPillText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   cardContent: {
     padding: 16,

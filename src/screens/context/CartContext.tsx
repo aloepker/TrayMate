@@ -46,6 +46,7 @@ type CartContextType = {
   getOrdersForResident: (residentId: string) => Order[];
   fetchOrderHistory: (userId: string) => Promise<void>;
   clearAllOrders: () => void;
+  removeOrder: (orderId: string) => void;
 };
 
 // Create the context
@@ -261,6 +262,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setCart([]);
   };
 
+  /** Remove a single order by id */
+  const removeOrder = (orderId: string) => {
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -277,6 +283,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         getOrdersForResident,
         fetchOrderHistory,
         clearAllOrders,
+        removeOrder,
       }}
     >
       {children}
