@@ -57,8 +57,19 @@ export const KitchenMessageProvider = ({ children }: { children: ReactNode }) =>
   );
 };
 
+// Safe fallback so screens don't crash if rendered before the provider mounts
+const NOOP_SEND = (_msg: Omit<KitchenMessage, 'id' | 'timestamp' | 'read'>) => {};
+const NOOP = () => {};
+const NOOP_MARK = (_id: string) => {};
+const FALLBACK: KitchenMessageContextType = {
+  messages: [],
+  unreadCount: 0,
+  sendMessage: NOOP_SEND,
+  markAllRead: NOOP,
+  markRead: NOOP_MARK,
+};
+
 export const useKitchenMessages = () => {
   const ctx = useContext(KitchenMessageContext);
-  if (!ctx) throw new Error('useKitchenMessages must be used within KitchenMessageProvider');
-  return ctx;
+  return ctx ?? FALLBACK;
 };
