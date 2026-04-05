@@ -671,9 +671,29 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       const [t, email] = await Promise.all([getAuthToken(), getUserEmail()]);
       setToken(t);
       setLoggedInEmail(email);
+      // Try fetching residents — admin endpoint first, then direct fetch
       try {
         const res = await getResidents();
-        setBackendResidents(res);
+        if (res && res.length > 0) { setBackendResidents(res); return; }
+      } catch { /* admin endpoint failed, try direct */ }
+      try {
+        const tok = t || await getAuthToken();
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (tok) headers["Authorization"] = `Bearer ${tok}`;
+        const resp = await fetch(`${BASE}/admin/residents`, { headers });
+        if (resp.ok) {
+          const data = await resp.json();
+          const list = Array.isArray(data) ? data : (data?.content ?? data?.data ?? []);
+          setBackendResidents(list.map((r: any) => ({
+            id: String(r.id),
+            name: String(r.fullName ?? r.name ?? [r.firstName, r.lastName].filter(Boolean).join(" ") ?? ""),
+            room: String(r.roomNumber ?? r.room ?? ""),
+            dietaryRestrictions: Array.isArray(r.dietaryRestrictions) ? r.dietaryRestrictions : [],
+            medicalConditions: Array.isArray(r.medicalConditions) ? r.medicalConditions : [],
+            foodAllergies: Array.isArray(r.foodAllergies) ? r.foodAllergies : [],
+            medications: Array.isArray(r.medications) ? r.medications : [],
+          })));
+        }
       } catch { /* silently ignore */ }
     })();
   }, []);
@@ -681,11 +701,18 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   // ── match a userId to a resident ──
   const findResident = useCallback((userId: string): ApiResident | undefined => {
     if (!userId) return undefined;
-    const exact = backendResidents.find((r) => r.id === userId);
+    const uid = String(userId).trim();
+    // exact id match (string comparison)
+    const exact = backendResidents.find((r) => String(r.id).trim() === uid);
     if (exact) return exact;
-    const byName = backendResidents.find((r) => r.name.toLowerCase() === userId.toLowerCase());
+    // by name (exact)
+    const byName = backendResidents.find((r) => r.name.toLowerCase() === uid.toLowerCase());
     if (byName) return byName;
-    return backendResidents.find((r) => r.name.toLowerCase().includes(userId.toLowerCase()));
+    // by name (partial)
+    const partial = backendResidents.find((r) => r.name.toLowerCase().includes(uid.toLowerCase()));
+    if (partial) return partial;
+    // by room number
+    return backendResidents.find((r) => String(r.room).trim() === uid);
   }, [backendResidents]);
 
   // ── logout ──
@@ -806,6 +833,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     const item = orders.find((o) => o.order.id === orderId);
     if (!item) return;
     const resident = findResident(item.order.userId);
+    const roomStr = resident?.room ? ` (Room ${resident.room})` : "";
     // Push into KitchenMessage context so caregiver can see it
     sendMessage({
       residentId: item.order.userId,
@@ -813,9 +841,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       residentRoom: resident?.room ?? "",
       fromRole: "kitchen",
       fromName: loggedInEmail ?? "Kitchen Staff",
-      text: replyText.trim(),
+      text: `[Order #${orderId}] ${replyText.trim()}`,
     });
-    Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}'s order.`);
+    Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}${roomStr}'s order #${orderId}.`);
     setReplyText("");
     setReplyingTo(null);
   };
@@ -1151,7 +1179,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         style={s.replyInput}
                         value={replyText}
                         onChangeText={setReplyText}
-                        placeholder="Message to resident..."
+                        placeholder="e.g. Missing ingredient, substitute available..."
                         placeholderTextColor="#ABABAB"
                         multiline
                       />
