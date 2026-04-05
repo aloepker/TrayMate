@@ -15,8 +15,7 @@ import { useSettings } from './context/SettingsContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
 
-<<<<<<< Updated upstream
-// ── Warm olive palette (matches browse meals, cart, settings) ─────────────────
+// ── Warm olive palette ────────────────────────────────────────────────────────
 const COLORS = {
   primary:      '#717644',
   primaryLight: '#F0EFE6',
@@ -27,27 +26,46 @@ const COLORS = {
   warmBorder:   '#DDD0B8',
   text:         '#1A1A1A',
   textMuted:    '#5C5C5C',
-=======
-const COLORS = {
-  primary: '#717644',
-  primaryLight: '#F4F3EE',
-  surface: '#FFFFFF',
-  background: '#FAF9F6',
-  border: '#E8E6E1',
-  text: '#1A1A1A',
-  textMuted: '#5C5C5C',
-  warmBorder: '#E8DCC8',
->>>>>>> Stashed changes
+  accent:       '#f6a72d',
+  danger:       '#C53030',
+  dangerBg:     '#FFF5F5',
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Returns true if the given date is today. */
+function isToday(date: Date): boolean {
+  const d = new Date(date);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth()    === now.getMonth()    &&
+    d.getDate()     === now.getDate()
+  );
+}
+
+/** Returns the estimated ready time: placedAt + 2 hours */
+function estimatedReadyTime(placedAt: Date): string {
+  const d = new Date(placedAt);
+  d.setHours(d.getHours() + 2);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Returns how many minutes until the estimated ready time; negative if past. */
+function minutesUntilReady(placedAt: Date): number {
+  const ready = new Date(placedAt);
+  ready.setHours(ready.getHours() + 2);
+  return Math.round((ready.getTime() - Date.now()) / 60000);
+}
+
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory } = useCart();
-  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory, clearAllOrders } = useCart();
+  const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const residentId = route?.params?.residentId as string | undefined;
-  const residentName = route?.params?.residentName || 'Resident';
+  const residentId        = route?.params?.residentId as string | undefined;
+  const residentName      = route?.params?.residentName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
 
   useEffect(() => {
@@ -55,65 +73,49 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   useEffect(() => {
-<<<<<<< Updated upstream
-    if (residentId) fetchOrderHistory(residentId);
-  }, [residentId]);
-=======
-    if (residentId) {
-      fetchOrderHistory(residentId);
-    }
-  }, [fetchOrderHistory, residentId]);
->>>>>>> Stashed changes
+    if (!residentId) return;
+    fetchOrderHistory(residentId);
+    const unsub = navigation.addListener('focus', () => fetchOrderHistory(residentId));
+    return unsub;
+  }, [residentId, navigation]);
 
-  const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
+  // ── Only show today's orders ──────────────────────────────────────────────
+  const allResidentOrders = residentId ? getOrdersForResident(residentId) : orders;
+  const residentOrders    = allResidentOrders.filter((o) => isToday(o.placedAt));
 
-  // ── Status config — olive-toned colours ──────────────────────────────────────
+  const activeOrders    = residentOrders.filter((o) => o.status !== 'completed');
+  const completedOrders = residentOrders.filter((o) => o.status === 'completed');
+
+  // ── Status config ─────────────────────────────────────────────────────────
   const statusConfig: Record<
     Order['status'],
     { label: string; color: string; bg: string; featherIcon: string; progress: number }
   > = {
     confirmed: {
       label: t.confirmed,
-<<<<<<< Updated upstream
       color: COLORS.primary,
       bg:    COLORS.primaryLight,
-=======
-      color: '#1d4ed8',
-      bg: '#dbeafe',
->>>>>>> Stashed changes
       featherIcon: 'check-circle',
       progress: 0.25,
     },
     preparing: {
       label: t.preparing,
       color: '#b45309',
-<<<<<<< Updated upstream
       bg:    '#fef3c7',
-=======
-      bg: '#fef3c7',
->>>>>>> Stashed changes
       featherIcon: 'clock',
       progress: 0.5,
     },
     ready: {
       label: t.ready,
       color: '#15803d',
-<<<<<<< Updated upstream
       bg:    '#dcfce7',
-=======
-      bg: '#dcfce7',
->>>>>>> Stashed changes
       featherIcon: 'check-circle',
       progress: 0.75,
     },
     completed: {
       label: t.completed,
       color: '#166534',
-<<<<<<< Updated upstream
       bg:    '#bbf7d0',
-=======
-      bg: '#bbf7d0',
->>>>>>> Stashed changes
       featherIcon: 'check-circle',
       progress: 1.0,
     },
@@ -128,24 +130,30 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   const formatDate = (date: Date) => {
-    const d = new Date(date);
-    const today = new Date();
-    if (d.toDateString() === today.toDateString()) return t.today;
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const d   = new Date(date);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return t.today;
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
     if (d.toDateString() === tomorrow.toDateString()) return t.tomorrow;
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  const activeOrders    = residentOrders.filter((o) => o.status !== 'completed');
-  const completedOrders = residentOrders.filter((o) => o.status === 'completed');
-  const backLabel = t.back?.replace(/^[\s\u2190\u21A9\u2B05]+/, '') || 'Back';
+  const handleClearAll = () => {
+    Alert.alert(
+      'Clear All Orders',
+      'Remove all of today\'s orders from your queue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: clearAllOrders },
+      ],
+    );
+  };
 
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
       <View style={styles.header}>
-<<<<<<< Updated upstream
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { minHeight: touchTarget }]}
@@ -155,27 +163,24 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {t.back?.replace(/^[\s\u2190\u21A9\u2B05]+/, '') || 'Back'}
           </Text>
         </TouchableOpacity>
+
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.upcomingMeals}</Text>
-=======
-        <TouchableOpacity onPress={handleBack} style={[styles.backButton, { minHeight: touchTarget }]}>
-          <Feather name="chevron-left" size={22} color={COLORS.primary} />
-          <Text style={[styles.backText, { fontSize: scaled(16) }]}>{backLabel}</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { fontSize: scaled(24) }]}>{t.upcomingMeals}</Text>
->>>>>>> Stashed changes
         </View>
-        <TouchableOpacity
-          style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-          onPress={() => navigation.navigate('Settings')}
-        >
-<<<<<<< Updated upstream
-          <Feather name="settings" size={20} color={COLORS.primary} />
-=======
-          <Feather name="settings" size={22} color={COLORS.primary} />
->>>>>>> Stashed changes
-        </TouchableOpacity>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {residentOrders.length > 0 && (
+            <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
+              <Feather name="trash-2" size={17} color={COLORS.danger} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Feather name="settings" size={20} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -187,28 +192,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           /* ── Empty state ── */
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconWrap}>
-<<<<<<< Updated upstream
               <Feather name="calendar" size={44} color={COLORS.primary} />
             </View>
             <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
             <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.noUpcomingDesc}</Text>
-=======
-              <Feather name="calendar" size={48} color={COLORS.primary} />
-            </View>
-            <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
-            <Text style={[styles.emptyText, { fontSize: scaled(15), lineHeight: scaled(22) }]}>
-              {t.noUpcomingDesc}
-            </Text>
->>>>>>> Stashed changes
             <TouchableOpacity
               style={styles.browseButton}
               onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
             >
-<<<<<<< Updated upstream
               <Feather name="book-open" size={17} color="#FFF" />
-=======
-              <Feather name="book-open" size={18} color="#FFFFFF" />
->>>>>>> Stashed changes
               <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </View>
@@ -217,14 +209,10 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {/* Meal reminder banner */}
             {notifications.mealReminders && activeOrders.length > 0 && (
               <View style={styles.reminderBanner}>
-<<<<<<< Updated upstream
                 <Feather name="bell" size={14} color="#92400E" />
                 <Text style={[styles.reminderText, { fontSize: scaled(13) }]}>
                   {t.mealReminders}: {t.mealRemindersDesc}
                 </Text>
-=======
-                <Text style={[styles.reminderText, { fontSize: scaled(13) }]}>{t.mealReminders}: {t.mealRemindersDesc}</Text>
->>>>>>> Stashed changes
               </View>
             )}
 
@@ -238,6 +226,9 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                 {activeOrders.map((order) => {
                   const expanded   = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];
+                  const minsLeft   = minutesUntilReady(order.placedAt);
+                  const estReady   = estimatedReadyTime(order.placedAt);
+                  const isOverdue  = minsLeft <= 0;
 
                   return (
                     <TouchableOpacity
@@ -246,6 +237,45 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       onPress={() => toggleExpand(order.id)}
                       activeOpacity={0.85}
                     >
+                      {/* ── Order Confirmation Banner ── */}
+                      <View style={styles.confirmationBanner}>
+                        <View style={styles.confirmationLeft}>
+                          <View style={styles.confirmIcon}>
+                            <Feather name="check" size={13} color="#FFF" />
+                          </View>
+                          <View>
+                            <Text style={styles.confirmTitle}>Order Confirmed</Text>
+                            <Text style={styles.confirmId}>#{order.backendId ?? order.id.slice(-6).toUpperCase()}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.confirmRight}>
+                          <Text style={styles.confirmPlacedLabel}>Placed at</Text>
+                          <Text style={styles.confirmPlacedTime}>{formatTime(order.placedAt)}</Text>
+                        </View>
+                      </View>
+
+                      {/* ── 2-Hour Reminder ── */}
+                      <View style={[styles.reminderRow, isOverdue ? styles.reminderRowReady : styles.reminderRowPending]}>
+                        <Feather
+                          name={isOverdue ? 'check-circle' : 'clock'}
+                          size={14}
+                          color={isOverdue ? '#15803d' : '#b45309'}
+                        />
+                        {isOverdue ? (
+                          <Text style={[styles.reminderRowText, { color: '#15803d' }]}>
+                            Est. ready by {estReady} · Should be ready soon
+                          </Text>
+                        ) : minsLeft <= 30 ? (
+                          <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
+                            Ready in ~{minsLeft} min · Est. {estReady}
+                          </Text>
+                        ) : (
+                          <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
+                            2-hr reminder · Est. ready by {estReady}
+                          </Text>
+                        )}
+                      </View>
+
                       {/* Progress track */}
                       <View style={styles.progressContainer}>
                         <View style={styles.progressTrack}>
@@ -270,26 +300,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                                     isCurrent && styles.progressDotCurrent,
                                   ]}
                                 >
-<<<<<<< Updated upstream
-                                  {isActive && (
-                                    <Feather name="check" size={9} color="#FFF" />
-                                  )}
-=======
-                                  {isActive && <Feather name="check" size={11} color="#FFFFFF" />}
->>>>>>> Stashed changes
+                                  {isActive && <Feather name="check" size={9} color="#FFF" />}
                                 </View>
                                 <Text
                                   style={[
                                     styles.progressStepLabel,
                                     { fontSize: scaled(10) },
-<<<<<<< Updated upstream
                                     isCurrent && { color: statusInfo.color, fontWeight: '700' },
-=======
-                                    isCurrent && styles.progressStepLabelCurrent,
-                                    isCurrent && {
-                                      color: statusInfo.color,
-                                    },
->>>>>>> Stashed changes
                                   ]}
                                 >
                                   {step}
@@ -306,31 +323,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <Text style={[styles.orderLabel, { fontSize: scaled(13) }]}>
                             {formatDate(order.placedAt)} · {formatTime(order.placedAt)}
                           </Text>
-<<<<<<< Updated upstream
                           <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-                            <Feather name={statusInfo.featherIcon} size={11} color={statusInfo.color} />
+                            <Feather name={statusInfo.featherIcon as any} size={11} color={statusInfo.color} />
                             <Text style={[styles.statusText, { fontSize: scaled(12), color: statusInfo.color }]}>
-=======
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: statusInfo.bg },
-                            ]}
-                          >
-                            <Feather name={statusInfo.featherIcon} size={12} color={statusInfo.color} />
-                            <Text
-                              style={[
-                                styles.statusText,
-                                { fontSize: scaled(12) },
-                                { color: statusInfo.color },
-                              ]}
-                            >
->>>>>>> Stashed changes
                               {statusInfo.label}
                             </Text>
                           </View>
                         </View>
-<<<<<<< Updated upstream
                         <Feather
                           name={expanded ? 'chevron-down' : 'chevron-right'}
                           size={20}
@@ -346,22 +345,9 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <View key={`${item.id}-${idx}`} style={styles.mealRow}>
                             {img ? (
                               <Image source={img} style={styles.mealThumb} />
-=======
-                        <Feather name={expanded ? 'chevron-down' : 'chevron-right'} size={22} color={COLORS.textMuted} />
-                      </View>
-
-                      {/* Meal items list */}
-                      {order.items.map((item, idx) => {
-                        const mealImg = getMealImage(item.name);
-                        const ph = getMealPlaceholder(item.name);
-                        return (
-                          <View key={`${item.id}-${idx}`} style={styles.mealRow}>
-                            {mealImg ? (
-                              <Image source={mealImg} style={styles.mealThumb} />
->>>>>>> Stashed changes
                             ) : (
                               <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
-                                <Feather name="coffee" size={18} color={COLORS.primary} />
+                                <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
                               </View>
                             )}
                             <View style={styles.mealRowInfo}>
@@ -373,19 +359,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                               </Text>
                             </View>
                             <View style={styles.mealCalBadge}>
-<<<<<<< Updated upstream
                               <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>
                                 {item.kcal} kcal
                               </Text>
-=======
-                              <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>{item.kcal} kcal</Text>
->>>>>>> Stashed changes
                             </View>
                           </View>
                         );
                       })}
 
-                      {/* Expanded nutrition — NO advance-status button for residents */}
+                      {/* Expanded nutrition */}
                       {expanded && (
                         <View style={styles.expandedSection}>
                           <View style={styles.divider} />
@@ -421,40 +403,21 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                     <View style={styles.completedHeader}>
                       <View style={styles.completedBadge}>
                         <Feather name="check-circle" size={12} color="#166534" />
-<<<<<<< Updated upstream
                         <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>{t.completed}</Text>
-=======
-                        <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>
-                          {t.completed}
-                        </Text>
->>>>>>> Stashed changes
                       </View>
                       <Text style={[styles.completedTime, { fontSize: scaled(13) }]}>
                         {formatDate(order.placedAt)}
                       </Text>
                     </View>
                     {order.items.map((item, idx) => {
-<<<<<<< Updated upstream
                       const img = getMealImage(item.name);
+                      const ph  = getMealPlaceholder(item.name);
                       return (
                         <View key={`${item.id}-${idx}`} style={styles.completedRow}>
                           {img ? (
                             <Image source={img} style={styles.completedThumb} />
                           ) : (
-                            <View style={styles.completedThumbPlaceholder}>
-=======
-                      const mealImg = getMealImage(item.name);
-                      const ph = getMealPlaceholder(item.name);
-                      return (
-                        <View
-                          key={`${item.id}-${idx}`}
-                          style={styles.completedRow}
-                        >
-                          {mealImg ? (
-                            <Image source={mealImg} style={styles.completedThumb} />
-                          ) : (
                             <View style={[styles.completedThumbPlaceholder, { backgroundColor: ph.bg }]}>
->>>>>>> Stashed changes
                               <Feather name="coffee" size={14} color={COLORS.primary} />
                             </View>
                           )}
@@ -464,10 +427,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         </View>
                       );
                     })}
-<<<<<<< Updated upstream
-=======
-                    {/* Completion bar */}
->>>>>>> Stashed changes
                     <View style={styles.completionBar}>
                       <View style={styles.completionFill} />
                     </View>
@@ -485,11 +444,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
               activeOpacity={0.8}
             >
-<<<<<<< Updated upstream
               <Feather name="book-open" size={20} color="#FFF" />
-=======
-              <Feather name="book-open" size={18} color="#FFFFFF" />
->>>>>>> Stashed changes
               <Text style={[styles.browseMenuText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </>
@@ -499,7 +454,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -511,14 +466,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< Updated upstream
     paddingHorizontal: 16,
     paddingTop: 8,
-=======
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
->>>>>>> Stashed changes
     paddingBottom: 14,
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
@@ -526,7 +475,6 @@ const styles = StyleSheet.create({
   },
   backButton: {
     flexDirection: 'row',
-<<<<<<< Updated upstream
     alignItems: 'center',
     gap: 4,
     paddingRight: 8,
@@ -557,41 +505,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  clearBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.dangerBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
 
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 36, paddingTop: 16 },
 
-  // Reminder banner
+  // Reminder banner (notifications setting)
   reminderBanner: {
     flexDirection: 'row',
-=======
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingRight: 8,
-  },
-  backText: {
-    fontSize: 16,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
->>>>>>> Stashed changes
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#FEF3C7',
@@ -601,13 +531,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
-<<<<<<< Updated upstream
   reminderText: {
     color: '#92400E',
     fontWeight: '600',
-=======
-  scrollView: {
->>>>>>> Stashed changes
     flex: 1,
   },
 
@@ -620,16 +546,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 10,
     marginTop: 4,
-  },
-  reminderBanner: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  reminderText: {
-    color: '#92400E',
-    fontWeight: '600',
   },
 
   // Empty state
@@ -647,21 +563,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-<<<<<<< Updated upstream
-=======
-    paddingTop: 80,
-    paddingHorizontal: 40,
-  },
-  emptyIconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: COLORS.primaryLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
->>>>>>> Stashed changes
     marginBottom: 16,
   },
   emptyTitle: {
@@ -682,11 +583,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-<<<<<<< Updated upstream
     backgroundColor: COLORS.primary,
-=======
-    backgroundColor: '#717644',
->>>>>>> Stashed changes
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 14,
@@ -701,7 +598,7 @@ const styles = StyleSheet.create({
   mealCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 18,
-    padding: 18,
+    padding: 16,
     marginBottom: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -710,6 +607,83 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
+  },
+
+  // Order confirmation banner (top of each active card)
+  confirmationBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.warmBorder,
+  },
+  confirmationLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  confirmIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  confirmId: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  confirmRight: {
+    alignItems: 'flex-end',
+  },
+  confirmPlacedLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  confirmPlacedTime: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+
+  // 2-hour reminder row
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  reminderRowPending: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  reminderRowReady: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  reminderRowText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
 
   // Progress bar
@@ -747,9 +721,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
-  progressStepLabelCurrent: {
-    fontWeight: '700',
-  },
 
   // Order meta row
   mealHeader: {
@@ -763,7 +734,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< Updated upstream
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 4,
@@ -772,29 +742,6 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 12, fontWeight: '700' },
 
   // Meal rows
-=======
-    gap: 10,
-    flex: 1,
-  },
-  orderLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A8A8A',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  // Meal rows within an order
->>>>>>> Stashed changes
   mealRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -803,15 +750,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
-<<<<<<< Updated upstream
   mealThumb: { width: 56, height: 56, borderRadius: 14 },
-=======
-  mealThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-  },
->>>>>>> Stashed changes
   mealThumbPlaceholder: {
     width: 56,
     height: 56,
@@ -819,7 +758,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-<<<<<<< Updated upstream
   mealRowInfo: { flex: 1 },
   mealName: { fontSize: 16, fontWeight: '600', color: COLORS.text },
   mealPeriod: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
@@ -830,33 +768,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 5,
-=======
-  mealRowInfo: {
-    flex: 1,
-  },
-  mealName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  mealPeriod: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  mealCal: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  mealCalBadge: {
-    backgroundColor: COLORS.primaryLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
->>>>>>> Stashed changes
   },
   mealCal: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
@@ -903,11 +814,7 @@ const styles = StyleSheet.create({
   completedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< Updated upstream
     gap: 5,
-=======
-    gap: 6,
->>>>>>> Stashed changes
     backgroundColor: '#bbf7d0',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -921,7 +828,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 5,
   },
-<<<<<<< Updated upstream
   completedThumb: { width: 38, height: 38, borderRadius: 10 },
   completedThumbPlaceholder: {
     width: 38,
@@ -930,24 +836,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-=======
-  completedThumb: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-  },
-  completedThumbPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  completedMealName: {
-    fontSize: 15,
-    color: COLORS.textMuted,
-    flex: 1,
->>>>>>> Stashed changes
   },
   completedMealName: { fontSize: 15, color: COLORS.textMuted, flex: 1 },
   completionBar: {
@@ -982,15 +870,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-<<<<<<< Updated upstream
   browseMenuText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
-=======
-  browseMenuText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
->>>>>>> Stashed changes
 });
 
 export default UpcomingMealsScreen;
