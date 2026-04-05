@@ -16,7 +16,7 @@ import {
 import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
-import { getMealImage, getMealPlaceholder } from "../../services/mealDisplayService";
+import { getMealPlaceholder } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident } from "../../services/api";
 import { clearAuth, getAuthToken } from "../../services/storage";
 
@@ -89,6 +89,7 @@ interface ApiOrder {
     id: number;
     name: string;
     description: string;
+    imageUrl?: string;
     allergenInfo?: string;
   }>;
 }
@@ -689,42 +690,30 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           orders.map((item) => {
             const st = statusStyle(item.order.status);
             const resident = findResident(item.order.userId);
-            const badges = [
-              ...(resident?.foodAllergies ?? []).map((a) => ({ label: a, color: C.danger, bg: C.dangerBg })),
-              ...(resident?.dietaryRestrictions ?? []).map((d) => ({ label: d, color: C.success, bg: C.successBg })),
-              ...(resident?.medicalConditions ?? []).map((m) => ({ label: m, color: "#7c3aed", bg: "#F3E8FF" })),
-            ];
+            const allergies = resident?.foodAllergies ?? [];
+            const dietary   = resident?.dietaryRestrictions ?? [];
+            const medical   = resident?.medicalConditions ?? [];
+            const initials  = (resident?.name ?? item.order.userId).slice(0, 2).toUpperCase();
+
             return (
               <View key={item.order.id} style={s.card}>
-                {/* Card header */}
-                <View style={s.cardHeader}>
-                  <View style={{ gap: 3 }}>
-                    <Text style={s.orderId}>Order #{item.order.id}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Feather name="user" size={13} color={C.textMuted} />
-                      <Text style={s.userId}>{resident?.name ?? item.order.userId}</Text>
+
+                {/* ── Top row: avatar + resident info + status pill ── */}
+                <View style={s.cardTop}>
+                  <View style={s.residentAvatar}>
+                    <Text style={s.residentInitials}>{initials}</Text>
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <Text style={s.orderId}>#{item.order.id}</Text>
+                      {resident?.room ? (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          <Feather name="home" size={11} color={C.textMuted} />
+                          <Text style={s.roomText}>Room {resident.room}</Text>
+                        </View>
+                      ) : null}
                     </View>
-                    {resident?.room ? (
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                        <Feather name="home" size={12} color={C.textMuted} />
-                        <Text style={[s.userId, { fontSize: 12 }]}>Room {resident.room}</Text>
-                      </View>
-                    ) : null}
-                    {/* Dietary / allergy badges */}
-                    {badges.length > 0 && (
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-                        {badges.slice(0, 4).map((b, i) => (
-                          <View key={i} style={{ backgroundColor: b.bg, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
-                            <Text style={{ fontSize: 10, fontWeight: "700", color: b.color }}>{b.label}</Text>
-                          </View>
-                        ))}
-                        {badges.length > 4 && (
-                          <View style={{ backgroundColor: C.surface, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1, borderColor: C.border }}>
-                            <Text style={{ fontSize: 10, fontWeight: "700", color: C.textMuted }}>+{badges.length - 4} more</Text>
-                          </View>
-                        )}
-                      </View>
-                    )}
                   </View>
                   <View style={[s.statusPill, { backgroundColor: st.bg }]}>
                     <Feather name={st.icon} size={12} color={st.text} />
@@ -734,23 +723,49 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   </View>
                 </View>
 
-                {/* Meals in this order */}
-                {item.meals.map((meal) => {
-                  const img = getMealImage(meal.name);
-                  const ph  = getMealPlaceholder(meal.name);
+                {/* ── Dietary / allergy / medical badges ── */}
+                {(allergies.length > 0 || dietary.length > 0 || medical.length > 0) && (
+                  <View style={s.badgeRow}>
+                    {allergies.map((a, i) => (
+                      <View key={`a${i}`} style={[s.badge, { backgroundColor: C.dangerBg }]}>
+                        <Feather name="alert-triangle" size={9} color={C.danger} />
+                        <Text style={[s.badgeText, { color: C.danger }]}>{a}</Text>
+                      </View>
+                    ))}
+                    {dietary.map((d, i) => (
+                      <View key={`d${i}`} style={[s.badge, { backgroundColor: C.successBg }]}>
+                        <Feather name="leaf" size={9} color={C.success} />
+                        <Text style={[s.badgeText, { color: C.success }]}>{d}</Text>
+                      </View>
+                    ))}
+                    {medical.map((m, i) => (
+                      <View key={`m${i}`} style={[s.badge, { backgroundColor: "#F3E8FF" }]}>
+                        <Feather name="activity" size={9} color="#7c3aed" />
+                        <Text style={[s.badgeText, { color: "#7c3aed" }]}>{m}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* ── Divider ── */}
+                <View style={s.divider} />
+
+                {/* ── Meals ── */}
+                {item.meals.map((meal, idx) => {
+                  const ph = getMealPlaceholder(meal.name);
                   return (
-                    <View key={meal.id} style={s.mealRow}>
-                      {img ? (
-                        <Image source={img} style={s.mealThumb} />
+                    <View key={meal.id} style={[s.mealRow, idx > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
+                      {meal.imageUrl ? (
+                        <Image source={{ uri: meal.imageUrl }} style={s.mealThumb} />
                       ) : (
                         <View style={[s.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
-                          <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
+                          <Text style={{ fontSize: 24 }}>{ph.emoji}</Text>
                         </View>
                       )}
-                      <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1, gap: 3 }}>
                         <Text style={s.mealName}>{meal.name}</Text>
                         {meal.description ? (
-                          <Text style={s.mealDesc} numberOfLines={1}>{meal.description}</Text>
+                          <Text style={s.mealDesc} numberOfLines={2}>{meal.description}</Text>
                         ) : null}
                         {meal.allergenInfo ? (
                           <View style={s.allergenRow}>
@@ -763,41 +778,30 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   );
                 })}
 
-                {/* Status toggle buttons */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
-                  <View style={{ flexDirection: "row", gap: 6 }}>
-                    {(["pending", "preparing", "ready", "served"] as Status[]).map((status) => {
-                      const active = item.order.status === status;
-                      const st2 = statusStyle(status);
-                      return (
-                        <TouchableOpacity
-                          key={status}
-                          style={[
-                            s.statusBtn,
-                            active
-                              ? { backgroundColor: st2.text, borderColor: st2.text }
-                              : { backgroundColor: C.primaryLight, borderColor: C.border },
-                          ]}
-                          onPress={() => handleStatusChange(item.order.id, status)}
-                        >
-                          <Feather
-                            name={st2.icon}
-                            size={12}
-                            color={active ? "#FFF" : C.textMuted}
-                          />
-                          <Text
-                            style={[
-                              s.statusBtnText,
-                              { color: active ? "#FFF" : C.textMuted },
-                            ]}
-                          >
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
+                {/* ── Status buttons — 2×2 grid ── */}
+                <View style={s.statusGrid}>
+                  {(["pending", "preparing", "ready", "served"] as Status[]).map((status) => {
+                    const active = item.order.status === status;
+                    const st2 = statusStyle(status);
+                    return (
+                      <TouchableOpacity
+                        key={status}
+                        style={[
+                          s.statusBtn,
+                          active
+                            ? { backgroundColor: st2.text, borderColor: st2.text }
+                            : { backgroundColor: C.surface, borderColor: C.border },
+                        ]}
+                        onPress={() => handleStatusChange(item.order.id, status)}
+                      >
+                        <Feather name={st2.icon} size={13} color={active ? "#FFF" : C.textMuted} />
+                        <Text style={[s.statusBtnText, { color: active ? "#FFF" : C.textMuted }]}>
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             );
           })
@@ -1061,41 +1065,61 @@ const s = StyleSheet.create({
   // Order cards
   card: {
     backgroundColor: C.surface,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
-    marginBottom: 14,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: C.border,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  cardHeader: {
+
+  // Card top row
+  cardTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
   },
-  orderId: {
+  residentAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.primaryLight,
+    borderWidth: 1.5,
+    borderColor: C.warmBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  residentInitials: {
     fontSize: 15,
+    fontWeight: "800",
+    color: C.primary,
+  },
+  residentName: {
+    fontSize: 16,
     fontWeight: "700",
     color: C.text,
   },
-  userId: {
-    fontSize: 13,
+  orderId: {
+    fontSize: 12,
+    fontWeight: "600",
     color: C.textMuted,
+  },
+  roomText: {
+    fontSize: 12,
+    color: C.textMuted,
+    fontWeight: "500",
   },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     borderRadius: 20,
   },
   statusPillText: {
@@ -1103,36 +1127,61 @@ const s = StyleSheet.create({
     fontWeight: "700",
   },
 
+  // Badge row (dietary/allergy/medical)
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  // Divider
+  divider: {
+    height: 1,
+    backgroundColor: C.border,
+    marginBottom: 12,
+  },
+
   // Meal row within a card
   mealRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+    paddingVertical: 10,
   },
   mealThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 14,
   },
   mealThumbPlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   mealName: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: C.text,
   },
   mealDesc: {
     fontSize: 12,
     color: C.textMuted,
-    marginTop: 2,
+    lineHeight: 17,
   },
   allergenRow: {
     flexDirection: "row",
@@ -1143,28 +1192,29 @@ const s = StyleSheet.create({
   allergenText: {
     fontSize: 12,
     color: C.danger,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
-  // Status toggle row
-  statusRow: {
+  // Status 2×2 grid
+  statusGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    marginTop: 12,
+    marginTop: 14,
   },
   statusBtn: {
-    flex: 1,
+    width: "47%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 9,
-    borderRadius: 10,
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 12,
     borderWidth: 1,
   },
   statusBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   // Empty state
