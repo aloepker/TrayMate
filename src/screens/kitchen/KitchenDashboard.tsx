@@ -18,7 +18,7 @@ import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageCon
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident } from "../../services/api";
-import { clearAuth, getAuthToken } from "../../services/storage";
+import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 
 // ─── Palette (matches app-wide theme) ─────────────────────────────────────────
 const C = {
@@ -330,50 +330,6 @@ interface SeasonalEntry {
   tag: string;
 }
 
-// ─── Cook Name Modal ───────────────────────────────────────────────────────────
-interface CookNameModalProps {
-  visible: boolean;
-  onConfirm: (cookName: string) => void;
-  onCancel: () => void;
-}
-const CookNameModal: React.FC<CookNameModalProps> = ({ visible, onConfirm, onCancel }) => {
-  const [name, setName] = useState("");
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
-        <View style={{ backgroundColor: C.surface, borderRadius: 20, padding: 24, width: "100%", gap: 14 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Feather name="user-check" size={18} color={C.primary} />
-            <Text style={{ fontSize: 17, fontWeight: "700", color: C.text }}>Who's cooking?</Text>
-          </View>
-          <Text style={{ fontSize: 14, color: C.textMuted }}>Enter the cook's name (optional)</Text>
-          <TextInput
-            style={{ backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: C.text }}
-            value={name}
-            onChangeText={setName}
-            placeholder="Cook name…"
-            placeholderTextColor="#ABABAB"
-            autoFocus
-          />
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <TouchableOpacity
-              style={{ flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: C.primaryLight, alignItems: "center", borderWidth: 1, borderColor: C.border }}
-              onPress={() => { setName(""); onCancel(); }}
-            >
-              <Text style={{ fontWeight: "600", color: C.textMuted }}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: C.primary, alignItems: "center" }}
-              onPress={() => { onConfirm(name); setName(""); }}
-            >
-              <Text style={{ fontWeight: "700", color: "#FFF" }}>Confirm</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-};
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
@@ -383,20 +339,19 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [activeTab, setActiveTab] = useState<MealPeriod>("Breakfast");
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
+  const [loggedInEmail, setLoggedInEmail] = useState<string | null>(null);
   const [backendResidents, setBackendResidents] = useState<ApiResident[]>([]);
 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
 
-  // cook-name modal state
-  const [cookModal, setCookModal] = useState<{ orderId: number; status: Status } | null>(null);
-
-  // ── load token + residents on mount ──
+  // ── load token + email + residents on mount ──
   useEffect(() => {
     (async () => {
-      const t = await getAuthToken();
+      const [t, email] = await Promise.all([getAuthToken(), getUserEmail()]);
       setToken(t);
+      setLoggedInEmail(email);
       try {
         const res = await getResidents();
         setBackendResidents(res);
@@ -469,36 +424,30 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   };
 
   const handleStatusChange = (orderId: number, status: Status) => {
-    if (status === "preparing") {
-      setCookModal({ orderId, status });
-    } else {
-      applyStatusChange(orderId, status);
-    }
+    // Pass the logged-in email automatically as cook when setting "preparing"
+    const cook = status === "preparing" ? (loggedInEmail ?? undefined) : undefined;
+    applyStatusChange(orderId, status, cook);
   };
 
   // ── bulk status update ──
-  const handleBulkStatus = async (status: Status) => {
+  const handleBulkStatus = (status: Status) => {
     const label = status.charAt(0).toUpperCase() + status.slice(1);
-    const doBulk = async (cookName?: string) => {
-      const prevOrders = orders;
-      setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
-      try {
-        const today = new Date().toISOString().split("T")[0];
-        const tok = token || await getAuthToken();
-        await apiSetStatusBulk(activeTab, today, status, cookName, tok);
-      } catch {
-        setOrders(prevOrders);
-        Alert.alert("Error", "Could not update all orders. Please try again.");
-      }
-    };
-    if (status === "preparing") {
-      setCookModal({ orderId: -1, status }); // -1 signals bulk
-    } else {
-      Alert.alert(`Mark All as ${label}?`, `This will update all ${activeTab} orders to "${label}".`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Confirm", onPress: () => doBulk() },
-      ]);
-    }
+    Alert.alert(`Mark All as ${label}?`, `This will update all ${activeTab} orders to "${label}".`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Confirm", onPress: async () => {
+        const prevOrders = orders;
+        setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          const tok = token || await getAuthToken();
+          const cook = status === "preparing" ? (loggedInEmail ?? undefined) : undefined;
+          await apiSetStatusBulk(activeTab, today, status, cook, tok);
+        } catch {
+          setOrders(prevOrders);
+          Alert.alert("Error", "Could not update all orders. Please try again.");
+        }
+      }},
+    ]);
   };
 
   const counts = {
@@ -825,33 +774,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         unreadCount={unreadCount}
       />
 
-      {/* ── Cook Name Modal ── */}
-      <CookNameModal
-        visible={cookModal !== null}
-        onConfirm={(cookName) => {
-          if (!cookModal) return;
-          if (cookModal.orderId === -1) {
-            // bulk
-            const prevOrders = orders;
-            const status: Status = "preparing";
-            setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
-            (async () => {
-              try {
-                const today = new Date().toISOString().split("T")[0];
-                const tok = token || await getAuthToken();
-                await apiSetStatusBulk(activeTab, today, status, cookName, tok);
-              } catch {
-                setOrders(prevOrders);
-                Alert.alert("Error", "Could not update all orders. Please try again.");
-              }
-            })();
-          } else {
-            applyStatusChange(cookModal.orderId, cookModal.status, cookName);
-          }
-          setCookModal(null);
-        }}
-        onCancel={() => setCookModal(null)}
-      />
     </SafeAreaView>
   );
 };
