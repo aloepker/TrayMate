@@ -96,7 +96,7 @@ export default function Login({ navigation }: any) {
         <TextInput
           value={email}
           onChangeText={setEmail}
-          placeholder="caregiver@traymate.com"
+          placeholder="you@traymate.com"
           placeholderTextColor="#8E8E93"
           keyboardType="email-address"
           autoCapitalize="none"
