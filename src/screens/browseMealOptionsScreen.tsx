@@ -214,24 +214,24 @@ type PeriodOption = {
 
 // ── Per-period header themes ──────────────────────────────────────────────────
 const PERIOD_THEMES: Record<string, {
-  bg: string;           // header background
-  titleColor: string;   // main title text
-  subColor: string;     // subtitle + date text
-  tabActiveBg: string;  // active tab pill background
+  bg: string;
+  titleColor: string;
+  subColor: string;
+  tabActiveBg: string;
   tabActiveText: string;
   tabInactiveBg: string;
   tabInactiveText: string;
-  icon: string;         // decorative emoji in corner
-  buttonBg: string;     // floating action button bg
+  icon: string;
+  buttonBg: string;
   buttonBorder: string;
 }> = {
-  allDay:     { bg: '#FFFFFF',  titleColor: '#111827', subColor: '#6B7280', tabActiveBg: '#717644', tabActiveText: '#FFF', tabInactiveBg: 'rgba(0,0,0,0.05)', tabInactiveText: '#374151', icon: '🍽', buttonBg: '#FFFFFF', buttonBorder: 'rgba(113,118,68,0.25)' },
-  breakfast:  { bg: '#FEF3C7', titleColor: '#78350F', subColor: '#92400E', tabActiveBg: '#D97706', tabActiveText: '#FFF', tabInactiveBg: 'rgba(217,119,6,0.12)', tabInactiveText: '#92400E', icon: '🌅', buttonBg: '#FFFBEB', buttonBorder: 'rgba(217,119,6,0.3)' },
-  lunch:      { bg: '#ECFDF5', titleColor: '#064E3B', subColor: '#065F46', tabActiveBg: '#059669', tabActiveText: '#FFF', tabInactiveBg: 'rgba(5,150,105,0.1)',  tabInactiveText: '#065F46', icon: '☀️', buttonBg: '#F0FDF4', buttonBorder: 'rgba(5,150,105,0.25)' },
-  dinner:     { bg: '#1E1B4B', titleColor: '#E0E7FF', subColor: '#A5B4FC', tabActiveBg: '#6366F1', tabActiveText: '#FFF', tabInactiveBg: 'rgba(165,180,252,0.15)', tabInactiveText: '#C7D2FE', icon: '🌙', buttonBg: '#2E2A5B', buttonBorder: 'rgba(165,180,252,0.3)' },
-  beverages:  { bg: '#E0F2FE', titleColor: '#0C4A6E', subColor: '#075985', tabActiveBg: '#0284C7', tabActiveText: '#FFF', tabInactiveBg: 'rgba(2,132,199,0.1)',  tabInactiveText: '#075985', icon: '🥤', buttonBg: '#F0F9FF', buttonBorder: 'rgba(2,132,199,0.25)' },
-  desserts:   { bg: '#FDF2F8', titleColor: '#701A75', subColor: '#86198F', tabActiveBg: '#C026D3', tabActiveText: '#FFF', tabInactiveBg: 'rgba(192,38,211,0.1)', tabInactiveText: '#86198F', icon: '🍰', buttonBg: '#FFF0FB', buttonBorder: 'rgba(192,38,211,0.25)' },
-  seasonal:   { bg: '#F0FDF4', titleColor: '#14532D', subColor: '#166534', tabActiveBg: '#16A34A', tabActiveText: '#FFF', tabInactiveBg: 'rgba(22,163,74,0.1)',  tabInactiveText: '#166534', icon: '🌸', buttonBg: '#F0FDF4', buttonBorder: 'rgba(22,163,74,0.25)' },
+  allDay:    { bg: '#FAFAF8', titleColor: '#1C1C1C', subColor: '#888880', tabActiveBg: '#717644', tabActiveText: '#FFF', tabInactiveBg: 'rgba(0,0,0,0.04)',    tabInactiveText: '#555550', icon: '🍽',  buttonBg: '#FFFFFF', buttonBorder: 'rgba(113,118,68,0.2)'  },
+  breakfast: { bg: '#FFFCF5', titleColor: '#3B2A14', subColor: '#8A6A40', tabActiveBg: '#9A7230', tabActiveText: '#FFF', tabInactiveBg: 'rgba(154,114,48,0.08)', tabInactiveText: '#7A5A30', icon: '🌅', buttonBg: '#FFFDF8', buttonBorder: 'rgba(154,114,48,0.2)'  },
+  lunch:     { bg: '#F7FAF8', titleColor: '#1A3028', subColor: '#4A6A58', tabActiveBg: '#4A7A60', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,96,0.07)',  tabInactiveText: '#3A5A48', icon: '☀️', buttonBg: '#F5F9F6', buttonBorder: 'rgba(74,122,96,0.2)'   },
+  dinner:    { bg: '#22213A', titleColor: '#D8DAF0', subColor: '#8A8DB0', tabActiveBg: '#5C5FA8', tabActiveText: '#FFF', tabInactiveBg: 'rgba(200,205,240,0.1)', tabInactiveText: '#A8AACC', icon: '🌙', buttonBg: '#2E2C4A', buttonBorder: 'rgba(200,205,240,0.18)' },
+  beverages: { bg: '#F5F9FC', titleColor: '#1A3040', subColor: '#4A6A80', tabActiveBg: '#4A7A9A', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,154,0.07)', tabInactiveText: '#3A607A', icon: '🥤', buttonBg: '#F2F7FA', buttonBorder: 'rgba(74,122,154,0.2)'  },
+  desserts:  { bg: '#FCF7FA', titleColor: '#32142A', subColor: '#7A4A68', tabActiveBg: '#8A4A72', tabActiveText: '#FFF', tabInactiveBg: 'rgba(138,74,114,0.07)', tabInactiveText: '#6A3A58', icon: '🍰', buttonBg: '#FAF4F8', buttonBorder: 'rgba(138,74,114,0.2)'  },
+  seasonal:  { bg: '#F6FAF6', titleColor: '#1A3020', subColor: '#4A6848', tabActiveBg: '#4A7850', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,120,80,0.07)',  tabInactiveText: '#3A5840', icon: '🌸', buttonBg: '#F4F9F4', buttonBorder: 'rgba(74,120,80,0.2)'   },
 };
 
 const PERIOD_KEYS: PeriodOption[] = [
@@ -1314,7 +1314,7 @@ const styles = StyleSheet.create({
     top: 10,
     right: 80,
     fontSize: 72,
-    opacity: 0.12,
+    opacity: 0.07,
     zIndex: 0,
   },
   titleRow: {
