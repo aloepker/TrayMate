@@ -980,33 +980,67 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const orderNote = item.order.note || item.order.specialInstructions || "";
             const isReplying = replyingTo === item.order.id;
 
+            // Per-order notification: messages sent for this order's resident
+            const orderMessages = messages.filter(
+              (m) => m.residentId === item.order.userId
+            );
+            const unreadOrderMsgs = orderMessages.filter((m) => !m.read).length;
+
             return (
               <View key={item.order.id} style={s.card}>
                 {/* ── Period indicator strip on left ── */}
                 <View style={[s.cardPeriodStrip, { backgroundColor: pa.color }]} />
 
-                {/* ── Top row: avatar + resident info + period pill + status pill ── */}
+                {/* ── Top row: room + resident + period + status ── */}
                 <View style={s.cardTop}>
-                  <View style={s.residentAvatar}>
-                    <Text style={s.residentInitials}>{initials}</Text>
+                  {/* Room number avatar (prominent) */}
+                  <View style={[s.residentAvatar, { backgroundColor: pa.light }]}>
+                    <Feather name="home" size={12} color={pa.color} />
+                    <Text style={[s.residentInitials, { color: pa.color, fontSize: 13 }]}>
+                      {resident?.room ?? "—"}
+                    </Text>
                   </View>
                   <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <Text style={s.orderId}>#{item.order.id}</Text>
+                    {/* Resident name + room label */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
                       {resident?.room ? (
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                          <Feather name="home" size={11} color={C.textMuted} />
-                          <Text style={s.roomText}>Room {resident.room}</Text>
-                        </View>
+                        <Text style={s.roomLabel}>Rm {resident.room}</Text>
                       ) : null}
-                      {/* Period pill on the order card */}
+                    </View>
+                    {/* Order # + period pill */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <Text style={s.orderId}>Order #{item.order.id}</Text>
                       <View style={[s.periodPill, { backgroundColor: pa.light, borderColor: pa.color }]}>
                         <Feather name={pa.icon as any} size={9} color={pa.color} />
                         <Text style={[s.periodPillText, { color: pa.color }]}>{orderPeriod}</Text>
                       </View>
                     </View>
                   </View>
+                  {/* Per-order notification bell */}
+                  <TouchableOpacity
+                    style={[s.orderBellBtn, unreadOrderMsgs > 0 && s.orderBellBtnActive]}
+                    onPress={() => {
+                      if (orderMessages.length === 0) {
+                        Alert.alert("No Messages", `No messages for order #${item.order.id}`);
+                      } else {
+                        Alert.alert(
+                          `Messages · Order #${item.order.id}`,
+                          orderMessages.map((m) => `${m.fromRole === "kitchen" ? "🍳" : "👤"} ${m.fromName}: ${m.text}`).join("\n\n")
+                        );
+                        // Mark messages for this resident as read
+                        orderMessages.forEach((m) => { if (!m.read) markRead(m.id); });
+                      }
+                    }}
+                  >
+                    <Feather name="bell" size={15} color={unreadOrderMsgs > 0 ? C.danger : C.textMuted} />
+                    {unreadOrderMsgs > 0 && (
+                      <View style={s.orderBellDot}>
+                        <Text style={s.orderBellDotText}>{unreadOrderMsgs}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  {/* Status pill */}
                   <View style={[s.statusPill, { backgroundColor: st.bg }]}>
                     <Feather name={st.icon} size={12} color={st.text} />
                     <Text style={[s.statusPillText, { color: st.text }]}>
@@ -1424,6 +1458,48 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: C.textMuted,
     fontWeight: "500",
+  },
+  roomLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: C.textMuted,
+    backgroundColor: C.primaryLight,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  orderBellBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.border,
+    marginRight: 6,
+  },
+  orderBellBtnActive: {
+    backgroundColor: C.dangerBg,
+    borderColor: "#FECACA",
+  },
+  orderBellDot: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: C.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  orderBellDotText: {
+    color: "#FFF",
+    fontSize: 9,
+    fontWeight: "800",
   },
   statusPill: {
     flexDirection: "row",
