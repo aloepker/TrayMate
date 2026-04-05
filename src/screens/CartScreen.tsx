@@ -16,6 +16,23 @@ import {
   translateMealName,
   translateMealPeriod,
 } from '../services/mealLocalization';
+import { ResidentService } from '../services/localDataService';
+
+const COLORS = {
+  primary: '#717644',
+  primaryLight: '#F4F3EE',
+  surface: '#FFFFFF',
+  background: '#FAF9F6',
+  border: '#E8E6E1',
+  text: '#1A1A1A',
+  textMuted: '#5C5C5C',
+  accent: '#717644',
+  danger: '#C53030',
+  dangerBg: '#FFF5F5',
+  success: '#2D6A4F',
+  warmBg: '#FDF8F0',
+  warmBorder: '#E8DCC8',
+};
 
 const CartScreen = ({ navigation, route }: any) => {
   const { cart: cartItems, removeFromCart, placeOrder, replaceOrder, getTotalNutrition } = useCart();
@@ -26,111 +43,136 @@ const CartScreen = ({ navigation, route }: any) => {
     setCurrentResidentId(route?.params?.residentId ?? null);
   }, [route?.params?.residentId, setCurrentResidentId]);
 
-  const residentId = route?.params?.residentId as string | undefined;
-  const residentName = route?.params?.residentName;
-  const dietaryRestrictions = route?.params?.dietaryRestrictions;
+  const residentId =
+    (route?.params?.residentId as string | undefined) ||
+    ResidentService.getDefaultResident().id;
+  const residentName =
+    route?.params?.residentName ||
+    ResidentService.getResidentById(residentId)?.fullName ||
+    ResidentService.getDefaultResident().fullName;
+  const dietaryRestrictions = route?.params?.dietaryRestrictions ?? [];
 
   const confirmOrder = async () => {
-    const { order, conflict } = await placeOrder(residentId);
+    try {
+      const { order, conflict } = await placeOrder(residentId);
 
-    if (conflict && conflict.id > 0) {
-      Alert.alert(
-        'Order Already Exists',
-        `You already have a pending ${conflict.mealOfDay} order for ${conflict.date}. Replace it with this cart?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Replace Order',
-            onPress: async () => {
-              const replaced = await replaceOrder(conflict.id, residentId || 'unknown');
-              if (replaced && notifications.orderUpdates) {
-                Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
-              }
-              navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+      if (conflict && conflict.id > 0) {
+        Alert.alert(
+          'Order Already Exists',
+          `You already have a pending ${conflict.mealOfDay} order for ${conflict.date}. Replace it with this cart?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Replace Order',
+              onPress: async () => {
+                const replaced = await replaceOrder(conflict.id, residentId);
+                if (replaced && notifications.orderUpdates) {
+                  Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
+                }
+                navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+              },
             },
-          },
-        ]
-      );
-      return;
-    }
+          ]
+        );
+        return;
+      }
 
-    if (order && notifications.orderUpdates) {
-      Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
+      if (order && notifications.orderUpdates) {
+        Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
+      }
+      navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+    } catch (error) {
+      console.warn('Failed to confirm order:', error);
+      Alert.alert('Unable to confirm order', 'Please try again.');
     }
-    navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
   };
 
   const totals = getTotalNutrition();
-  const backLabel = t.backToMenu?.replace(/^[\s←↩⬅]+/, '') || 'Back to Menu';
+  const backLabel = t.backToMenu.replace(/^[\s←↩⬅]+/, '');
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-
-      {/* ── Header ── */}
-      <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+      {/* Header */}
+      <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={[styles.backButton, { minHeight: touchTarget, borderColor: theme.border }]}
+          style={[styles.backButton, { minHeight: touchTarget }]}
         >
-          <Feather name="chevron-left" size={18} color={theme.accent} />
-          <Text style={[styles.backText, { fontSize: scaled(16), color: theme.accent }]}>{backLabel}</Text>
+          <Feather name="chevron-left" size={22} color={COLORS.primary} />
+          <Text style={[styles.backText, { fontSize: scaled(16) }]}>{backLabel}</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontSize: scaled(28), color: theme.textPrimary }]}>{t.yourCart}</Text>
-        <Text style={[styles.headerSubtitle, { fontSize: scaled(14), color: theme.textSecondary }]}>
-          {cartItems.length} {cartItems.length === 1 ? t.itemsReady?.split(' ')[0] : t.itemsReady}
-        </Text>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.headerTitle, { fontSize: scaled(26) }]}>{t.yourCart}</Text>
+          <Text style={[styles.headerSubtitle, { fontSize: scaled(14) }]}>
+            {cartItems.length} {cartItems.length === 1 ? t.itemsReady.split(' ')[0] : t.itemsReady}
+          </Text>
+        </View>
+        <View style={{ width: 60 }} />
       </View>
 
+      {/* Nutrition summary bar — shown when cart has items */}
+      {cartItems.length > 0 && (
+        <View style={styles.nutritionBar}>
+          <View style={styles.nutritionBarItem}>
+            <Text style={[styles.nutritionBarValue, { fontSize: scaled(18) }]}>{totals.calories}</Text>
+            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>kcal</Text>
+          </View>
+          <View style={styles.nutritionBarDivider} />
+          <View style={styles.nutritionBarItem}>
+            <Text style={[styles.nutritionBarValue, { fontSize: scaled(18) }]}>{totals.sodium}<Text style={styles.nutritionBarUnit}>mg</Text></Text>
+            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>sodium</Text>
+          </View>
+          <View style={styles.nutritionBarDivider} />
+          <View style={styles.nutritionBarItem}>
+            <Text style={[styles.nutritionBarValue, { fontSize: scaled(18) }]}>{totals.protein}<Text style={styles.nutritionBarUnit}>g</Text></Text>
+            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>protein</Text>
+          </View>
+        </View>
+      )}
+
       {cartItems.length === 0 ? (
-        /* ── Empty state ── */
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconWrap}>
-            <Feather name="shopping-bag" size={52} color="#717644" />
+            <Feather name="shopping-bag" size={48} color={COLORS.primary} />
           </View>
-          <Text style={[styles.emptyTitle, { fontSize: scaled(24) }]}>{t.cartEmpty}</Text>
-          <Text style={[styles.emptyText, { fontSize: scaled(16) }]}>{t.cartEmptyDesc}</Text>
+          <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.cartEmpty}</Text>
+          <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.cartEmptyDesc}</Text>
           <TouchableOpacity
             style={styles.browseButton}
             onPress={() => navigation.goBack()}
           >
-            <Feather name="book-open" size={18} color="#FFF" />
+            <Feather name="book-open" size={18} color="#FFFFFF" />
             <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-
-            {/* ── Cart Items ── */}
             {cartItems.map((item, index) => (
-              <View
-                key={`${item.id}-${index}`}
-                style={[styles.cartCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              >
-                {/* Olive left accent stripe */}
-                <View style={[styles.cardAccent, { backgroundColor: theme.accent }]} />
-
-                <View style={styles.cartCardHeader}>
-                  <View style={styles.cartCardInfo}>
-                    <Text style={[styles.cartItemName, { fontSize: scaled(18) }]}>
-                      {translateMealName(item.name, language)}
+              <View key={`${item.id}-${index}`} style={styles.cartCard}>
+                {/* Row 1: Period badge + remove */}
+                <View style={styles.cartCardTopRow}>
+                  <View style={styles.periodBadge}>
+                    <Text style={[styles.periodBadgeText, { fontSize: scaled(11) }]}>
+                      {translateMealPeriod(item.meal_period, language)}
                     </Text>
-                    <View style={styles.periodBadge}>
-                      <Text style={[styles.periodBadgeText, { fontSize: scaled(11) }]}>
-                        {translateMealPeriod(item.meal_period, language)}
-                      </Text>
-                    </View>
                   </View>
                   <TouchableOpacity
                     style={[styles.removeButton, { minHeight: touchTarget, justifyContent: 'center' }]}
                     onPress={() => removeFromCart(index)}
                   >
-                    <Feather name="x" size={13} color="#991b1b" />
-                    <Text style={[styles.removeButtonText, { fontSize: scaled(13) }]}>{t.remove}</Text>
+                    <Feather name="x" size={16} color={COLORS.danger} />
+                    <Text style={styles.removeText}>Remove</Text>
                   </TouchableOpacity>
                 </View>
 
-                <Text style={[styles.cartItemDescription, { fontSize: scaled(14), color: theme.textPrimary }]}>
+                {/* Row 2: Meal name */}
+                <Text style={[styles.cartItemName, { fontSize: scaled(20) }]}>
+                  {translateMealName(item.name, language)}
+                </Text>
+
+                {/* Row 3: Description */}
+                <Text style={[styles.cartItemDescription, { fontSize: scaled(14) }]}>
                   {translateMealDescription(item.description, language)}
                 </Text>
 
@@ -141,56 +183,39 @@ const CartScreen = ({ navigation, route }: any) => {
                   </View>
                 ) : null}
 
+                {/* Row 4: Nutrition */}
                 <View style={styles.nutritionRow}>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.kcal} {t.calories}</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.kcal} kcal</Text>
                   </View>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.sodium_mg} mg {t.sodium}</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.sodium_mg}mg sodium</Text>
                   </View>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.protein_g} g {t.protein}</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.protein_g}g protein</Text>
                   </View>
                 </View>
               </View>
             ))}
 
-            {/* ── Total Nutrition card ── */}
-            <View style={styles.totalsCard}>
-              <Text style={[styles.totalsTitle, { fontSize: scaled(20) }]}>{t.totalNutrition}</Text>
-              <View style={styles.totalsGrid}>
-                <View style={styles.totalItem}>
-                  <Text style={[styles.totalValue, { fontSize: scaled(34) }]}>{totals.calories}</Text>
-                  <Text style={[styles.totalLabel, { fontSize: scaled(13) }]}>{t.totalCalories}</Text>
-                </View>
-                <View style={styles.totalItem}>
-                  <Text style={[styles.totalValue, { fontSize: scaled(34) }]}>{totals.sodium}mg</Text>
-                  <Text style={[styles.totalLabel, { fontSize: scaled(13) }]}>{t.totalSodium}</Text>
-                </View>
-                <View style={styles.totalItem}>
-                  <Text style={[styles.totalValue, { fontSize: scaled(34) }]}>{totals.protein}g</Text>
-                  <Text style={[styles.totalLabel, { fontSize: scaled(13) }]}>{t.totalProtein}</Text>
-                </View>
-              </View>
-            </View>
           </ScrollView>
 
-          {/* ── Bottom Action Bar ── */}
-          <View style={[styles.bottomBar, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+          {/* Bottom Action Bar */}
+          <View style={styles.bottomBar}>
             <View style={styles.bottomBarInfo}>
-              <Text style={[styles.itemCount, { color: theme.textPrimary, fontSize: scaled(18) }]}>
+              <Text style={[styles.itemCount, { fontSize: scaled(16) }]}>
                 {cartItems.length} {t.meals}
               </Text>
-              <Text style={[styles.calorieCount, { color: theme.textSecondary, fontSize: scaled(14) }]}>
+              <Text style={[styles.calorieCount, { fontSize: scaled(13) }]}>
                 {totals.calories} {t.totalCalories}
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.confirmButton, { minHeight: touchTarget, justifyContent: 'center', backgroundColor: theme.success }]}
+              style={[styles.confirmButton, { minHeight: touchTarget, justifyContent: 'center' }]}
               onPress={confirmOrder}
             >
-              <Feather name="check-circle" size={18} color="#FFF" />
-              <Text style={[styles.confirmButtonText, { fontSize: scaled(17) }]}>{t.confirmOrder}</Text>
+              <Feather name="check-circle" size={20} color="#FFFFFF" />
+              <Text style={[styles.confirmButtonText, { fontSize: scaled(16) }]}>{t.confirmOrder}</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -200,203 +225,264 @@ const CartScreen = ({ navigation, route }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  // Header
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+    gap: 4,
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingRight: 8,
   },
-  backText: { fontWeight: '700' },
-  headerTitle: { fontWeight: '800', letterSpacing: -0.5 },
-  headerSubtitle: { marginTop: 2, fontWeight: '500' },
-
-  // Empty state
-  emptyContainer: {
+  backText: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  headerCenter: {
+    alignItems: 'center',
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 12,
   },
-  emptyIconWrap: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#F0EFE6',
-    borderWidth: 1,
-    borderColor: '#E2DFD8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.3,
   },
-  emptyTitle: { fontWeight: '700', color: '#111827', textAlign: 'center' },
-  emptyText: { color: '#6b7280', textAlign: 'center', lineHeight: 24 },
-  browseButton: {
+  headerSubtitle: {
+    marginTop: 2,
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  nutritionBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#717644',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 14,
-    marginTop: 8,
+    justifyContent: 'center',
+    backgroundColor: COLORS.primaryLight,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  browseButtonText: { fontWeight: '700', color: '#ffffff' },
-
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 20 },
-
-  // Cart card
+  nutritionBarItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  nutritionBarValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  nutritionBarUnit: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  nutritionBarLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  nutritionBarDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: COLORS.border,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 24,
+  },
   cartCard: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
     borderWidth: 1,
-    overflow: 'hidden',
+    borderColor: COLORS.border,
   },
-  cardAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 5,
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-    opacity: 0.9,
-  },
-  cartCardHeader: {
+  cartCardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 10,
   },
-  cartCardInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
+  cartItemName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 6,
   },
-  cartItemName: { fontWeight: '700', color: '#111827', flex: 1 },
   periodBadge: {
-    paddingVertical: 5,
-    paddingHorizontal: 11,
-    borderRadius: 999,
-    backgroundColor: '#EEF2F7',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  periodBadgeText: { fontWeight: '600', color: '#374151' },
+  periodBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   removeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: '#FEE2E2',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: COLORS.dangerBg,
   },
-  removeButtonText: { fontWeight: '600', color: '#991b1b' },
-  cartItemDescription: { marginBottom: 12, lineHeight: 20 },
+  removeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.danger,
+  },
+  cartItemDescription: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginBottom: 12,
+    lineHeight: 21,
+  },
   specialNoteRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
     backgroundColor: '#FFFBEB',
     borderRadius: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 10,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
-  specialNoteText: { flex: 1, color: '#92400E', fontStyle: 'italic' },
-  nutritionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  nutritionChip: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  nutritionText: { color: '#111827', fontWeight: '600' },
-
-  // Total nutrition (warm gold card)
-  totalsCard: {
-    backgroundColor: '#FFF7E2',
-    borderRadius: 22,
-    padding: 20,
-    marginTop: 10,
-    borderWidth: 1.5,
-    borderColor: '#F1D39A',
-  },
-  totalsTitle: {
-    fontWeight: '800',
-    color: '#92400e',
-    marginBottom: 14,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  totalsGrid: { flexDirection: 'row', gap: 10 },
-  totalItem: {
+  specialNoteText: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F1D39A',
+    fontSize: 13,
+    color: '#92400E',
+    fontStyle: 'italic',
   },
-  totalValue: { fontWeight: '800', color: '#111827', marginBottom: 2, letterSpacing: -0.6 },
-  totalLabel: { fontWeight: '600', color: '#374151', textAlign: 'center' },
-
-  // Bottom bar
+  nutritionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  nutritionChip: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  nutritionText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
-    gap: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 10,
+    borderTopColor: COLORS.border,
+    gap: 12,
   },
-  bottomBarInfo: { flex: 1 },
-  itemCount: { fontWeight: '700', marginBottom: 1 },
-  calorieCount: { fontWeight: '500' },
+  bottomBarInfo: {
+    flex: 1,
+  },
+  itemCount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 1,
+  },
+  calorieCount: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
   confirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    backgroundColor: COLORS.success,
     paddingVertical: 14,
     paddingHorizontal: 22,
     borderRadius: 14,
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
   },
-  confirmButtonText: { fontWeight: '700', color: '#ffffff', letterSpacing: 0.5 },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyIconWrap: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginBottom: 28,
+    lineHeight: 22,
+  },
+  browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+  },
+  browseButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
 });
 
 export default CartScreen;

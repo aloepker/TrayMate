@@ -45,6 +45,7 @@ type CartContextType = {
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
   fetchOrderHistory: (userId: string) => Promise<void>;
+  clearAllOrders: () => void;
 };
 
 // Create the context
@@ -136,7 +137,6 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Success — backend returned 201
       const newOrder = buildLocalOrder(rid, response.id);
-      setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       return { order: newOrder };
     } catch (err: any) {
@@ -235,12 +235,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         },
       }));
 
-      // Merge: keep local orders that don't have a matching backendId
-      setOrders((prev) => {
-        const backendIds = new Set(backendOrders.map((o) => o.backendId));
-        const localOnly = prev.filter((o) => !o.backendId || !backendIds.has(o.backendId));
-        return [...backendOrders, ...localOnly];
-      });
+      // Fully replace orders for this resident with backend data (prevents duplicates)
+      setOrders((prev) => [
+        ...prev.filter((o) => o.residentId !== userId),
+        ...backendOrders,
+      ]);
     } catch (err: any) {
       console.warn('Failed to fetch order history:', err?.message);
     }
@@ -254,6 +253,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const getOrdersForResident = (residentId: string): Order[] => {
     return orders.filter((o) => o.residentId === residentId);
+  };
+
+  /** Wipe all locally cached orders (e.g. on logout or dev reset) */
+  const clearAllOrders = () => {
+    setOrders([]);
+    setCart([]);
   };
 
   return (
@@ -271,6 +276,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         updateOrderStatus,
         getOrdersForResident,
         fetchOrderHistory,
+        clearAllOrders,
       }}
     >
       {children}

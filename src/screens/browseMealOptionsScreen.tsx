@@ -627,6 +627,55 @@ const AIAssistantChat = ({
   );
 };
 
+// ── Time-range availability check ────────────────────────────────────────────
+function parseTimeToMinutes(s: string): number {
+  const cleaned = s.trim().toLowerCase().replace(/\s/g, '');
+  const isPm = cleaned.includes('pm');
+  const isAm = cleaned.includes('am');
+  const num = parseInt(cleaned.replace(/[^0-9]/g, ''), 10);
+  if (isNaN(num)) return 0;
+  let hours = num;
+  if (isPm && hours !== 12) hours += 12;
+  if (isAm && hours === 12) hours = 0;
+  return hours * 60;
+}
+
+function isWithinTimeRange(timeRange: string, period?: string): boolean {
+  // Drinks and Sides are available all day
+  if (period === 'Drinks' || period === 'Sides') return true;
+  if (!timeRange || timeRange.trim() === '') return true;
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  // normalize en-dash / em-dash to hyphen
+  const normalized = timeRange.replace(/[–—]/g, '-');
+  const parts = normalized.split('-').map((p) => p.trim());
+  if (parts.length < 2) return true;
+  const start = parseTimeToMinutes(parts[0]);
+  const end   = parseTimeToMinutes(parts[1]);
+  return currentMins >= start && currentMins <= end;
+}
+
+/** Start minute of a time-range string, used for sorting */
+function timeRangeStartMinutes(timeRange: string): number {
+  if (!timeRange) return 0;
+  const normalized = timeRange.replace(/[–—]/g, '-');
+  const first = normalized.split('-')[0]?.trim() ?? '';
+  return parseTimeToMinutes(first);
+}
+
+/** Sort meals: available-now first (ordered by start time), then unavailable (ordered by start time) */
+function sortMealsByAvailability(meals: Meal[]): Meal[] {
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  return [...meals].sort((a, b) => {
+    const aAvail = isWithinTimeRange(a.time_range, a.meal_period);
+    const bAvail = isWithinTimeRange(b.time_range, b.meal_period);
+    if (aAvail && !bAvail) return -1;
+    if (!aAvail && bAvail) return 1;
+    return timeRangeStartMinutes(a.time_range) - timeRangeStartMinutes(b.time_range);
+  });
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -728,6 +777,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId, selectedPeriod.value]);
 
+  // Pre-load drinks & sides once on mount so add-on pickers are always ready
+  useEffect(() => {
+    MealService.getMealsByPeriod("Drinks").then(d => setAvailableDrinks(d.map(mapServiceMeal)));
+    MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
+  }, []);
+
   // Load menu and recommendation when component mounts or period changes
   useEffect(() => {
     loadMenu(selectedPeriod.value, selectedPeriod.key);
@@ -767,14 +822,25 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
-    //const mealImg = getMealImage(item.name);
     const mealImg = !!item.imageUrl;
+    const available = isWithinTimeRange(item.time_range, item.meal_period);
     return (
       <TouchableOpacity
-        style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
-        activeOpacity={0.7}
-        onPress={() => openMealDetail(item)}
+        style={[
+          styles.card,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+          !available && styles.cardUnavailable,
+        ]}
+        activeOpacity={available ? 0.7 : 1}
+        onPress={() => { if (available) openMealDetail(item); }}
+        disabled={!available}
       >
+        {!available && (
+          <View style={styles.unavailableOverlay}>
+            <Feather name="clock" size={12} color="#717644" />
+            <Text style={styles.unavailableText}>Not available · {item.time_range}</Text>
+          </View>
+        )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
           {/* {mealImg ? (
             <Image source={mealImg} style={styles.mealRealImage} resizeMode="contain" />
@@ -785,6 +851,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <Image source={{ uri: item.imageUrl }} style={styles.mealRealImage} resizeMode="cover" />
           ) : (
             <Image source={require('../styles/pictures/grandma.png')} style={{ width: 60, height: 60, opacity: 0.3 }} resizeMode="contain" />
+          )}
+          {/* Light frost over image for unavailable meals — image stays visible */}
+          {!available && (
+            <View style={styles.imageFrost} />
           )}
           <View style={styles.mealImageOverlay}>
             <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
@@ -888,7 +958,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const listFooter = (
     <View style={styles.aiRecommendation}>
       <View style={styles.aiRecommendationIcon}>
-        <Text style={styles.aiRecommendationIconText}>👵</Text>
+        <Image
+          source={require('../styles/pictures/grandma.png')}
+          style={{ width: 38, height: 38 }}
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.aiRecommendationContent}>
         <Text style={[styles.aiRecommendationTitle, { fontSize: scaled(15) }]}>
@@ -935,7 +1009,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       ) : (
         <FlatList
           key={`meal-list-cols-2`}
-          data={meals}
+          data={sortMealsByAvailability(meals)}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMeal}
           numColumns={2}
@@ -1493,6 +1567,41 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.support,
+  },
+  cardUnavailable: {
+    borderColor: '#DDD0B8',
+    borderStyle: 'dashed',
+  },
+  unavailableOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F0EFE6',
+    borderWidth: 1,
+    borderColor: '#717644',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.10,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  unavailableText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#717644',
+    letterSpacing: 0.1,
+  },
+  imageFrost: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(245,243,238,0.55)',
+    zIndex: 1,
   },
   aiRecommendationIcon: {
     width: 36,
