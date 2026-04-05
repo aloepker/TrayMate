@@ -84,6 +84,8 @@ interface ApiOrder {
     mealOfDay: string;
     userId: string;
     status: Status | string;
+    note?: string;
+    specialInstructions?: string;
   };
   meals: Array<{
     id: number;
@@ -646,10 +648,9 @@ const support = StyleSheet.create({
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
-  const { messages, unreadCount, markRead, markAllRead } = useKitchenMessages();
+  const { messages, unreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
 
   const [orders, setOrders] = useState<ApiOrder[]>([]);
-  const [activeTab, setActiveTab] = useState<MealPeriod>("Breakfast");
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [loggedInEmail, setLoggedInEmail] = useState<string | null>(null);
@@ -659,6 +660,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+
+  // Per-order messaging
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   // ── load token + email + residents on mount ──
   useEffect(() => {
@@ -694,18 +699,25 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     ]);
   };
 
-  // ── fetch orders from backend ──
-  const fetchOrders = async (meal: MealPeriod) => {
+  // ── fetch ALL orders for today (every meal period) ──
+  const fetchAllOrders = async () => {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
     try {
       const tok = token || await getAuthToken();
       const headers: Record<string, string> = {};
       if (tok) headers["Authorization"] = `Bearer ${tok}`;
-      const url = `${BASE}/mealOrders/search?mealOfDay=${meal}&date=${today}`;
-      const response = await fetch(url, { headers });
-      const data = await response.json();
-      setOrders(Array.isArray(data) ? data : []);
+      const periods: MealPeriod[] = ["Breakfast", "Lunch", "Dinner", "Sides", "Drinks"];
+      const fetches = periods.map(async (meal) => {
+        try {
+          const url = `${BASE}/mealOrders/search?mealOfDay=${meal}&date=${today}`;
+          const response = await fetch(url, { headers });
+          const data = await response.json();
+          return Array.isArray(data) ? data : [];
+        } catch { return []; }
+      });
+      const results = await Promise.all(fetches);
+      setOrders(results.flat());
     } catch {
       setOrders([]);
     } finally {
@@ -713,7 +725,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     }
   };
 
-  useEffect(() => { fetchOrders(activeTab); }, [activeTab]);
+  useEffect(() => { fetchAllOrders(); }, []);
 
   // ── apply a status change to a single order ──
   const applyStatusChange = async (orderId: number, status: Status, cookName?: string) => {
@@ -727,7 +739,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     try {
       const today = new Date().toISOString().split("T")[0];
       const tok = token || await getAuthToken();
-      await apiSetStatusSingle(item.order.userId, activeTab, today, status, cookName, tok);
+      await apiSetStatusSingle(item.order.userId, item.order.mealOfDay, today, status, cookName, tok);
     } catch {
       // rollback on error
       setOrders((prev) =>
@@ -743,10 +755,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     applyStatusChange(orderId, status, cook);
   };
 
-  // ── bulk status update ──
+  // ── bulk status update (applies per-period for each period that has orders) ──
   const handleBulkStatus = (status: Status) => {
     const label = status.charAt(0).toUpperCase() + status.slice(1);
-    Alert.alert(`Mark All as ${label}?`, `This will update all ${activeTab} orders to "${label}".`, [
+    Alert.alert(`Mark All as ${label}?`, `This will update all today's orders to "${label}".`, [
       { text: "Cancel", style: "cancel" },
       { text: "Confirm", onPress: async () => {
         const prevOrders = orders;
@@ -755,7 +767,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           const today = new Date().toISOString().split("T")[0];
           const tok = token || await getAuthToken();
           const cook = status === "preparing" ? (loggedInEmail ?? undefined) : undefined;
-          await apiSetStatusBulk(activeTab, today, status, cook, tok);
+          // Call bulk for each period that has orders
+          const periods = [...new Set(orders.map((o) => o.order.mealOfDay))];
+          await Promise.all(periods.map((p) => apiSetStatusBulk(p, today, status, cook, tok)));
         } catch {
           setOrders(prevOrders);
           Alert.alert("Error", "Could not update all orders. Please try again.");
@@ -783,7 +797,28 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     setSeasonalMeals((prev) => prev.filter((m) => m.id !== id));
   };
 
-  const tabSeasonalMeals = seasonalMeals.filter((m) => m.period === activeTab);
+  // Show all seasonal meals (no longer filtered by tab)
+  const tabSeasonalMeals = seasonalMeals;
+
+  // ── send message to resident (per-order) ──
+  const handleSendReply = (orderId: number) => {
+    if (!replyText.trim()) return;
+    const item = orders.find((o) => o.order.id === orderId);
+    if (!item) return;
+    const resident = findResident(item.order.userId);
+    // Push into KitchenMessage context so caregiver can see it
+    sendMessage({
+      residentId: item.order.userId,
+      residentName: resident?.name ?? item.order.userId,
+      residentRoom: resident?.room ?? "",
+      fromRole: "kitchen",
+      fromName: loggedInEmail ?? "Kitchen Staff",
+      text: replyText.trim(),
+    });
+    Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}'s order.`);
+    setReplyText("");
+    setReplyingTo(null);
+  };
 
   // Status chip styling
   const statusStyle = (s: Status | string) => {
@@ -839,26 +874,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Meal Period Tabs ── */}
-        <View style={s.tabs}>
-          {(["Breakfast", "Lunch", "Dinner"] as MealPeriod[]).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[s.tab, activeTab === tab && s.tabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Feather
-                name={tab === "Breakfast" ? "sun" : tab === "Lunch" ? "coffee" : "moon"}
-                size={15}
-                color={activeTab === tab ? "#FFF" : C.textMuted}
-              />
-              <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         {/* ── Summary Cards ── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
           <View style={{ flexDirection: "row", gap: 8 }}>
@@ -878,12 +893,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </View>
         </ScrollView>
 
-        {/* ── Seasonal Meals for this period ── */}
+        {/* ── Seasonal Meals ── */}
         {tabSeasonalMeals.length > 0 && (
           <View style={s.seasonalSection}>
             <View style={s.sectionTitleRow}>
               <Feather name="star" size={14} color={C.accent} />
-              <Text style={s.sectionTitle}>Seasonal Specials · {activeTab}</Text>
+              <Text style={s.sectionTitle}>Seasonal Specials</Text>
             </View>
             {tabSeasonalMeals.map((meal) => (
               <View key={meal.id} style={s.seasonalCard}>
@@ -908,10 +923,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </View>
         )}
 
-        {/* ── Orders List ── */}
+        {/* ── Orders — All Periods ── */}
         <View style={s.sectionTitleRow}>
           <Feather name="clipboard" size={14} color={C.primary} />
-          <Text style={s.sectionTitle}>Orders · {activeTab}</Text>
+          <Text style={s.sectionTitle}>Today's Orders</Text>
+          {!loading && orders.length > 0 && (
+            <TouchableOpacity onPress={fetchAllOrders} style={{ marginLeft: "auto" }}>
+              <Feather name="refresh-cw" size={16} color={C.primary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Bulk Actions ── */}
@@ -945,7 +965,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               <Feather name="clipboard" size={36} color={C.primary} />
             </View>
             <Text style={s.emptyTitle}>No orders yet</Text>
-            <Text style={s.emptyDesc}>No {activeTab.toLowerCase()} orders for today.</Text>
+            <Text style={s.emptyDesc}>No orders for today.</Text>
           </View>
         ) : (
           orders.map((item) => {
@@ -955,18 +975,24 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const dietary   = resident?.dietaryRestrictions ?? [];
             const medical   = resident?.medicalConditions ?? [];
             const initials  = (resident?.name ?? item.order.userId).slice(0, 2).toUpperCase();
+            const orderPeriod = item.order.mealOfDay || "Breakfast";
+            const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
+            const orderNote = item.order.note || item.order.specialInstructions || "";
+            const isReplying = replyingTo === item.order.id;
 
             return (
               <View key={item.order.id} style={s.card}>
+                {/* ── Period indicator strip on left ── */}
+                <View style={[s.cardPeriodStrip, { backgroundColor: pa.color }]} />
 
-                {/* ── Top row: avatar + resident info + status pill ── */}
+                {/* ── Top row: avatar + resident info + period pill + status pill ── */}
                 <View style={s.cardTop}>
                   <View style={s.residentAvatar}>
                     <Text style={s.residentInitials}>{initials}</Text>
                   </View>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <Text style={s.orderId}>#{item.order.id}</Text>
                       {resident?.room ? (
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -974,6 +1000,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                           <Text style={s.roomText}>Room {resident.room}</Text>
                         </View>
                       ) : null}
+                      {/* Period pill on the order card */}
+                      <View style={[s.periodPill, { backgroundColor: pa.light, borderColor: pa.color }]}>
+                        <Feather name={pa.icon as any} size={9} color={pa.color} />
+                        <Text style={[s.periodPillText, { color: pa.color }]}>{orderPeriod}</Text>
+                      </View>
                     </View>
                   </View>
                   <View style={[s.statusPill, { backgroundColor: st.bg }]}>
@@ -1008,13 +1039,20 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   </View>
                 )}
 
+                {/* ── Resident note (if provided with order) ── */}
+                {orderNote !== "" && (
+                  <View style={s.noteRow}>
+                    <Feather name="message-circle" size={13} color="#92400E" />
+                    <Text style={s.noteText}>{orderNote}</Text>
+                  </View>
+                )}
+
                 {/* ── Divider ── */}
                 <View style={s.divider} />
 
                 {/* ── Meals ── */}
                 {item.meals.map((meal, idx) => {
                   const ph = getMealPlaceholder(meal.name);
-                  const pa = PERIOD_ACCENT[activeTab] ?? PERIOD_ACCENT["Breakfast"];
                   return (
                     <View key={meal.id} style={[s.mealRow, idx > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
                       {meal.imageUrl ? (
@@ -1029,7 +1067,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                           <Text style={s.mealName}>{meal.name}</Text>
                           <View style={[s.periodPill, { backgroundColor: pa.light, borderColor: pa.color }]}>
                             <Feather name={pa.icon as any} size={9} color={pa.color} />
-                            <Text style={[s.periodPillText, { color: pa.color }]}>{activeTab}</Text>
+                            <Text style={[s.periodPillText, { color: pa.color }]}>{orderPeriod}</Text>
                           </View>
                         </View>
                         {meal.description ? (
@@ -1069,6 +1107,38 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       </TouchableOpacity>
                     );
                   })}
+                </View>
+
+                {/* ── Message / reply to resident ── */}
+                <View style={s.replySection}>
+                  {isReplying ? (
+                    <View style={s.replyInputRow}>
+                      <TextInput
+                        style={s.replyInput}
+                        value={replyText}
+                        onChangeText={setReplyText}
+                        placeholder="Message to resident..."
+                        placeholderTextColor="#ABABAB"
+                        multiline
+                      />
+                      <View style={{ gap: 6 }}>
+                        <TouchableOpacity style={s.replySendBtn} onPress={() => handleSendReply(item.order.id)}>
+                          <Feather name="send" size={14} color="#FFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.replyCancelBtn} onPress={() => { setReplyingTo(null); setReplyText(""); }}>
+                          <Feather name="x" size={14} color={C.textMuted} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={s.replyToggleBtn}
+                      onPress={() => { setReplyingTo(item.order.id); setReplyText(""); }}
+                    >
+                      <Feather name="message-square" size={14} color={C.primary} />
+                      <Text style={s.replyToggleText}>Message Resident</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             );
@@ -1297,6 +1367,7 @@ const s = StyleSheet.create({
     backgroundColor: C.surface,
     borderRadius: 18,
     padding: 16,
+    paddingLeft: 22,   // extra left padding for the accent strip
     marginBottom: 16,
     borderWidth: 1,
     borderColor: C.border,
@@ -1305,6 +1376,16 @@ const s = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
+    overflow: "hidden",
+    position: "relative",
+  },
+  cardPeriodStrip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    zIndex: 2,
   },
 
   // Card top row
@@ -1458,6 +1539,84 @@ const s = StyleSheet.create({
   statusBtnText: {
     fontSize: 13,
     fontWeight: "700",
+  },
+
+  // Note row (resident note / special instructions)
+  noteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 6,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#92400E",
+    fontWeight: "500",
+    lineHeight: 19,
+    fontStyle: "italic",
+  },
+
+  // Reply / message per order
+  replySection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10,
+  },
+  replyToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+  },
+  replyToggleText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: C.primary,
+  },
+  replyInputRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-end",
+  },
+  replyInput: {
+    flex: 1,
+    backgroundColor: C.inputBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: C.text,
+    minHeight: 42,
+    maxHeight: 100,
+    textAlignVertical: "top",
+  },
+  replySendBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  replyCancelBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: C.inputBg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.border,
   },
 
   // Empty state

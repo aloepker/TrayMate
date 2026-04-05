@@ -24,6 +24,7 @@ import {
   getCaregiverResidents,
   getCaregiverNotifications,
 } from "../../services/api";
+import { useKitchenMessages } from "../context/KitchenMessageContext";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -34,6 +35,9 @@ interface CaregiverDashboardProps {
 export default function CaregiverDashboardScreen({
   navigation,
 }: CaregiverDashboardProps) {
+  // Kitchen messages from context (sent by kitchen staff per order)
+  const { messages: kitchenMessages, unreadCount: kitchenUnread } = useKitchenMessages();
+
   // -----------------------------
   // Main screen state
   // -----------------------------
@@ -147,22 +151,35 @@ export default function CaregiverDashboardScreen({
     setSelectedResident(null);
   };
 
+  // Kitchen messages grouped by resident
+  const kitchenMessagesByResident = useMemo(() => {
+    const map: Record<string, typeof kitchenMessages> = {};
+    for (const msg of kitchenMessages) {
+      if (!map[msg.residentId]) map[msg.residentId] = [];
+      map[msg.residentId].push(msg);
+    }
+    return map;
+  }, [kitchenMessages]);
+
   // -----------------------------
   // Bell icon click:
-  // show all notifications for that resident
+  // show all notifications + kitchen messages for that resident
   // -----------------------------
   const handleNotificationPress = (residentId: string) => {
     const residentNotifications = notificationsByResident[residentId] || [];
+    const residentKitchenMsgs = kitchenMessagesByResident[residentId] || [];
 
-    if (!residentNotifications.length) {
+    const allLines = [
+      ...residentNotifications.map((n) => `• ${n.message}`),
+      ...residentKitchenMsgs.map((m) => `🍳 Kitchen: ${m.text}`),
+    ];
+
+    if (!allLines.length) {
       Alert.alert("Notifications", "No updates for this resident yet.");
       return;
     }
 
-    Alert.alert(
-      "Resident Updates",
-      residentNotifications.map((n) => `• ${n.message}`).join("\n")
-    );
+    Alert.alert("Resident Updates", allLines.join("\n"));
   };
 
   // -----------------------------
@@ -197,6 +214,17 @@ export default function CaregiverDashboardScreen({
         </View>
 
         <View style={styles.topBarRight}>
+          {/* Kitchen messages bell */}
+          {kitchenUnread > 0 && (
+            <View style={styles.kitchenAlertBadge}>
+              <Feather name="bell" size={16} color="#DC2626" />
+              <View style={styles.kitchenAlertCount}>
+                <Text style={styles.kitchenAlertCountText}>
+                  {kitchenUnread > 9 ? "9+" : kitchenUnread}
+                </Text>
+              </View>
+            </View>
+          )}
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -256,7 +284,11 @@ export default function CaregiverDashboardScreen({
                 {residents.map((resident, idx) => {
                   const residentNotifications =
                     notificationsByResident[resident.id] || [];
-                  const hasNotifications = residentNotifications.length > 0;
+                  const residentKitchenMsgs =
+                    kitchenMessagesByResident[resident.id] || [];
+                  const unreadKitchen = residentKitchenMsgs.filter((m) => !m.read).length;
+                  const hasNotifications = residentNotifications.length > 0 || residentKitchenMsgs.length > 0;
+                  const hasUrgent = unreadKitchen > 0;
 
                   return (
                     <Pressable
@@ -266,12 +298,15 @@ export default function CaregiverDashboardScreen({
                     >
                       {/* Notification bell at top-right of resident card */}
                       <Pressable
-                        style={styles.cardBell}
+                        style={[
+                          styles.cardBell,
+                          hasUrgent && styles.cardBellUrgent,
+                        ]}
                         onPress={() => handleNotificationPress(resident.id)}
                         hitSlop={10}
                       >
-                        <Feather name="bell" size={18} color="#6D6B3B" />
-                        {hasNotifications && <View style={styles.notificationDot} />}
+                        <Feather name="bell" size={18} color={hasUrgent ? "#DC2626" : "#6D6B3B"} />
+                        {hasNotifications && <View style={[styles.notificationDot, hasUrgent && styles.notificationDotUrgent]} />}
                       </Pressable>
 
                       {/* Room badge */}
@@ -556,6 +591,34 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
+  kitchenAlertBadge: {
+    position: "relative",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  kitchenAlertCount: {
+    position: "absolute",
+    top: -2,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  kitchenAlertCountText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
   logoutBtn: {
     height: 44,
     minWidth: 110,
@@ -717,6 +780,19 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 999,
     backgroundColor: "#DC2626",
+  },
+  notificationDotUrgent: {
+    width: 12,
+    height: 12,
+    top: 2,
+    right: 3,
+    borderWidth: 2,
+    borderColor: "#FFF",
+  },
+  cardBellUrgent: {
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
 
   // Room pill
