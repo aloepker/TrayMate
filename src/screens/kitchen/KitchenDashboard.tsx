@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealImage, getMealPlaceholder } from "../../services/mealDisplayService";
+import { getResidents, Resident as ApiResident } from "../../services/api";
+import { clearAuth, getAuthToken } from "../../services/storage";
 
 // ─── Palette (matches app-wide theme) ─────────────────────────────────────────
 const C = {
@@ -39,7 +41,41 @@ const C = {
 };
 
 type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
-type Status = "pending" | "preparing" | "ready";
+type Status = "pending" | "preparing" | "ready" | "served";
+
+// ─── Base URL + API helpers ────────────────────────────────────────────────────
+const BASE = "https://traymate-auth.onrender.com";
+
+async function apiSetStatusSingle(
+  userId: string,
+  mealOfDay: string,
+  date: string,
+  newStatus: Status,
+  cook?: string,
+  token?: string | null,
+) {
+  let url = `${BASE}/mealOrders/status/single?userId=${encodeURIComponent(userId)}&mealOfDay=${encodeURIComponent(mealOfDay)}&date=${encodeURIComponent(date)}&newStatus=${encodeURIComponent(newStatus)}`;
+  if (cook?.trim()) url += `&cook=${encodeURIComponent(cook.trim())}`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { method: "PUT", headers });
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+}
+
+async function apiSetStatusBulk(
+  mealOfDay: string,
+  date: string,
+  newStatus: Status,
+  cook?: string,
+  token?: string | null,
+) {
+  let url = `${BASE}/mealOrders/status/bulk?mealOfDay=${encodeURIComponent(mealOfDay)}&date=${encodeURIComponent(date)}&newStatus=${encodeURIComponent(newStatus)}`;
+  if (cook?.trim()) url += `&cook=${encodeURIComponent(cook.trim())}`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(url, { method: "PUT", headers });
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+}
 
 interface ApiOrder {
   order: {
@@ -47,7 +83,7 @@ interface ApiOrder {
     date: string;
     mealOfDay: string;
     userId: string;
-    status: Status;
+    status: Status | string;
   };
   meals: Array<{
     id: number;
@@ -293,25 +329,111 @@ interface SeasonalEntry {
   tag: string;
 }
 
+// ─── Cook Name Modal ───────────────────────────────────────────────────────────
+interface CookNameModalProps {
+  visible: boolean;
+  onConfirm: (cookName: string) => void;
+  onCancel: () => void;
+}
+const CookNameModal: React.FC<CookNameModalProps> = ({ visible, onConfirm, onCancel }) => {
+  const [name, setName] = useState("");
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}>
+        <View style={{ backgroundColor: C.surface, borderRadius: 20, padding: 24, width: "100%", gap: 14 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Feather name="user-check" size={18} color={C.primary} />
+            <Text style={{ fontSize: 17, fontWeight: "700", color: C.text }}>Who's cooking?</Text>
+          </View>
+          <Text style={{ fontSize: 14, color: C.textMuted }}>Enter the cook's name (optional)</Text>
+          <TextInput
+            style={{ backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: C.text }}
+            value={name}
+            onChangeText={setName}
+            placeholder="Cook name…"
+            placeholderTextColor="#ABABAB"
+            autoFocus
+          />
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity
+              style={{ flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: C.primaryLight, alignItems: "center", borderWidth: 1, borderColor: C.border }}
+              onPress={() => { setName(""); onCancel(); }}
+            >
+              <Text style={{ fontWeight: "600", color: C.textMuted }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: C.primary, alignItems: "center" }}
+              onPress={() => { onConfirm(name); setName(""); }}
+            >
+              <Text style={{ fontWeight: "700", color: "#FFF" }}>Confirm</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 // ─── Main Screen ───────────────────────────────────────────────────────────────
-const KitchenDashboardScreen: React.FC = () => {
+const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
   const { messages, unreadCount, markRead, markAllRead } = useKitchenMessages();
 
   const [orders, setOrders] = useState<ApiOrder[]>([]);
   const [activeTab, setActiveTab] = useState<MealPeriod>("Breakfast");
   const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
+  const [backendResidents, setBackendResidents] = useState<ApiResident[]>([]);
 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
+
+  // cook-name modal state
+  const [cookModal, setCookModal] = useState<{ orderId: number; status: Status } | null>(null);
+
+  // ── load token + residents on mount ──
+  useEffect(() => {
+    (async () => {
+      const t = await getAuthToken();
+      setToken(t);
+      try {
+        const res = await getResidents();
+        setBackendResidents(res);
+      } catch { /* silently ignore */ }
+    })();
+  }, []);
+
+  // ── match a userId to a resident ──
+  const findResident = useCallback((userId: string): ApiResident | undefined => {
+    if (!userId) return undefined;
+    const exact = backendResidents.find((r) => r.id === userId);
+    if (exact) return exact;
+    const byName = backendResidents.find((r) => r.name.toLowerCase() === userId.toLowerCase());
+    if (byName) return byName;
+    return backendResidents.find((r) => r.name.toLowerCase().includes(userId.toLowerCase()));
+  }, [backendResidents]);
+
+  // ── logout ──
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log Out", style: "destructive", onPress: async () => {
+        await clearAuth();
+        navigation?.replace("Login");
+      }},
+    ]);
+  };
 
   // ── fetch orders from backend ──
   const fetchOrders = async (meal: MealPeriod) => {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
     try {
-      const url = `https://traymate-auth.onrender.com/mealOrders/search?mealOfDay=${meal}&date=${today}`;
-      const response = await fetch(url);
+      const tok = token || await getAuthToken();
+      const headers: Record<string, string> = {};
+      if (tok) headers["Authorization"] = `Bearer ${tok}`;
+      const url = `${BASE}/mealOrders/search?mealOfDay=${meal}&date=${today}`;
+      const response = await fetch(url, { headers });
       const data = await response.json();
       setOrders(Array.isArray(data) ? data : []);
     } catch {
@@ -323,12 +445,59 @@ const KitchenDashboardScreen: React.FC = () => {
 
   useEffect(() => { fetchOrders(activeTab); }, [activeTab]);
 
-  const handleStatusChange = (id: number, status: Status) => {
+  // ── apply a status change to a single order ──
+  const applyStatusChange = async (orderId: number, status: Status, cookName?: string) => {
+    const item = orders.find((o) => o.order.id === orderId);
+    if (!item) return;
+    const prevStatus = item.order.status;
+    // optimistic update
     setOrders((prev) =>
-      prev.map((item) =>
-        item.order.id === id ? { ...item, order: { ...item.order, status } } : item
-      )
+      prev.map((o) => o.order.id === orderId ? { ...o, order: { ...o.order, status } } : o)
     );
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const tok = token || await getAuthToken();
+      await apiSetStatusSingle(item.order.userId, activeTab, today, status, cookName, tok);
+    } catch {
+      // rollback on error
+      setOrders((prev) =>
+        prev.map((o) => o.order.id === orderId ? { ...o, order: { ...o.order, status: prevStatus } } : o)
+      );
+      Alert.alert("Error", "Could not update order status. Please try again.");
+    }
+  };
+
+  const handleStatusChange = (orderId: number, status: Status) => {
+    if (status === "preparing") {
+      setCookModal({ orderId, status });
+    } else {
+      applyStatusChange(orderId, status);
+    }
+  };
+
+  // ── bulk status update ──
+  const handleBulkStatus = async (status: Status) => {
+    const label = status.charAt(0).toUpperCase() + status.slice(1);
+    const doBulk = async (cookName?: string) => {
+      const prevOrders = orders;
+      setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const tok = token || await getAuthToken();
+        await apiSetStatusBulk(activeTab, today, status, cookName, tok);
+      } catch {
+        setOrders(prevOrders);
+        Alert.alert("Error", "Could not update all orders. Please try again.");
+      }
+    };
+    if (status === "preparing") {
+      setCookModal({ orderId: -1, status }); // -1 signals bulk
+    } else {
+      Alert.alert(`Mark All as ${label}?`, `This will update all ${activeTab} orders to "${label}".`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Confirm", onPress: () => doBulk() },
+      ]);
+    }
   };
 
   const counts = {
@@ -336,6 +505,7 @@ const KitchenDashboardScreen: React.FC = () => {
     pending:   orders.filter((o) => o.order.status === "pending").length,
     preparing: orders.filter((o) => o.order.status === "preparing").length,
     ready:     orders.filter((o) => o.order.status === "ready").length,
+    served:    orders.filter((o) => o.order.status === "served").length,
   };
 
   const addSeasonalMeal = (meal: Omit<SeasonalEntry, "id">) => {
@@ -352,10 +522,12 @@ const KitchenDashboardScreen: React.FC = () => {
   const tabSeasonalMeals = seasonalMeals.filter((m) => m.period === activeTab);
 
   // Status chip styling
-  const statusStyle = (s: Status) => {
+  const statusStyle = (s: Status | string) => {
     if (s === "pending")   return { bg: C.warningBg,  text: C.warning,  icon: "clock"         as const };
     if (s === "preparing") return { bg: "#FEE2E2",    text: C.danger,   icon: "loader"        as const };
-    return                        { bg: C.successBg,  text: C.success,  icon: "check-circle"  as const };
+    if (s === "ready")     return { bg: C.successBg,  text: C.success,  icon: "check-circle"  as const };
+    if (s === "served")    return { bg: "#E0F2FE",    text: "#0369A1",  icon: "check-square"  as const };
+    return                        { bg: C.surface,    text: C.textMuted, icon: "help-circle"  as const };
   };
 
   return (
@@ -392,6 +564,11 @@ const KitchenDashboardScreen: React.FC = () => {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* Logout */}
+          <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
+            <Feather name="log-out" size={18} color={C.danger} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -421,20 +598,23 @@ const KitchenDashboardScreen: React.FC = () => {
         </View>
 
         {/* ── Summary Cards ── */}
-        <View style={s.summaryRow}>
-          {[
-            { label: "Total",     value: counts.total,     icon: "layers"       as const, color: C.primary  },
-            { label: "Pending",   value: counts.pending,   icon: "clock"        as const, color: C.warning  },
-            { label: "Preparing", value: counts.preparing, icon: "loader"       as const, color: C.danger   },
-            { label: "Ready",     value: counts.ready,     icon: "check-circle" as const, color: C.success  },
-          ].map(({ label, value, icon, color }) => (
-            <View key={label} style={s.summaryCard}>
-              <Feather name={icon} size={18} color={color} />
-              <Text style={[s.summaryValue, { color }]}>{value}</Text>
-              <Text style={s.summaryLabel}>{label}</Text>
-            </View>
-          ))}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {[
+              { label: "Total",     value: counts.total,     icon: "layers"        as const, color: C.primary  },
+              { label: "Pending",   value: counts.pending,   icon: "clock"         as const, color: C.warning  },
+              { label: "Preparing", value: counts.preparing, icon: "loader"        as const, color: C.danger   },
+              { label: "Ready",     value: counts.ready,     icon: "check-circle"  as const, color: C.success  },
+              { label: "Served",    value: counts.served,    icon: "check-square"  as const, color: "#0369A1"  },
+            ].map(({ label, value, icon, color }) => (
+              <View key={label} style={[s.summaryCard, { minWidth: 72 }]}>
+                <Feather name={icon} size={18} color={color} />
+                <Text style={[s.summaryValue, { color }]}>{value}</Text>
+                <Text style={s.summaryLabel}>{label}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
 
         {/* ── Seasonal Meals for this period ── */}
         {tabSeasonalMeals.length > 0 && (
@@ -472,6 +652,29 @@ const KitchenDashboardScreen: React.FC = () => {
           <Text style={s.sectionTitle}>Orders · {activeTab}</Text>
         </View>
 
+        {/* ── Bulk Actions ── */}
+        {orders.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(["pending", "preparing", "ready", "served"] as Status[]).map((status) => {
+                const st = statusStyle(status);
+                return (
+                  <TouchableOpacity
+                    key={status}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: st.bg, borderWidth: 1, borderColor: st.bg }}
+                    onPress={() => handleBulkStatus(status)}
+                  >
+                    <Feather name={st.icon} size={13} color={st.text} />
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: st.text }}>
+                      All → {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        )}
+
         {loading ? (
           <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} />
         ) : orders.length === 0 ? (
@@ -485,21 +688,48 @@ const KitchenDashboardScreen: React.FC = () => {
         ) : (
           orders.map((item) => {
             const st = statusStyle(item.order.status);
+            const resident = findResident(item.order.userId);
+            const badges = [
+              ...(resident?.foodAllergies ?? []).map((a) => ({ label: a, color: C.danger, bg: C.dangerBg })),
+              ...(resident?.dietaryRestrictions ?? []).map((d) => ({ label: d, color: C.success, bg: C.successBg })),
+              ...(resident?.medicalConditions ?? []).map((m) => ({ label: m, color: "#7c3aed", bg: "#F3E8FF" })),
+            ];
             return (
               <View key={item.order.id} style={s.card}>
                 {/* Card header */}
                 <View style={s.cardHeader}>
-                  <View style={{ gap: 2 }}>
+                  <View style={{ gap: 3 }}>
                     <Text style={s.orderId}>Order #{item.order.id}</Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                       <Feather name="user" size={13} color={C.textMuted} />
-                      <Text style={s.userId}>{item.order.userId}</Text>
+                      <Text style={s.userId}>{resident?.name ?? item.order.userId}</Text>
                     </View>
+                    {resident?.room ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                        <Feather name="home" size={12} color={C.textMuted} />
+                        <Text style={[s.userId, { fontSize: 12 }]}>Room {resident.room}</Text>
+                      </View>
+                    ) : null}
+                    {/* Dietary / allergy badges */}
+                    {badges.length > 0 && (
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                        {badges.slice(0, 4).map((b, i) => (
+                          <View key={i} style={{ backgroundColor: b.bg, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                            <Text style={{ fontSize: 10, fontWeight: "700", color: b.color }}>{b.label}</Text>
+                          </View>
+                        ))}
+                        {badges.length > 4 && (
+                          <View style={{ backgroundColor: C.surface, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1, borderColor: C.border }}>
+                            <Text style={{ fontSize: 10, fontWeight: "700", color: C.textMuted }}>+{badges.length - 4} more</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                   <View style={[s.statusPill, { backgroundColor: st.bg }]}>
                     <Feather name={st.icon} size={12} color={st.text} />
                     <Text style={[s.statusPillText, { color: st.text }]}>
-                      {item.order.status.toUpperCase()}
+                      {String(item.order.status).toUpperCase()}
                     </Text>
                   </View>
                 </View>
@@ -514,7 +744,7 @@ const KitchenDashboardScreen: React.FC = () => {
                         <Image source={img} style={s.mealThumb} />
                       ) : (
                         <View style={[s.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
-                          <Feather name="coffee" size={16} color={C.primary} />
+                          <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
@@ -534,38 +764,40 @@ const KitchenDashboardScreen: React.FC = () => {
                 })}
 
                 {/* Status toggle buttons */}
-                <View style={s.statusRow}>
-                  {(["pending", "preparing", "ready"] as Status[]).map((status) => {
-                    const active = item.order.status === status;
-                    const st2 = statusStyle(status);
-                    return (
-                      <TouchableOpacity
-                        key={status}
-                        style={[
-                          s.statusBtn,
-                          active
-                            ? { backgroundColor: C.primary }
-                            : { backgroundColor: C.primaryLight, borderColor: C.border },
-                        ]}
-                        onPress={() => handleStatusChange(item.order.id, status)}
-                      >
-                        <Feather
-                          name={st2.icon}
-                          size={12}
-                          color={active ? "#FFF" : C.textMuted}
-                        />
-                        <Text
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+                  <View style={{ flexDirection: "row", gap: 6 }}>
+                    {(["pending", "preparing", "ready", "served"] as Status[]).map((status) => {
+                      const active = item.order.status === status;
+                      const st2 = statusStyle(status);
+                      return (
+                        <TouchableOpacity
+                          key={status}
                           style={[
-                            s.statusBtnText,
-                            { color: active ? "#FFF" : C.textMuted },
+                            s.statusBtn,
+                            active
+                              ? { backgroundColor: st2.text, borderColor: st2.text }
+                              : { backgroundColor: C.primaryLight, borderColor: C.border },
                           ]}
+                          onPress={() => handleStatusChange(item.order.id, status)}
                         >
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                          <Feather
+                            name={st2.icon}
+                            size={12}
+                            color={active ? "#FFF" : C.textMuted}
+                          />
+                          <Text
+                            style={[
+                              s.statusBtnText,
+                              { color: active ? "#FFF" : C.textMuted },
+                            ]}
+                          >
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
               </View>
             );
           })
@@ -587,6 +819,34 @@ const KitchenDashboardScreen: React.FC = () => {
         markRead={markRead}
         markAllRead={markAllRead}
         unreadCount={unreadCount}
+      />
+
+      {/* ── Cook Name Modal ── */}
+      <CookNameModal
+        visible={cookModal !== null}
+        onConfirm={(cookName) => {
+          if (!cookModal) return;
+          if (cookModal.orderId === -1) {
+            // bulk
+            const prevOrders = orders;
+            const status: Status = "preparing";
+            setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
+            (async () => {
+              try {
+                const today = new Date().toISOString().split("T")[0];
+                const tok = token || await getAuthToken();
+                await apiSetStatusBulk(activeTab, today, status, cookName, tok);
+              } catch {
+                setOrders(prevOrders);
+                Alert.alert("Error", "Could not update all orders. Please try again.");
+              }
+            })();
+          } else {
+            applyStatusChange(cookModal.orderId, cookModal.status, cookName);
+          }
+          setCookModal(null);
+        }}
+        onCancel={() => setCookModal(null)}
       />
     </SafeAreaView>
   );
@@ -667,6 +927,16 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     color: "#FFF",
+  },
+  logoutBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.dangerBg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
 
   // Tabs
