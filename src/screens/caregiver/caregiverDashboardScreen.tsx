@@ -14,8 +14,6 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
-  TextInput,
-  TouchableOpacity,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import {
@@ -155,8 +153,10 @@ export default function CaregiverDashboardScreen({
   const kitchenMessagesByResident = useMemo(() => {
     const map: Record<string, typeof kitchenMessages> = {};
     for (const msg of kitchenMessages) {
-      if (!map[msg.residentId]) map[msg.residentId] = [];
-      map[msg.residentId].push(msg);
+      const residentId = String(msg.residentId ?? "").trim();
+      if (!residentId) continue;
+      if (!map[residentId]) map[residentId] = [];
+      map[residentId].push(msg);
     }
     return map;
   }, [kitchenMessages]);
@@ -171,7 +171,7 @@ export default function CaregiverDashboardScreen({
 
     const allLines = [
       ...residentNotifications.map((n) => `• ${n.message}`),
-      ...residentKitchenMsgs.map((m) => `🍳 Kitchen: ${m.text}`),
+      ...residentKitchenMsgs.map((m) => `🍳 Kitchen${m.orderId != null ? ` · Order #${m.orderId}` : ""}: ${m.text}`),
     ];
 
     if (!allLines.length) {
@@ -194,6 +194,7 @@ export default function CaregiverDashboardScreen({
       residentId: resident.id,
       residentName: resident.name,
       dietaryRestrictions: resident.dietaryRestrictions ?? [],
+      foodAllergies: resident.foodAllergies ?? [],
     });
   };
 

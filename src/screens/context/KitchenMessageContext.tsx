@@ -5,6 +5,7 @@ import React, { createContext, useContext, useState, ReactNode, useCallback } fr
 export type KitchenMessage = {
   id: string;
   residentId: string;
+  orderId?: number;
   residentName: string;
   residentRoom: string;
   fromRole: 'caregiver' | 'admin' | 'kitchen';
@@ -29,8 +30,21 @@ export const KitchenMessageProvider = ({ children }: { children: ReactNode }) =>
 
   const sendMessage = useCallback(
     (msg: Omit<KitchenMessage, 'id' | 'timestamp' | 'read'>) => {
+      const parsedOrderId =
+        typeof msg.orderId === "number"
+          ? msg.orderId
+          : Number.isFinite(Number(msg.orderId))
+            ? Number(msg.orderId)
+            : undefined;
+
       const newMsg: KitchenMessage = {
         ...msg,
+        residentId: String(msg.residentId ?? '').trim(),
+        residentName: String(msg.residentName ?? '').trim() || 'Resident',
+        residentRoom: String(msg.residentRoom ?? '').trim(),
+        fromName: String(msg.fromName ?? '').trim() || 'Staff',
+        text: String(msg.text ?? '').trim(),
+        orderId: parsedOrderId,
         id: `msg_${Date.now()}`,
         timestamp: new Date(),
         read: false,

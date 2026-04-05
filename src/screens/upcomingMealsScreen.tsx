@@ -59,7 +59,7 @@ function minutesUntilReady(placedAt: Date): number {
 }
 
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder } = useCart();
+  const { orders, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -67,6 +67,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   const residentId        = route?.params?.residentId as string | undefined;
   const residentName      = route?.params?.residentName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
+  const foodAllergies: string[] = route?.params?.foodAllergies ?? [];
 
   useEffect(() => {
     setCurrentResidentId(route?.params?.residentId ?? null);
@@ -77,7 +78,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     fetchOrderHistory(residentId);
     const unsub = navigation.addListener('focus', () => fetchOrderHistory(residentId));
     return unsub;
-  }, [residentId, navigation]);
+  }, [fetchOrderHistory, residentId, navigation]);
 
   // ── Only show today's orders ──────────────────────────────────────────────
   const allResidentOrders = residentId ? getOrdersForResident(residentId) : orders;
@@ -209,7 +210,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.noUpcomingDesc}</Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
+              onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions, foodAllergies })}
             >
               <Feather name="book-open" size={17} color="#FFF" />
               <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
@@ -461,7 +462,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {/* Browse Menu CTA */}
             <TouchableOpacity
               style={styles.browseMenuBtn}
-              onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
+              onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions, foodAllergies })}
               activeOpacity={0.8}
             >
               <Feather name="book-open" size={20} color="#FFF" />

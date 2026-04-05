@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,13 +9,11 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
-  FlatList,
   Alert,
   Image,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
-import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident } from "../../services/api";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
@@ -47,14 +45,14 @@ type Status = "pending" | "preparing" | "ready" | "served";
 const BASE = "https://traymate-auth.onrender.com";
 
 async function apiSetStatusSingle(
-  userId: string,
+  userId: string | number,
   mealOfDay: string,
   date: string,
   newStatus: Status,
   cook?: string,
   token?: string | null,
 ) {
-  let url = `${BASE}/mealOrders/status/single?userId=${encodeURIComponent(userId)}&mealOfDay=${encodeURIComponent(mealOfDay)}&date=${encodeURIComponent(date)}&newStatus=${encodeURIComponent(newStatus)}`;
+  let url = `${BASE}/mealOrders/status/single?userId=${encodeURIComponent(String(userId))}&mealOfDay=${encodeURIComponent(mealOfDay)}&date=${encodeURIComponent(date)}&newStatus=${encodeURIComponent(newStatus)}`;
   if (cook?.trim()) url += `&cook=${encodeURIComponent(cook.trim())}`;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -82,7 +80,7 @@ interface ApiOrder {
     id: number;
     date: string;
     mealOfDay: string;
-    userId: string;
+    userId: string | number;
     status: Status | string;
     note?: string;
     specialInstructions?: string;
@@ -409,9 +407,14 @@ const MessagePanel: React.FC<MessagePanelProps> = ({
                     </View>
                     <View>
                       <Text style={msgPanel.residentName}>{msg.residentName}</Text>
-                      {msg.residentRoom ? (
-                        <Text style={msgPanel.room}>Room {msg.residentRoom}</Text>
-                      ) : null}
+                      <View style={msgPanel.residentMeta}>
+                        {msg.residentRoom ? (
+                          <Text style={msgPanel.room}>Room {msg.residentRoom}</Text>
+                        ) : null}
+                        {msg.orderId != null ? (
+                          <Text style={msgPanel.orderMeta}>Order #{msg.orderId}</Text>
+                        ) : null}
+                      </View>
                     </View>
                   </View>
                   <View style={{ alignItems: "flex-end", gap: 4 }}>
@@ -441,6 +444,31 @@ interface SeasonalEntry {
   period: MealPeriod;
   tag: string;
 }
+
+const QUICK_REPLY_TEMPLATES = [
+  {
+    id: "ingredient-unavailable",
+    label: "Ingredient unavailable",
+    text: "One of the ingredients for this order is unavailable today. Please let us know if you would like us to prepare it without that ingredient or help choose another option.",
+  },
+  {
+    id: "substitute-available",
+    label: "Offer substitute",
+    text: "One ingredient for this order is unavailable, but we can offer a substitute. Please confirm if you would like the substitute option.",
+  },
+] as const;
+
+const normalizeResidentKey = (value: string | number | null | undefined) =>
+  String(value ?? "").trim().toLowerCase();
+
+const residentKeysMatch = (
+  left: string | number | null | undefined,
+  right: string | number | null | undefined,
+) => {
+  const leftKey = normalizeResidentKey(left);
+  const rightKey = normalizeResidentKey(right);
+  return leftKey.length > 0 && leftKey === rightKey;
+};
 
 
 // ─── Support Modal ─────────────────────────────────────────────────────────────
@@ -679,13 +707,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   }, []);
 
   // ── match a userId to a resident ──
-  const findResident = useCallback((userId: string): ApiResident | undefined => {
-    if (!userId) return undefined;
-    const exact = backendResidents.find((r) => r.id === userId);
+  const findResident = useCallback((userId: string | number): ApiResident | undefined => {
+    if (userId === null || userId === undefined || String(userId).trim() === "") return undefined;
+    const exact = backendResidents.find((r) => residentKeysMatch(r.id, userId));
     if (exact) return exact;
-    const byName = backendResidents.find((r) => r.name.toLowerCase() === userId.toLowerCase());
+    const userKey = normalizeResidentKey(userId);
+    const byName = backendResidents.find((r) => normalizeResidentKey(r.name) === userKey);
     if (byName) return byName;
-    return backendResidents.find((r) => r.name.toLowerCase().includes(userId.toLowerCase()));
+    return backendResidents.find((r) => normalizeResidentKey(r.name).includes(userKey));
   }, [backendResidents]);
 
   // ── logout ──
@@ -700,7 +729,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   };
 
   // ── fetch ALL orders for today (every meal period) ──
-  const fetchAllOrders = async () => {
+  const fetchAllOrders = useCallback(async () => {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
     try {
@@ -723,9 +752,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
-  useEffect(() => { fetchAllOrders(); }, []);
+  useEffect(() => { fetchAllOrders(); }, [fetchAllOrders]);
 
   // ── apply a status change to a single order ──
   const applyStatusChange = async (orderId: number, status: Status, cookName?: string) => {
@@ -806,16 +835,19 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     const item = orders.find((o) => o.order.id === orderId);
     if (!item) return;
     const resident = findResident(item.order.userId);
+    const residentId = String(resident?.id ?? item.order.userId).trim();
+    const residentName = resident?.name ?? String(item.order.userId);
     // Push into KitchenMessage context so caregiver can see it
     sendMessage({
-      residentId: item.order.userId,
-      residentName: resident?.name ?? item.order.userId,
+      residentId,
+      orderId: item.order.id,
+      residentName,
       residentRoom: resident?.room ?? "",
       fromRole: "kitchen",
       fromName: loggedInEmail ?? "Kitchen Staff",
       text: replyText.trim(),
     });
-    Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}'s order.`);
+    Alert.alert("Sent", `Message sent for ${residentName}'s order.`);
     setReplyText("");
     setReplyingTo(null);
   };
@@ -974,7 +1006,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const allergies = resident?.foodAllergies ?? [];
             const dietary   = resident?.dietaryRestrictions ?? [];
             const medical   = resident?.medicalConditions ?? [];
-            const initials  = (resident?.name ?? item.order.userId).slice(0, 2).toUpperCase();
+            const residentName = resident?.name ?? String(item.order.userId);
             const orderPeriod = item.order.mealOfDay || "Breakfast";
             const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
             const orderNote = item.order.note || item.order.specialInstructions || "";
@@ -982,7 +1014,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
             // Per-order notification: messages sent for this order's resident
             const orderMessages = messages.filter(
-              (m) => m.residentId === item.order.userId
+              (m) =>
+                m.orderId === item.order.id ||
+                (
+                  m.orderId == null &&
+                  residentKeysMatch(m.residentId, resident?.id ?? item.order.userId)
+                )
             );
             const unreadOrderMsgs = orderMessages.filter((m) => !m.read).length;
 
@@ -1003,7 +1040,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   <View style={{ flex: 1, gap: 2 }}>
                     {/* Resident name + room label */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
+                      <Text style={s.residentName}>{residentName}</Text>
                       {resident?.room ? (
                         <Text style={s.roomLabel}>Rm {resident.room}</Text>
                       ) : null}
@@ -1026,7 +1063,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       } else {
                         Alert.alert(
                           `Messages · Order #${item.order.id}`,
-                          orderMessages.map((m) => `${m.fromRole === "kitchen" ? "🍳" : "👤"} ${m.fromName}: ${m.text}`).join("\n\n")
+                          orderMessages
+                            .map((m) => `${m.fromRole === "kitchen" ? "🍳" : "👤"} ${m.fromName}: ${m.text}`)
+                            .join("\n\n")
                         );
                         // Mark messages for this resident as read
                         orderMessages.forEach((m) => { if (!m.read) markRead(m.id); });
@@ -1146,22 +1185,45 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 {/* ── Message / reply to resident ── */}
                 <View style={s.replySection}>
                   {isReplying ? (
-                    <View style={s.replyInputRow}>
-                      <TextInput
-                        style={s.replyInput}
-                        value={replyText}
-                        onChangeText={setReplyText}
-                        placeholder="Message to resident..."
-                        placeholderTextColor="#ABABAB"
-                        multiline
-                      />
-                      <View style={{ gap: 6 }}>
-                        <TouchableOpacity style={s.replySendBtn} onPress={() => handleSendReply(item.order.id)}>
-                          <Feather name="send" size={14} color="#FFF" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={s.replyCancelBtn} onPress={() => { setReplyingTo(null); setReplyText(""); }}>
-                          <Feather name="x" size={14} color={C.textMuted} />
-                        </TouchableOpacity>
+                    <View style={s.replyComposer}>
+                      <View style={s.replyPresetRow}>
+                        {QUICK_REPLY_TEMPLATES.map((template) => (
+                          <TouchableOpacity
+                            key={template.id}
+                            style={[
+                              s.replyPresetChip,
+                              replyText === template.text && s.replyPresetChipActive,
+                            ]}
+                            onPress={() => setReplyText(template.text)}
+                          >
+                            <Text
+                              style={[
+                                s.replyPresetText,
+                                replyText === template.text && s.replyPresetTextActive,
+                              ]}
+                            >
+                              {template.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      <View style={s.replyInputRow}>
+                        <TextInput
+                          style={s.replyInput}
+                          value={replyText}
+                          onChangeText={setReplyText}
+                          placeholder="Message to resident..."
+                          placeholderTextColor="#ABABAB"
+                          multiline
+                        />
+                        <View style={{ gap: 6 }}>
+                          <TouchableOpacity style={s.replySendBtn} onPress={() => handleSendReply(item.order.id)}>
+                            <Feather name="send" size={14} color="#FFF" />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={s.replyCancelBtn} onPress={() => { setReplyingTo(null); setReplyText(""); }}>
+                            <Feather name="x" size={14} color={C.textMuted} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
                   ) : (
@@ -1646,6 +1708,9 @@ const s = StyleSheet.create({
     borderTopColor: C.border,
     paddingTop: 10,
   },
+  replyComposer: {
+    gap: 10,
+  },
   replyToggleBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1656,6 +1721,31 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: C.primary,
+  },
+  replyPresetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  replyPresetChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: C.primaryLight,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  replyPresetChipActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  replyPresetText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: C.primary,
+  },
+  replyPresetTextActive: {
+    color: "#FFF",
   },
   replyInputRow: {
     flexDirection: "row",
@@ -1977,7 +2067,17 @@ const msgPanel = StyleSheet.create({
     fontWeight: "700",
     color: C.text,
   },
+  residentMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   room: {
+    fontSize: 12,
+    color: C.textMuted,
+  },
+  orderMeta: {
     fontSize: 12,
     color: C.textMuted,
   },

@@ -51,6 +51,7 @@ const CartScreen = ({ navigation, route }: any) => {
     ResidentService.getResidentById(residentId)?.fullName ||
     ResidentService.getDefaultResident().fullName;
   const dietaryRestrictions = route?.params?.dietaryRestrictions ?? [];
+  const foodAllergies = route?.params?.foodAllergies ?? [];
 
   const confirmOrder = async () => {
     try {
@@ -69,7 +70,7 @@ const CartScreen = ({ navigation, route }: any) => {
                 if (replaced && notifications.orderUpdates) {
                   Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
                 }
-                navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+                navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions, foodAllergies });
               },
             },
           ]
@@ -80,7 +81,7 @@ const CartScreen = ({ navigation, route }: any) => {
       if (order && notifications.orderUpdates) {
         Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
       }
-      navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions });
+      navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions, foodAllergies });
     } catch (error) {
       console.warn('Failed to confirm order:', error);
       Alert.alert('Unable to confirm order', 'Please try again.');
