@@ -1025,17 +1025,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         />
       )}
 
-      {/* Upcoming Meals — bottom left, clear of granny button */}
-      <TouchableOpacity
-        style={styles.floatingUpcomingBtn}
-        onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
-        activeOpacity={0.85}
-        accessibilityLabel="Upcoming Meals"
-      >
-        <Feather name="calendar" size={17} color="#FFF" />
-        <Text style={styles.floatingUpcomingText}>My Orders</Text>
-      </TouchableOpacity>
-
       <TouchableOpacity
         style={[styles.floatingGrannyButton, { minHeight: touchTarget, minWidth: touchTarget }]}
         onPress={() => setShowAIChat(true)}
@@ -1059,13 +1048,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
         )}
         <TouchableOpacity
+          style={[styles.floatingUpcomingBtn, { minHeight: touchTarget, minWidth: touchTarget }]}
+          onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
+          accessibilityLabel="My Orders"
+          activeOpacity={0.85}
+        >
+          <Feather name="calendar" size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
           onPress={goToSettings}
           style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
           accessibilityLabel="Settings"
           accessibilityRole="button"
           activeOpacity={0.85}
         >
-          <Feather name="settings" size={22} color={theme.accent} />
+          <Feather name="settings" size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
 
@@ -1420,35 +1417,34 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   floatingSettingsButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F3F4F6',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0EFE6',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD0B8',
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   floatingUpcomingBtn: {
-    position: 'absolute',
-    left: 16,
-    bottom: 22,
-    flexDirection: 'row',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0EFE6',
     alignItems: 'center',
-    gap: 7,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    borderRadius: 30,
-    zIndex: 10,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD0B8',
     shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   floatingUpcomingText: {
     fontSize: 14,
