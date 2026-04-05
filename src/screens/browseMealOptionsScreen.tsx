@@ -1025,6 +1025,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         />
       )}
 
+      {/* Upcoming Meals — bottom left, clear of granny button */}
+      <TouchableOpacity
+        style={styles.floatingUpcomingBtn}
+        onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
+        activeOpacity={0.85}
+        accessibilityLabel="Upcoming Meals"
+      >
+        <Feather name="calendar" size={17} color="#FFF" />
+        <Text style={styles.floatingUpcomingText}>My Orders</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={[styles.floatingGrannyButton, { minHeight: touchTarget, minWidth: touchTarget }]}
         onPress={() => setShowAIChat(true)}
@@ -1420,6 +1431,29 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
+  },
+  floatingUpcomingBtn: {
+    position: 'absolute',
+    left: 16,
+    bottom: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderRadius: 30,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+  },
+  floatingUpcomingText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
   },
   tabs: {
     flexDirection: 'row',
