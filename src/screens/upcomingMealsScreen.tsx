@@ -59,7 +59,7 @@ function minutesUntilReady(placedAt: Date): number {
 }
 
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory, clearAllOrders } = useCart();
+  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -146,6 +146,17 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Clear', style: 'destructive', onPress: clearAllOrders },
+      ],
+    );
+  };
+
+  const handleRemoveOrder = (orderId: string) => {
+    Alert.alert(
+      'Remove Order',
+      'Remove this order from your queue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => removeOrder(orderId) },
       ],
     );
   };
@@ -330,11 +341,20 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             </Text>
                           </View>
                         </View>
-                        <Feather
-                          name={expanded ? 'chevron-down' : 'chevron-right'}
-                          size={20}
-                          color={COLORS.textMuted}
-                        />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <TouchableOpacity
+                            style={styles.removeOrderBtn}
+                            onPress={(e) => { e.stopPropagation?.(); handleRemoveOrder(order.id); }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Feather name="trash-2" size={15} color={COLORS.danger} />
+                          </TouchableOpacity>
+                          <Feather
+                            name={expanded ? 'chevron-down' : 'chevron-right'}
+                            size={20}
+                            color={COLORS.textMuted}
+                          />
+                        </View>
                       </View>
 
                       {/* Meal rows */}
@@ -740,6 +760,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   statusText: { fontSize: 12, fontWeight: '700' },
+  removeOrderBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: COLORS.dangerBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
 
   // Meal rows
   mealRow: {
