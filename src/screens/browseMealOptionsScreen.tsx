@@ -732,7 +732,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [selectedSide, setSelectedSide] = useState<Meal | null>(null);
 
   // Use the cart context
-  const { addToCart, getCartCount } = useCart();
+  const { addToCart, getCartCount, orders, getOrdersForResident } = useCart();
 
   const [menuLoading, setMenuLoading] = useState<boolean>(true);
   const [recLoading, setRecLoading] = useState<boolean>(true);
@@ -740,6 +740,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
   const activePeriod = getCurrentMealPeriod();
+
+  // Auto-suggest from past orders (2-hour pre-meal reminder)
+  const [autoSuggest, setAutoSuggest] = useState<{ period: string; meal: Meal } | null>(null);
+  const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -858,6 +862,40 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     loadMenu(selectedPeriod.value, selectedPeriod.key);
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
+
+  // 2-hour pre-meal auto-suggest from past orders
+  useEffect(() => {
+    if (autoSuggestDismissed || meals.length === 0) return;
+
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+
+    // Windows: 2 hrs before each period start
+    const upcoming = MEAL_SCHEDULE.find((s) => mins >= s.start - 120 && mins < s.start);
+    if (!upcoming) return;
+
+    // Check if resident already has a current order for this period
+    const resOrders = residentId ? getOrdersForResident(residentId) : orders;
+    const hasOrderForPeriod = resOrders.some((o) =>
+      o.items.some((i) => i.meal_period === upcoming.label)
+    );
+    if (hasOrderForPeriod) return;
+
+    // Pick a past meal for this period from order history
+    const pastMeal = resOrders
+      .flatMap((o) => o.items)
+      .find((i) => i.meal_period === upcoming.label);
+
+    if (pastMeal) {
+      // Match to current available meals list
+      const match = meals.find((m) => String(m.id) === String(pastMeal.id) || m.name === pastMeal.name);
+      if (match) setAutoSuggest({ period: upcoming.label, meal: match });
+    } else {
+      // No past order — pick the top available meal for that period
+      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label);
+      if (periodMeals.length > 0) setAutoSuggest({ period: upcoming.label, meal: periodMeals[0] });
+    }
+  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -1058,9 +1096,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         ) : recommendation ? (
           <Text style={[styles.aiRecommendationText, { fontSize: scaled(16) }]}>
             {recommendation.reason}{' '}
-            <Text style={styles.aiRecommendationHighlight}>
+            <Text
+              style={[styles.aiRecommendationHighlight, styles.aiRecommendationTappable]}
+              onPress={() => {
+                const found = meals.find(
+                  (m) => m.name === recommendation.meal_name || translateMealName(m.name, language) === recommendation.meal_name
+                );
+                if (found) openMealDetail(found);
+              }}
+            >
               {translateMealName(recommendation.meal_name, language)}
-            </Text>.
+            </Text>
+            <Text style={styles.aiRecommendationText}>{' — tap to order.'}</Text>
           </Text>
         ) : (
           <Text style={[styles.aiRecommendationText, { fontSize: scaled(16) }]}>
@@ -1084,6 +1131,51 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
         </View>
       ) : null}
+
+      {/* 2-hour pre-meal auto-suggest banner */}
+      {autoSuggest && !autoSuggestDismissed && (
+        <View style={styles.autoSuggestBanner}>
+          <View style={styles.autoSuggestLeft}>
+            <Feather name="clock" size={16} color="#4A5C2A" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.autoSuggestTitle}>
+                {autoSuggest.period} in under 2 hours
+              </Text>
+              <Text style={styles.autoSuggestBody}>
+                We picked <Text style={styles.autoSuggestMeal}>{autoSuggest.meal.name}</Text> based on past orders — want to go with it?
+              </Text>
+            </View>
+          </View>
+          <View style={styles.autoSuggestActions}>
+            <TouchableOpacity
+              style={styles.autoSuggestConfirm}
+              onPress={() => {
+                const m = autoSuggest.meal;
+                addToCart({
+                  id: Number(m.id),
+                  name: m.name,
+                  meal_period: m.meal_period as any,
+                  description: m.description,
+                  kcal: m.kcal,
+                  sodium_mg: m.sodium_mg,
+                  protein_g: m.protein_g,
+                  tags: m.tags,
+                });
+                setAutoSuggestDismissed(true);
+                setAutoSuggest(null);
+              }}
+            >
+              <Text style={styles.autoSuggestConfirmText}>Order</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.autoSuggestDeny}
+              onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }}
+            >
+              <Text style={styles.autoSuggestDenyText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Main Content */}
       {menuLoading ? (
@@ -2056,6 +2148,72 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // Recommendation tappable highlight
+  aiRecommendationTappable: {
+    textDecorationLine: 'underline',
+  },
+
+  // Auto-suggest banner
+  autoSuggestBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    backgroundColor: '#F0F7E8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C2D9A0',
+    padding: 14,
+    gap: 10,
+  },
+  autoSuggestLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    flex: 1,
+  },
+  autoSuggestTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#3A5020',
+    marginBottom: 2,
+  },
+  autoSuggestBody: {
+    fontSize: 13,
+    color: '#4A5C2A',
+    lineHeight: 18,
+  },
+  autoSuggestMeal: {
+    fontWeight: '700',
+    color: '#2D4018',
+  },
+  autoSuggestActions: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  autoSuggestConfirm: {
+    backgroundColor: '#4A5C2A',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+  },
+  autoSuggestConfirmText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  autoSuggestDeny: {
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#B0C890',
+  },
+  autoSuggestDenyText: {
+    color: '#4A5C2A',
+    fontWeight: '600',
+    fontSize: 13,
   },
 
   // Schedule banner in header

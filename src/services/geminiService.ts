@@ -122,18 +122,17 @@ ${residentContext}
 AVAILABLE MEALS:
 ${mealsContext}
 
-RESPONSE GUIDELINES:
-- Be concise, friendly, and helpful. No over-the-top grandma persona.
-- Answer greetings naturally and casually.
-- When recommending meals, explain WHY they are safe and suitable for this resident.
-- When a meal is unsafe, explain which specific allergen or restriction it violates.
-- Format meal names in bold using **name**.
-- Use bullet points for lists.
-- If asked about a meal not in the database, say you can only recommend from the currently available meals.
-- If asked a general nutrition or diet question, answer helpfully but tie it back to available meals.
-- Keep responses concise — no more than 3-4 short paragraphs.
+RESPONSE RULES — KEEP IT SHORT:
+- Max 2-3 sentences per response. Never write paragraphs.
+- For meal recommendations: one sentence on why it fits, then the meal name in bold.
+- For menu listing: bullet points only, no extra commentary.
+- Never repeat the resident's name back in every sentence.
+- No filler phrases like "Great question!" or "Of course!".
+- Format meal names in bold: **name**.
+- Flag unsafe meals in one short sentence.
+- Only recommend meals from the AVAILABLE MEALS list.
 
-LANGUAGE: You MUST respond in ${language}. All your responses — greetings, recommendations, warnings, everything — must be in ${language}. Meal names can stay in English but all descriptions and conversation must be in ${language}.`;
+LANGUAGE: Respond in ${language} only. Meal names stay in English.`;
 }
 
 /**
@@ -156,7 +155,7 @@ async function callGeminiModel(
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.8 },
+    generationConfig: { maxOutputTokens: 350, temperature: 0.7 },
   };
 
   let resp: Response;
