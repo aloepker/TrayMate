@@ -1021,22 +1021,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </View>
 
-      {/* Kitchen Schedule */}
-      <View style={styles.scheduleRow}>
-        <Feather name="clock" size={13} color={pt.subColor} />
-        <Text style={[styles.scheduleLabel, { color: pt.subColor }]}>Kitchen open 7 am – 7 pm  ·  </Text>
-        {MEAL_SCHEDULE.map((s) => {
-          const isActive = activePeriod === s.label;
-          return (
-            <View key={s.label} style={[styles.schedulePill, isActive && { backgroundColor: s.color }]}>
-              <Text style={[styles.schedulePillText, isActive && styles.schedulePillTextActive]}>
-                {s.icon} {s.label} {s.label === 'Breakfast' ? '7–10am' : s.label === 'Lunch' ? '11am–2pm' : '4–7pm'}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-
       {/* Period Tabs */}
       <View style={styles.tabs}>
         {PERIOD_KEYS.map((period) => {
