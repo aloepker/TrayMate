@@ -155,7 +155,7 @@ async function callGeminiModel(
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: { maxOutputTokens: 350, temperature: 0.7 },
+    generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
   };
 
   let resp: Response;

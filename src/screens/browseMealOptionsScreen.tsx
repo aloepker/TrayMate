@@ -1031,7 +1031,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       {/* Decorative period icon — top right of header */}
       <Text style={styles.headerIcon}>{pt.icon}</Text>
 
-      {/* Back Button & Title */}
+      {/* Back Button, Title & Header Actions */}
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -1043,8 +1043,44 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         </TouchableOpacity>
         <View style={styles.titleContainer}>
-          <Text style={[styles.title, { fontSize: scaled(32), color: pt.titleColor }]}>{t.availableMenus}</Text>
-          <Text style={[styles.subtitle, { fontSize: scaled(17), color: pt.subColor }]}>{t.orderingFor} {residentName}</Text>
+          <Text style={[styles.title, { fontSize: scaled(28), color: pt.titleColor }]}>{t.availableMenus}</Text>
+          <Text style={[styles.subtitle, { fontSize: scaled(15), color: pt.subColor }]}>{t.orderingFor} {residentName}</Text>
+        </View>
+        {/* Header action buttons — right side */}
+        <View style={styles.headerActions}>
+          {getCartCount() > 0 && (
+            <TouchableOpacity
+              style={[styles.headerActionBtn, { backgroundColor: pt.tabActiveBg }]}
+              onPress={goToCart}
+              activeOpacity={0.85}
+            >
+              <Feather name="shopping-cart" size={18} color="#FFF" />
+              <View style={styles.headerCartBadge}>
+                <Text style={styles.headerCartBadgeText}>{getCartCount()}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
+            onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
+            activeOpacity={0.85}
+          >
+            <Feather name="calendar" size={18} color={pt.tabActiveBg} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
+            onPress={() => setShowBrowseSupport(true)}
+            activeOpacity={0.85}
+          >
+            <Feather name="help-circle" size={18} color={pt.tabActiveBg} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
+            onPress={goToSettings}
+            activeOpacity={0.85}
+          >
+            <Feather name="settings" size={18} color={pt.tabActiveBg} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1209,46 +1245,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         <Image source={require('../styles/pictures/grandma.png')} style={styles.floatingGrannyImage} resizeMode="contain" />
       </TouchableOpacity>
 
-      <View style={styles.floatingTopActions}>
-        {getCartCount() > 0 && (
-          <TouchableOpacity
-            style={[styles.floatingCartButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-            onPress={goToCart}
-            accessibilityLabel="Cart"
-            activeOpacity={0.85}
-          >
-            <Feather name="shopping-cart" size={20} color="#FFFFFF" />
-            <View style={styles.headerCartBadge}>
-              <Text style={styles.headerCartBadgeText}>{getCartCount()}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.floatingUpcomingBtn, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
-          onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
-          accessibilityLabel="My Orders"
-          activeOpacity={0.85}
-        >
-          <Feather name="calendar" size={20} color={pt.tabActiveBg} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setShowBrowseSupport(true)}
-          style={[styles.floatingSupportButton, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
-          accessibilityLabel="Support"
-          activeOpacity={0.85}
-        >
-          <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={goToSettings}
-          style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
-          accessibilityLabel="Settings"
-          accessibilityRole="button"
-          activeOpacity={0.85}
-        >
-          <Feather name="settings" size={20} color={pt.tabActiveBg} />
-        </TouchableOpacity>
-      </View>
 
       {/* Meal Detail Modal */}
       <Modal
@@ -1566,7 +1562,19 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flex: 1,
-    paddingRight: 72,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   title: {
     fontSize: 32,
