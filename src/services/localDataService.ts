@@ -688,6 +688,71 @@ export const RecommendationService = {
     dietary_restrictions: restrictions,
   };
 },
+
+  /**
+   * Get top recommendation using a pre-built resident object (e.g. from backend params).
+   * Used when the resident isn't in the local RESIDENTS_DATABASE.
+   */
+  getTopRecommendationForResident: async (
+    resident: Resident,
+    period?: Meal["mealPeriod"] | null
+  ) => {
+    let meals = await MealService.getMealsByPeriod(period || null);
+
+    // Filter out meals unsafe for this resident's allergies
+    meals = meals.filter((m) => ResidentService.isMealSafeForResident(m, resident));
+
+    // Filter out disliked ingredients
+    meals = meals.filter((m) => {
+      const mealIngredients = m.ingredients.map((i) => i.toLowerCase());
+      return !resident.dislikedIngredients.some((disliked) =>
+        mealIngredients.some((ing) => ing.includes(disliked.toLowerCase()))
+      );
+    });
+
+    if (meals.length === 0) return null;
+
+    const scored = meals.map((meal) => {
+      let score = 50;
+      const reasons: string[] = [];
+
+      const sodium = parseInt(meal.nutrition.sodium.replace(/[^\d]/g, '') || '0');
+      const protein = parseInt(meal.nutrition.protein.replace(/[^\d]/g, '') || '0');
+
+      if (sodium <= 400) { score += 15; reasons.push('Low sodium'); }
+      if (protein >= 15) { score += 10; reasons.push('High protein'); }
+      if (meal.isSeasonal) { score += 5; reasons.push('Seasonal special'); }
+      if (meal.tags.some((t) => t.toLowerCase().includes('heart healthy'))) {
+        score += 10; reasons.push('Heart healthy');
+      }
+
+      return { meal, score, reasons };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored[0];
+
+    const restrictions = resident.dietaryRestrictions.map((r) => r.name);
+    const whyParts: string[] = [];
+    if (restrictions.length > 0) {
+      whyParts.push(`free of ${restrictions.join(', ')}`);
+    }
+    if (top.reasons.length > 0) {
+      for (const r of top.reasons) {
+        if (!r.toLowerCase().includes('free of')) whyParts.push(r.toLowerCase());
+      }
+    }
+
+    const whyText = whyParts.length > 0
+      ? `It's ${whyParts.join(', ')} — a great fit for ${resident.firstName}. We recommend the`
+      : `Based on ${resident.firstName}'s profile, we suggest the`;
+
+    return {
+      meal_name: top.meal.name,
+      reason: whyText,
+      dietary_restrictions: restrictions,
+    };
+  },
 };
 
 // ==================== ORDER SERVICE ====================

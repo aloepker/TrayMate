@@ -36,6 +36,7 @@ import {
   ResidentService,
   RecommendationService,
   Meal as ServiceMeal,
+  Resident,
 } from "../services/localDataService";
 import {
   translateMealDescription,
@@ -708,6 +709,20 @@ function sortMealsByAvailability(meals: Meal[]): Meal[] {
   });
 }
 
+// ---------- Meal Schedule (iPad device time) ----------
+const MEAL_SCHEDULE = [
+  { label: 'Breakfast', start: 7 * 60, end: 10 * 60, color: '#D97706', icon: '☀️' },
+  { label: 'Lunch',     start: 11 * 60, end: 14 * 60, color: '#4A7A60', icon: '🍽️' },
+  { label: 'Dinner',    start: 16 * 60, end: 19 * 60, color: '#5C5FA8', icon: '🌙' },
+];
+
+function getCurrentMealPeriod(): string | null {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const found = MEAL_SCHEDULE.find((s) => mins >= s.start && mins <= s.end);
+  return found ? found.label : null;
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -733,6 +748,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [showBrowseSupport, setShowBrowseSupport] = useState(false);
+  const activePeriod = getCurrentMealPeriod();
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -794,21 +811,51 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId]);
 
-  // Fetch recommendation from API (async)
+  // Fetch recommendation — works with both local and backend residents
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
 
     try {
       const resId = residentId || ResidentService.getDefaultResident().id;
-      const rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
+      const localResident = ResidentService.getResidentById(resId);
+
+      let rec;
+      if (localResident) {
+        // local resident — use normal path
+        rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
+      } else {
+        // backend resident — build a virtual resident from route params
+        const rawAllergies: string[] = route?.params?.dietaryRestrictions ?? [];
+        const virtualResident: Resident = {
+          id: resId,
+          firstName: (route?.params?.residentName ?? 'Resident').split(' ')[0],
+          lastName: '',
+          fullName: route?.params?.residentName ?? 'Resident',
+          email: '',
+          phone: '',
+          roomNumber: '',
+          role: 'resident',
+          dietaryRestrictions: rawAllergies.map((name: string) => ({
+            type: 'allergy' as const,
+            name,
+            severity: 'moderate' as const,
+          })),
+          nutritionGoals: { dailyCalories: 1800, maxSodium: 2000, minProtein: 45, maxCholesterol: 250, maxSugar: 40 },
+          dislikedIngredients: [],
+          favoriteMealIds: [],
+          isActive: true,
+        };
+        rec = await RecommendationService.getTopRecommendationForResident(virtualResident, selectedPeriod.value);
+      }
+
       setRecommendation(rec);
       setRecLoading(false);
     } catch {
       setRecommendation(null);
       setRecLoading(false);
     }
-  }, [residentId, selectedPeriod.value]);
+  }, [residentId, selectedPeriod.value, route?.params]);
 
   // Pre-load drinks & sides once on mount so add-on pickers are always ready
   useEffect(() => {
@@ -974,6 +1021,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </View>
 
+      {/* Kitchen Schedule */}
+      <View style={styles.scheduleRow}>
+        <Feather name="clock" size={13} color={pt.subColor} />
+        <Text style={[styles.scheduleLabel, { color: pt.subColor }]}>Kitchen open 7 am – 7 pm  ·  </Text>
+        {MEAL_SCHEDULE.map((s) => {
+          const isActive = activePeriod === s.label;
+          return (
+            <View key={s.label} style={[styles.schedulePill, isActive && { backgroundColor: s.color }]}>
+              <Text style={[styles.schedulePillText, isActive && styles.schedulePillTextActive]}>
+                {s.icon} {s.label} {s.label === 'Breakfast' ? '7–10am' : s.label === 'Lunch' ? '11am–2pm' : '4–7pm'}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
       {/* Period Tabs */}
       <View style={styles.tabs}>
         {PERIOD_KEYS.map((period) => {
@@ -1102,6 +1165,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           activeOpacity={0.85}
         >
           <Feather name="calendar" size={20} color={pt.tabActiveBg} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setShowBrowseSupport(true)}
+          style={[styles.floatingSupportButton, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
+          accessibilityLabel="Support"
+          activeOpacity={0.85}
+        >
+          <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={goToSettings}
@@ -1305,6 +1376,45 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         residentId={residentId || ResidentService.getDefaultResident().id}
         dietaryRestrictions={route?.params?.dietaryRestrictions || []}
       />
+
+      {/* Browse Support Modal */}
+      <Modal visible={showBrowseSupport} transparent animationType="fade" onRequestClose={() => setShowBrowseSupport(false)}>
+        <View style={styles.supportBackdrop}>
+          <View style={styles.supportCard}>
+            <View style={styles.supportCardHeader}>
+              <Text style={styles.supportCardTitle}>Need Help?</Text>
+              <TouchableOpacity onPress={() => setShowBrowseSupport(false)} hitSlop={10}>
+                <Feather name="x" size={22} color="#1A1A1A" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.supportCardSub}>Contact your care team or kitchen staff for assistance with meal orders.</Text>
+
+            <View style={styles.scheduleCardBlock}>
+              <Text style={styles.scheduleCardTitle}>Kitchen Hours</Text>
+              {MEAL_SCHEDULE.map((s) => {
+                const isActive = activePeriod === s.label;
+                return (
+                  <View key={s.label} style={[styles.scheduleCardRow, isActive && styles.scheduleCardRowActive]}>
+                    <Text style={styles.scheduleCardIcon}>{s.icon}</Text>
+                    <Text style={[styles.scheduleCardLabel, isActive && styles.scheduleCardLabelActive]}>
+                      {s.label}
+                    </Text>
+                    <Text style={[styles.scheduleCardTime, isActive && styles.scheduleCardLabelActive]}>
+                      {s.label === 'Breakfast' ? '7:00 am – 10:00 am' : s.label === 'Lunch' ? '11:00 am – 2:00 pm' : '4:00 pm – 7:00 pm'}
+                    </Text>
+                    {isActive && <View style={styles.scheduleActiveDot} />}
+                  </View>
+                );
+              })}
+              <Text style={styles.scheduleKitchenNote}>Kitchen open 7 am – 7 pm daily</Text>
+            </View>
+
+            <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
+              <Text style={styles.supportCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1972,6 +2082,153 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // Schedule banner in header
+  scheduleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  scheduleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  schedulePill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  schedulePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#555',
+  },
+  schedulePillTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+
+  // Support button in floating actions
+  floatingSupportButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(113,118,68,0.25)',
+    shadowColor: '#717644',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+
+  // Support modal
+  supportBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  supportCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 480,
+  },
+  supportCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  supportCardTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1A1A1A',
+  },
+  supportCardSub: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  scheduleCardBlock: {
+    backgroundColor: '#F8F7F3',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+  },
+  scheduleCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4A4A4A',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scheduleCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+    gap: 8,
+  },
+  scheduleCardRowActive: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  scheduleCardIcon: {
+    fontSize: 16,
+  },
+  scheduleCardLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    width: 72,
+  },
+  scheduleCardLabelActive: {
+    color: '#1D4ED8',
+  },
+  scheduleCardTime: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+  },
+  scheduleActiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
+  },
+  scheduleKitchenNote: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  supportCloseBtn: {
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  supportCloseBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
 

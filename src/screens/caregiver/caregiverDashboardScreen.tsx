@@ -114,9 +114,9 @@ export default function CaregiverDashboardScreen({
   const stats = useMemo(() => {
     return {
       assignedResidents: residents.length,
-      activeAlerts: notifications.filter((n) => !n.read).length,
+      activeAlerts: notifications.filter((n) => !n.read).length + kitchenUnread,
     };
-  }, [residents, notifications]);
+  }, [residents, notifications, kitchenUnread]);
 
   // -----------------------------
   // Group notifications by residentId
