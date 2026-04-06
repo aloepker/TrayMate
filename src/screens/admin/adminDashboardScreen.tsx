@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import Feather from "react-native-vector-icons/Feather";
-
 /**
  * FILE PATHS
  */
@@ -325,22 +324,24 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       {/* HEADER SECTION */}
       <View style={styles.topBar}>
         <View style={styles.brand}>
-          <Image 
-            source={grandmaLogo} 
-            style={styles.logo} 
-            resizeMode="contain" 
+          <Image
+            source={grandmaLogo}
+            style={styles.logo}
+            resizeMode="contain"
           />
           <View>
             <Text style={styles.brandTitle}>TrayMate</Text>
             <Text style={styles.brandSub}>Admin Portal</Text>
           </View>
         </View>
-        <Pressable 
-          style={styles.logoutBtn} 
-          onPress={() => navigation.replace("Login")}
-        >
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+        <View style={styles.topBarRight}>
+          <Pressable
+            style={styles.logoutBtn}
+            onPress={() => navigation.replace("Login")}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       {loading ? (
@@ -478,9 +479,10 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     }
                     hitSlop={10}
                   >
-                    <Text style={styles.cartBtnIcon}>🛒</Text>
+                    <Feather name="shopping-cart" size={16} color="#717644" />
                     <Text style={styles.cartBtnText}>Select Resident</Text>
                   </Pressable>
+
                 </View>
               </View>
             ))}
@@ -682,6 +684,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -768,6 +771,36 @@ const styles = StyleSheet.create({
     fontSize: 12, 
     color: "#6F6F6F", 
     marginTop: 1 
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F5F3EF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   logoutBtn: {
     height: 44,
@@ -1042,7 +1075,75 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#FFFFFF",
   },
-  modalBackdrop: { 
+  msgKitchenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#F5F3EF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#A7A07F',
+  },
+  msgKitchenText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6D6B3B',
+  },
+  inboxCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '92%',
+    maxWidth: 500,
+  },
+  inboxHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inboxEmpty: {
+    textAlign: 'center',
+    color: '#9CA3AF',
+    paddingVertical: 20,
+    fontSize: 15,
+  },
+  inboxItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6D6B3B',
+  },
+  inboxItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  inboxResident: {
+    fontWeight: '800',
+    color: '#111827',
+    fontSize: 14,
+  },
+  inboxTime: {
+    color: '#9CA3AF',
+    fontSize: 12,
+  },
+  inboxMessage: {
+    color: '#374151',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  inboxFrom: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  modalBackdrop: {
     flex: 1, 
     backgroundColor: "rgba(0,0,0,0.35)", 
     justifyContent: "center", 
@@ -1091,10 +1192,49 @@ const styles = StyleSheet.create({
     color: "#fff", 
     fontWeight: "900" 
   },
-  modalCancel: { 
-    marginTop: 12, 
-    textAlign: "center", 
-    fontWeight: "800", 
-    color: "#6B7280" 
+  modalCancel: {
+    marginTop: 12,
+    textAlign: "center",
+    fontWeight: "800",
+    color: "#6B7280"
+  },
+  msgKitchenBtn: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    marginLeft: 8,
+  },
+  msgKitchenText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#D87000',
+  },
+  composeSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  composeResident: {
+    fontSize: 14,
+    color: '#6A6A6A',
+    fontWeight: '600',
+    marginBottom: 14,
+  },
+  composeInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#1A1A1A',
+    backgroundColor: '#F9FAFB',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 4,
   },
 });

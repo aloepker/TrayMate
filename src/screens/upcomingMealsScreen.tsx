@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Feather from 'react-native-vector-icons/Feather';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -11,91 +13,86 @@ import { useCart } from './context/CartContext';
 import type { Order } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
+import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
 
-// Emoji placeholders for meals (same as browse screen)
-const MEAL_EMOJIS: Record<string, string> = {
-  'Banana-Chocolate Pancakes': '🥞',
-  'Broccoli-Cheddar Quiche': '🥧',
-  'Caesar Salad with Chicken': '🥗',
-  'Citrus Butter Salmon': '🐟',
-  'Chicken Bruschetta': '🍗',
-  'Breakfast Banana Split': '🍌',
-  'Herb Baked Chicken': '🍗',
-  'Garden Vegetable Medley': '🥦',
-  'Strawberry Belgian Waffle': '🧇',
-  'Spring Menu Special': '🌸',
-  'Grilled Salmon Fillet': '🐟',
-  'Oatmeal Bowl': '🥣',
+// ── Warm olive palette (matches browse meals, cart, settings) ─────────────────
+const COLORS = {
+  primary:      '#717644',
+  primaryLight: '#F0EFE6',
+  background:   '#F5F3EE',
+  surface:      '#FDFCF9',
+  card:         '#FFFFFF',
+  border:       '#E2DFD8',
+  warmBorder:   '#DDD0B8',
+  text:         '#1A1A1A',
+  textMuted:    '#5C5C5C',
 };
 
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, updateOrderStatus, getOrdersForResident } = useCart();
-  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const { orders, updateOrderStatus, getOrdersForResident, fetchOrderHistory, clearAllOrders } = useCart();
+  const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Get resident info from navigation params
   const residentId = route?.params?.residentId as string | undefined;
   const residentName = route?.params?.residentName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
 
-  // Only show orders for this specific resident
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
+
+  useEffect(() => {
+    if (!residentId) return;
+    fetchOrderHistory(residentId);
+    const unsub = navigation.addListener('focus', () => fetchOrderHistory(residentId));
+    return unsub;
+  }, [residentId, navigation]);
+
   const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
 
+  // ── Status config — olive-toned colours ──────────────────────────────────────
   const statusConfig: Record<
     Order['status'],
-    { label: string; color: string; bg: string; icon: string; progress: number }
+    { label: string; color: string; bg: string; featherIcon: string; progress: number }
   > = {
     confirmed: {
       label: t.confirmed,
-      color: '#1d4ed8',
-      bg: '#dbeafe',
-      icon: '✓',
+      color: COLORS.primary,
+      bg:    COLORS.primaryLight,
+      featherIcon: 'check-circle',
       progress: 0.25,
     },
     preparing: {
       label: t.preparing,
       color: '#b45309',
-      bg: '#fef3c7',
-      icon: '🍳',
+      bg:    '#fef3c7',
+      featherIcon: 'clock',
       progress: 0.5,
     },
     ready: {
       label: t.ready,
       color: '#15803d',
-      bg: '#dcfce7',
-      icon: '✓',
+      bg:    '#dcfce7',
+      featherIcon: 'check-circle',
       progress: 0.75,
     },
     completed: {
       label: t.completed,
       color: '#166534',
-      bg: '#bbf7d0',
-      icon: '✓',
+      bg:    '#bbf7d0',
+      featherIcon: 'check-circle',
       progress: 1.0,
     },
   };
 
   const statusSteps = [t.confirmed, t.preparing, t.ready, t.completed];
 
-  const toggleExpand = (id: string) => {
+  const toggleExpand = (id: string) =>
     setExpandedId((curr) => (curr === id ? null : id));
-  };
 
-  const handleBack = () => {
-    navigation.goBack();
-  };
-
-  const handleSettings = () => {
-    navigation.navigate('Settings');
-  };
-
-  const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
+  const formatTime = (date: Date) =>
+    new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   const formatDate = (date: Date) => {
     const d = new Date(date);
@@ -107,43 +104,46 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  // Cycle to next status for demo
-  const advanceStatus = (order: Order) => {
-    const statusOrder: Order['status'][] = [
-      'confirmed',
-      'preparing',
-      'ready',
-      'completed',
-    ];
-    const currentIndex = statusOrder.indexOf(order.status);
-    if (currentIndex < statusOrder.length - 1) {
-      const nextStatus = statusOrder[currentIndex + 1];
-      updateOrderStatus(order.id, nextStatus);
-      if (notifications.orderUpdates) {
-        Alert.alert(t.orderUpdates, `${t.upcomingMeals}: ${statusConfig[nextStatus].label}`);
-      }
-    }
-  };
-
-  const activeOrders = residentOrders.filter((o) => o.status !== 'completed');
+  const activeOrders    = residentOrders.filter((o) => o.status !== 'completed');
   const completedOrders = residentOrders.filter((o) => o.status === 'completed');
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={styles.container}>
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={[styles.backButton, { minHeight: touchTarget, minWidth: touchTarget }]}>
-          <View style={styles.backArrow}>
-            <View style={styles.backArrowLine1} />
-            <View style={styles.backArrowLine2} />
-          </View>
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontSize: scaled(24) }]}>{t.upcomingMeals}</Text>
         <TouchableOpacity
-          style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-          onPress={handleSettings}
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { minHeight: touchTarget }]}
         >
-          <Text style={styles.settingsIcon}>⚙</Text>
+          <Feather name="chevron-left" size={22} color={COLORS.primary} />
+          <Text style={[styles.backText, { fontSize: scaled(16) }]}>
+            {t.back?.replace(/^[\s\u2190\u21A9\u2B05]+/, '') || 'Back'}
+          </Text>
         </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.upcomingMeals}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          {residentOrders.length > 0 && (
+            <TouchableOpacity
+              style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+              onPress={() => {
+                Alert.alert('Clear Orders', 'Remove all cached orders from this device?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Clear', style: 'destructive', onPress: clearAllOrders },
+                ]);
+              }}
+            >
+              <Feather name="trash-2" size={18} color="#C53030" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Feather name="settings" size={20} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -152,36 +152,42 @@ function UpcomingMealsScreen({ navigation, route }: any) {
         showsVerticalScrollIndicator={false}
       >
         {residentOrders.length === 0 ? (
+          /* ── Empty state ── */
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
+            <View style={styles.emptyIconWrap}>
+              <Feather name="calendar" size={44} color={COLORS.primary} />
+            </View>
             <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.noUpcoming}</Text>
-            <Text style={[styles.emptyText, { fontSize: scaled(15), lineHeight: scaled(22) }]}>
-              {t.noUpcomingDesc}
-            </Text>
+            <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.noUpcomingDesc}</Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => navigation.navigate('BrowseMealOptions', {
-                residentId,
-                residentName,
-                dietaryRestrictions,
-              })}
+              onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
             >
+              <Feather name="book-open" size={17} color="#FFF" />
               <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
+            {/* Meal reminder banner */}
             {notifications.mealReminders && activeOrders.length > 0 && (
-              <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                <Text style={{ color: '#92400E', fontWeight: '600', fontSize: scaled(13) }}>{t.mealReminders}: {t.mealRemindersDesc}</Text>
+              <View style={styles.reminderBanner}>
+                <Feather name="bell" size={14} color="#92400E" />
+                <Text style={[styles.reminderText, { fontSize: scaled(13) }]}>
+                  {t.mealReminders}: {t.mealRemindersDesc}
+                </Text>
               </View>
             )}
-            {/* Active Orders */}
+
+            {/* ── Active Orders ── */}
             {activeOrders.length > 0 && (
               <>
-                <Text style={[styles.sectionHeader, { fontSize: scaled(16) }]}>{t.activeOrdersLabel}</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>
+                  {t.activeOrdersLabel}
+                </Text>
+
                 {activeOrders.map((order) => {
-                  const expanded = expandedId === order.id;
+                  const expanded   = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];
 
                   return (
@@ -189,53 +195,41 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       key={order.id}
                       style={styles.mealCard}
                       onPress={() => toggleExpand(order.id)}
-                      activeOpacity={0.8}
+                      activeOpacity={0.85}
                     >
-                      {/* Status progress bar */}
+                      {/* Progress track */}
                       <View style={styles.progressContainer}>
                         <View style={styles.progressTrack}>
                           <View
                             style={[
                               styles.progressFill,
-                              {
-                                width: `${statusInfo.progress * 100}%`,
-                                backgroundColor: statusInfo.color,
-                              },
+                              { width: `${statusInfo.progress * 100}%`, backgroundColor: statusInfo.color },
                             ]}
                           />
                         </View>
                         <View style={styles.progressSteps}>
                           {statusSteps.map((step, i) => {
                             const stepProgress = (i + 1) / statusSteps.length;
-                            const isActive =
-                              statusInfo.progress >= stepProgress;
+                            const isActive  = statusInfo.progress >= stepProgress;
                             const isCurrent = step === statusInfo.label;
                             return (
                               <View key={step} style={styles.progressStep}>
                                 <View
                                   style={[
                                     styles.progressDot,
-                                    isActive && {
-                                      backgroundColor: statusInfo.color,
-                                      borderColor: statusInfo.color,
-                                    },
+                                    isActive && { backgroundColor: statusInfo.color, borderColor: statusInfo.color },
                                     isCurrent && styles.progressDotCurrent,
                                   ]}
                                 >
                                   {isActive && (
-                                    <Text style={styles.progressDotCheck}>
-                                      ✓
-                                    </Text>
+                                    <Feather name="check" size={9} color="#FFF" />
                                   )}
                                 </View>
                                 <Text
                                   style={[
                                     styles.progressStepLabel,
                                     { fontSize: scaled(10) },
-                                    isCurrent && {
-                                      color: statusInfo.color,
-                                      fontWeight: '700',
-                                    },
+                                    isCurrent && { color: statusInfo.color, fontWeight: '700' },
                                   ]}
                                 >
                                   {step}
@@ -246,109 +240,75 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         </View>
                       </View>
 
-                      {/* Order header */}
+                      {/* Order meta row */}
                       <View style={styles.mealHeader}>
                         <View style={styles.mealInfo}>
-                          <Text style={[styles.orderLabel, { fontSize: scaled(14) }]}>
-                            {formatDate(order.placedAt)} ·{' '}
-                            {formatTime(order.placedAt)}
+                          <Text style={[styles.orderLabel, { fontSize: scaled(13) }]}>
+                            {formatDate(order.placedAt)} · {formatTime(order.placedAt)}
                           </Text>
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: statusInfo.bg },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.statusText,
-                                { fontSize: scaled(12) },
-                                { color: statusInfo.color },
-                              ]}
-                            >
-                              {statusInfo.icon} {statusInfo.label}
+                          <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
+                            <Feather name={statusInfo.featherIcon} size={11} color={statusInfo.color} />
+                            <Text style={[styles.statusText, { fontSize: scaled(12), color: statusInfo.color }]}>
+                              {statusInfo.label}
                             </Text>
                           </View>
                         </View>
-                        <Text style={[styles.chevron, { fontSize: scaled(24) }]}>
-                          {expanded ? '‹' : '›'}
-                        </Text>
+                        <Feather
+                          name={expanded ? 'chevron-down' : 'chevron-right'}
+                          size={20}
+                          color={COLORS.textMuted}
+                        />
                       </View>
 
-                      {/* Meal items list */}
-                      {order.items.map((item, idx) => (
-                        <View key={`${item.id}-${idx}`} style={styles.mealRow}>
-                          <Text style={styles.mealEmoji}>
-                            {MEAL_EMOJIS[item.name] || '🍽'}
-                          </Text>
-                          <View style={styles.mealRowInfo}>
-                            <Text style={[styles.mealName, { fontSize: scaled(16) }]}>
-                              {translateMealName(item.name, language)}
-                            </Text>
-                            <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
-                              {translateMealPeriod(item.meal_period, language)}
-                            </Text>
+                      {/* Meal rows */}
+                      {order.items.map((item, idx) => {
+                        const img = getMealImage(item.name);
+                        const ph  = getMealPlaceholder(item.name);
+                        return (
+                          <View key={`${item.id}-${idx}`} style={styles.mealRow}>
+                            {img ? (
+                              <Image source={img} style={styles.mealThumb} />
+                            ) : (
+                              <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
+                                <Feather name="coffee" size={18} color={COLORS.primary} />
+                              </View>
+                            )}
+                            <View style={styles.mealRowInfo}>
+                              <Text style={[styles.mealName, { fontSize: scaled(16) }]}>
+                                {translateMealName(item.name, language)}
+                              </Text>
+                              <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
+                                {translateMealPeriod(item.meal_period, language)}
+                              </Text>
+                            </View>
+                            <View style={styles.mealCalBadge}>
+                              <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>
+                                {item.kcal} kcal
+                              </Text>
+                            </View>
                           </View>
-                          <Text style={[styles.mealCal, { fontSize: scaled(14) }]}>{item.kcal} {t.calories}</Text>
-                        </View>
-                      ))}
+                        );
+                      })}
 
-                      {/* Expanded details */}
+                      {/* Expanded nutrition — NO advance-status button for residents */}
                       {expanded && (
                         <View style={styles.expandedSection}>
                           <View style={styles.divider} />
-
-                          {/* Nutrition summary */}
-                          <View style={styles.nutritionSection}>
-                            <Text style={[styles.nutritionTitle, { fontSize: scaled(13) }]}>
-                              {t.orderNutrition}
-                            </Text>
-                            <View style={styles.nutritionGrid}>
-                              <View style={styles.nutritionItem}>
-                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>
-                                  {order.totalNutrition.calories}
-                                </Text>
-                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>
-                                  {t.calories}
-                                </Text>
+                          <Text style={[styles.nutritionTitle, { fontSize: scaled(12) }]}>
+                            {t.orderNutrition}
+                          </Text>
+                          <View style={styles.nutritionGrid}>
+                            {[
+                              { label: t.calories, value: String(order.totalNutrition.calories) },
+                              { label: t.sodium,   value: `${order.totalNutrition.sodium}mg`   },
+                              { label: t.protein,  value: `${order.totalNutrition.protein}g`   },
+                            ].map(({ label, value }) => (
+                              <View key={label} style={styles.nutritionItem}>
+                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>{value}</Text>
+                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>{label}</Text>
                               </View>
-                              <View style={styles.nutritionItem}>
-                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>
-                                  {order.totalNutrition.sodium}mg
-                                </Text>
-                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>
-                                  {t.sodium}
-                                </Text>
-                              </View>
-                              <View style={styles.nutritionItem}>
-                                <Text style={[styles.nutritionValue, { fontSize: scaled(16) }]}>
-                                  {order.totalNutrition.protein}g
-                                </Text>
-                                <Text style={[styles.nutritionLabel, { fontSize: scaled(11) }]}>
-                                  {t.protein}
-                                </Text>
-                              </View>
-                            </View>
+                            ))}
                           </View>
-
-                          {/* Action button to advance status (for demo) */}
-                          {order.status !== 'completed' && (
-                            <TouchableOpacity
-                              style={[
-                                styles.advanceButton,
-                                { backgroundColor: statusInfo.color },
-                              ]}
-                              onPress={() => advanceStatus(order)}
-                            >
-                              <Text style={[styles.advanceButtonText, { fontSize: scaled(15) }]}>
-                                {order.status === 'confirmed'
-                                  ? t.startPreparing
-                                  : order.status === 'preparing'
-                                    ? t.markReady
-                                    : t.markCompleted}
-                              </Text>
-                            </TouchableOpacity>
-                          )}
                         </View>
                       )}
                     </TouchableOpacity>
@@ -357,36 +317,38 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               </>
             )}
 
-            {/* Completed Orders */}
+            {/* ── Completed Orders ── */}
             {completedOrders.length > 0 && (
               <>
-                <Text style={[styles.sectionHeader, { fontSize: scaled(16) }]}>{t.completed}</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>{t.completed}</Text>
                 {completedOrders.map((order) => (
                   <View key={order.id} style={styles.completedCard}>
                     <View style={styles.completedHeader}>
                       <View style={styles.completedBadge}>
-                        <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>
-                          ✓ {t.completed}
-                        </Text>
+                        <Feather name="check-circle" size={12} color="#166534" />
+                        <Text style={[styles.completedBadgeText, { fontSize: scaled(12) }]}>{t.completed}</Text>
                       </View>
                       <Text style={[styles.completedTime, { fontSize: scaled(13) }]}>
                         {formatDate(order.placedAt)}
                       </Text>
                     </View>
-                    {order.items.map((item, idx) => (
-                      <View
-                        key={`${item.id}-${idx}`}
-                        style={styles.completedRow}
-                      >
-                        <Text style={styles.mealEmoji}>
-                          {MEAL_EMOJIS[item.name] || '🍽'}
-                        </Text>
-                        <Text style={[styles.completedMealName, { fontSize: scaled(15) }]}>
-                          {translateMealName(item.name, language)}
-                        </Text>
-                      </View>
-                    ))}
-                    {/* Completion bar */}
+                    {order.items.map((item, idx) => {
+                      const img = getMealImage(item.name);
+                      return (
+                        <View key={`${item.id}-${idx}`} style={styles.completedRow}>
+                          {img ? (
+                            <Image source={img} style={styles.completedThumb} />
+                          ) : (
+                            <View style={styles.completedThumbPlaceholder}>
+                              <Feather name="coffee" size={14} color={COLORS.primary} />
+                            </View>
+                          )}
+                          <Text style={[styles.completedMealName, { fontSize: scaled(15) }]}>
+                            {translateMealName(item.name, language)}
+                          </Text>
+                        </View>
+                      );
+                    })}
                     <View style={styles.completionBar}>
                       <View style={styles.completionFill} />
                     </View>
@@ -398,17 +360,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               </>
             )}
 
-            {/* Browse Menu button — quick access without going back */}
+            {/* Browse Menu CTA */}
             <TouchableOpacity
               style={styles.browseMenuBtn}
-              onPress={() => navigation.navigate('BrowseMealOptions', {
-                residentId,
-                residentName,
-                dietaryRestrictions,
-              })}
-              activeOpacity={0.75}
+              onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions })}
+              activeOpacity={0.8}
             >
-              <Text style={styles.browseMenuEmoji}>🍽</Text>
+              <Feather name="book-open" size={20} color="#FFF" />
               <Text style={[styles.browseMenuText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
             </TouchableOpacity>
           </>
@@ -418,176 +376,170 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3EF',
+    backgroundColor: COLORS.background,
     paddingTop: 50,
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 14,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingRight: 8,
+    paddingVertical: 6,
+  },
+  backText: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.3,
+  },
+  settingsButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  backArrow: {
-    width: 12,
-    height: 12,
-    marginLeft: 3,
-  },
-  backArrowLine1: {
-    position: 'absolute',
-    width: 10,
-    height: 2,
-    backgroundColor: '#717644',
-    borderRadius: 1,
-    transform: [{ rotate: '-45deg' }, { translateX: 1 }, { translateY: 3 }],
-  },
-  backArrowLine2: {
-    position: 'absolute',
-    width: 10,
-    height: 2,
-    backgroundColor: '#717644',
-    borderRadius: 1,
-    transform: [{ rotate: '45deg' }, { translateX: 1 }, { translateY: 7 }],
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#4A4A4A',
-    flex: 1,
-    textAlign: 'center',
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 36, paddingTop: 16 },
+
+  // Reminder banner
+  reminderBanner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
   },
-  settingsIcon: {
-    fontSize: 24,
-    color: '#717644',
-  },
-  scrollView: {
+  reminderText: {
+    color: '#92400E',
+    fontWeight: '600',
     flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
   },
 
   // Section headers
   sectionHeader: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#8A8A8A',
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-    marginTop: 8,
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    marginTop: 4,
   },
 
   // Empty state
   emptyContainer: {
-    flex: 1,
+    alignItems: 'center',
+    paddingTop: 72,
+    paddingHorizontal: 36,
+  },
+  emptyIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 40,
-  },
-  emptyIcon: {
-    fontSize: 64,
     marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#4A4A4A',
+    color: COLORS.text,
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptyText: {
     fontSize: 15,
-    color: '#8A8A8A',
+    color: COLORS.textMuted,
     textAlign: 'center',
-    marginBottom: 28,
     lineHeight: 22,
+    marginBottom: 28,
   },
   browseButton: {
-    backgroundColor: '#717644',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     borderRadius: 14,
   },
   browseButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#FFF',
   },
 
-  // Meal cards (active)
+  // Active order cards
   mealCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
 
   // Progress bar
-  progressContainer: {
-    marginBottom: 16,
-  },
+  progressContainer: { marginBottom: 14 },
   progressTrack: {
-    height: 6,
-    backgroundColor: '#E8E4DE',
+    height: 5,
+    backgroundColor: COLORS.border,
     borderRadius: 3,
     overflow: 'hidden',
     marginBottom: 10,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressSteps: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  progressStep: {
-    alignItems: 'center',
-    flex: 1,
-  },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressSteps: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressStep: { alignItems: 'center', flex: 1 },
   progressDot: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#E8E4DE',
+    backgroundColor: COLORS.border,
     borderWidth: 2,
-    borderColor: '#E8E4DE',
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -598,150 +550,95 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 3,
   },
-  progressDotCheck: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '700',
-  },
   progressStepLabel: {
     fontSize: 10,
-    color: '#8A8A8A',
+    color: COLORS.textMuted,
     fontWeight: '500',
+    textAlign: 'center',
   },
 
-  // Order header
+  // Order meta row
   mealHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  mealInfo: {
+  mealInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  orderLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  orderLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A8A8A',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
+    gap: 5,
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 20,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  chevron: {
-    fontSize: 24,
-    color: '#cbc2b4',
-    fontWeight: '300',
-  },
+  statusText: { fontSize: 12, fontWeight: '700' },
 
-  // Meal rows within an order
+  // Meal rows
   mealRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
-  mealEmoji: {
-    fontSize: 28,
-    width: 40,
-    textAlign: 'center',
+  mealThumb: { width: 56, height: 56, borderRadius: 14 },
+  mealThumbPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mealRowInfo: {
-    flex: 1,
+  mealRowInfo: { flex: 1 },
+  mealName: { fontSize: 16, fontWeight: '600', color: COLORS.text },
+  mealPeriod: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
+  mealCalBadge: {
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.warmBorder,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  mealName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#4A4A4A',
-  },
-  mealPeriod: {
-    fontSize: 13,
-    color: '#8A8A8A',
-    marginTop: 2,
-  },
-  mealCal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A8A8A',
-  },
+  mealCal: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
 
-  // Expanded section
-  expandedSection: {
-    marginTop: 12,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E8E4DE',
-    marginBottom: 16,
-  },
-
-  // Nutrition grid
-  nutritionSection: {
-    marginBottom: 16,
-  },
+  // Expanded nutrition
+  expandedSection: { marginTop: 10 },
+  divider: { height: 1, backgroundColor: COLORS.border, marginBottom: 14 },
   nutritionTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#8A8A8A',
+    color: COLORS.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
+    letterSpacing: 0.6,
+    marginBottom: 8,
   },
-  nutritionGrid: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  nutritionGrid: { flexDirection: 'row', gap: 8 },
   nutritionItem: {
     flex: 1,
-    backgroundColor: '#F5F3EF',
+    backgroundColor: COLORS.primaryLight,
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E8E4DE',
+    borderColor: COLORS.border,
   },
-  nutritionValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#4A4A4A',
-    marginBottom: 2,
-  },
-  nutritionLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#8A8A8A',
-    textAlign: 'center',
-  },
+  nutritionValue: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: 2 },
+  nutritionLabel: { fontSize: 11, fontWeight: '500', color: COLORS.textMuted, textAlign: 'center' },
 
-  // Advance status button (demo)
-  advanceButton: {
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  advanceButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-
-  // Completed orders
+  // Completed cards
   completedCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E8E4DE',
-    opacity: 0.85,
+    borderColor: COLORS.border,
+    opacity: 0.88,
   },
   completedHeader: {
     flexDirection: 'row',
@@ -750,45 +647,40 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: '#bbf7d0',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 20,
   },
-  completedBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#166534',
-  },
-  completedTime: {
-    fontSize: 13,
-    color: '#8A8A8A',
-    fontWeight: '500',
-  },
+  completedBadgeText: { fontSize: 12, fontWeight: '700', color: '#166534' },
+  completedTime: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
   completedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
-  completedMealName: {
-    fontSize: 15,
-    color: '#6A6A6A',
-    flex: 1,
+  completedThumb: { width: 38, height: 38, borderRadius: 10 },
+  completedThumbPlaceholder: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  completedMealName: { fontSize: 15, color: COLORS.textMuted, flex: 1 },
   completionBar: {
-    height: 8,
-    backgroundColor: '#E8E4DE',
-    borderRadius: 4,
+    height: 6,
+    backgroundColor: COLORS.border,
+    borderRadius: 3,
     overflow: 'hidden',
     marginTop: 12,
   },
-  completionFill: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#22c55e',
-    borderRadius: 4,
-  },
+  completionFill: { width: '100%', height: '100%', backgroundColor: '#22c55e', borderRadius: 3 },
   completionText: {
     fontSize: 13,
     fontWeight: '600',
@@ -796,29 +688,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
+
+  // Browse menu CTA
   browseMenuBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#717644',
+    backgroundColor: COLORS.primary,
     paddingVertical: 16,
     borderRadius: 16,
     marginTop: 20,
-    shadowColor: '#717644',
-    shadowOpacity: 0.3,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-  browseMenuEmoji: {
-    fontSize: 20,
-  },
-  browseMenuText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
+  browseMenuText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
 });
 
 export default UpcomingMealsScreen;

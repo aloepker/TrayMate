@@ -14,9 +14,10 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
-
 import {
   Resident,
   KitchenNotification,
@@ -42,6 +43,9 @@ export default function CaregiverDashboardScreen({
 
   // Notifications related to the caregiver's assigned residents
   const [notifications, setNotifications] = useState<KitchenNotification[]>([]);
+
+
+  // Inbox (view messages) modal state
 
   // Loading spinner for initial page fetch
   const [loading, setLoading] = useState(true);
@@ -192,12 +196,14 @@ export default function CaregiverDashboardScreen({
           </View>
         </View>
 
-        <Pressable
-          style={styles.logoutBtn}
-          onPress={() => navigation.replace("Login")}
-        >
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+        <View style={styles.topBarRight}>
+          <Pressable
+            style={styles.logoutBtn}
+            onPress={() => navigation.replace("Login")}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* -----------------------------
@@ -407,19 +413,22 @@ export default function CaregiverDashboardScreen({
               </View>
             </ScrollView>
 
-            {/* Action button to continue into meal selection flow */}
+            {/* Action buttons */}
             {selectedResident && (
-              <Pressable
-                style={styles.modalPrimaryBtn}
-                onPress={() => handleBrowseMeals(selectedResident)}
-              >
-                <View style={styles.modalBtnRow}>
-                  <Feather name="shopping-cart" size={16} color="#FFFFFF" />
-                  <Text style={styles.modalPrimaryText}>
-                    Browse Meals & Place Order
-                  </Text>
-                </View>
-              </Pressable>
+              <>
+                <Pressable
+                  style={styles.modalPrimaryBtn}
+                  onPress={() => handleBrowseMeals(selectedResident)}
+                >
+                  <View style={styles.modalBtnRow}>
+                    <Feather name="shopping-cart" size={16} color="#FFFFFF" />
+                    <Text style={styles.modalPrimaryText}>
+                      Browse Meals & Place Order
+                    </Text>
+                  </View>
+                </Pressable>
+
+              </>
             )}
 
             <Pressable onPress={closeResidentModal}>
@@ -428,6 +437,7 @@ export default function CaregiverDashboardScreen({
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -515,6 +525,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6F6F6F",
     marginTop: 1,
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F5F3EF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   logoutBtn: {
     height: 44,
@@ -852,5 +892,126 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "800",
     color: "#6B7280",
+  },
+  modalKitchenBtn: {
+    marginTop: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  modalKitchenText: {
+    color: '#D87000',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  // Compose modal
+  composeSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  composeTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  composeResident: {
+    fontSize: 14,
+    color: '#6A6A6A',
+    fontWeight: '600',
+    marginBottom: 14,
+  },
+  composeInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#1A1A1A',
+    backgroundColor: '#F9FAFB',
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  composeSendBtn: {
+    backgroundColor: '#6D6B3B',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  composeSendText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  composeCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 6,
+  },
+  composeCancelText: {
+    fontSize: 14,
+    color: '#8A8A8A',
+    fontWeight: '600',
+  },
+  // Inbox modal
+  inboxCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    marginHorizontal: 20,
+    width: '92%',
+    maxWidth: 500,
+    alignItems: 'stretch',
+  },
+  inboxHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inboxEmpty: {
+    textAlign: 'center',
+    color: '#9CA3AF',
+    paddingVertical: 20,
+    fontSize: 15,
+  },
+  inboxItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6D6B3B',
+  },
+  inboxItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  inboxResident: {
+    fontWeight: '800',
+    color: '#111827',
+    fontSize: 14,
+  },
+  inboxTime: {
+    color: '#9CA3AF',
+    fontSize: 12,
+  },
+  inboxMessage: {
+    color: '#374151',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  inboxFrom: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 });

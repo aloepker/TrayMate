@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -14,11 +15,20 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Alert,
 } from "react-native";
 import { StatusBar } from "react-native";
+import Feather from "react-native-vector-icons/Feather";
 import { useCart } from "./context/CartContext";
 import { useSettings } from './context/SettingsContext';
+
+// Display-layer constants (images, colours, mappers) — extracted for clarity
+import {
+  COLORS,
+  DisplayMeal,
+  getMealPlaceholder,
+  getMealImage,
+  mapServiceMeal,
+} from '../services/mealDisplayService';
 
 // Local CSV-backed data service (temporary until API is ready)
 import {
@@ -36,29 +46,13 @@ import {
 } from "../services/mealLocalization";
 
 import { geminiChat } from "../services/geminiService";
+import { Picker } from "@react-native-picker/picker";
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Meal placeholder image colors based on meal type
-const MEAL_PLACEHOLDER_COLORS: Record<string, { bg: string; accent: string; emoji: string }> = {
-  'Banana-Chocolate Pancakes': { bg: '#FEF3C7', accent: '#92400E', emoji: '🥞' },
-  'Broccoli-Cheddar Quiche': { bg: '#DCFCE7', accent: '#166534', emoji: '🥧' },
-  'Caesar Salad with Chicken': { bg: '#D1FAE5', accent: '#065F46', emoji: '🥗' },
-  'Citrus Butter Salmon': { bg: '#DBEAFE', accent: '#1E40AF', emoji: '🐟' },
-  'Chicken Bruschetta': { bg: '#FEE2E2', accent: '#991B1B', emoji: '🍗' },
-  'Breakfast Banana Split': { bg: '#FCE7F3', accent: '#9D174D', emoji: '🍌' },
-  'Herb Baked Chicken': { bg: '#FEF3C7', accent: '#78350F', emoji: '🍗' },
-  'Garden Vegetable Medley': { bg: '#DCFCE7', accent: '#14532D', emoji: '🥦' },
-  'Strawberry Belgian Waffle': { bg: '#FCE7F3', accent: '#831843', emoji: '🧇' },
-  'Spring Menu Special': { bg: '#E0E7FF', accent: '#3730A3', emoji: '🌸' },
-  'Grilled Salmon Fillet': { bg: '#CFFAFE', accent: '#155E75', emoji: '🐟' },
-  'Oatmeal Bowl': { bg: '#FEF3C7', accent: '#78350F', emoji: '🥣' },
-};
-
-const getMealPlaceholder = (mealName: string) => {
-  return MEAL_PLACEHOLDER_COLORS[mealName] || { bg: '#F3F4F6', accent: '#6B7280', emoji: '🍽' };
-};
+// MEAL_PLACEHOLDER_COLORS, MEAL_IMAGES, getMealPlaceholder, getMealImage
+// → now imported from ../services/mealDisplayService.ts
 
 // ---------- Rich Text Renderer for Chat ----------
 const ChatRichText = ({
@@ -107,11 +101,16 @@ const ChatRichText = ({
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
+          const realImg = getMealImage(matchedMeal.name);
           const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
             <View key={lineIdx} style={chatRichStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
               <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
+                {realImg ? (
+                  <Image source={realImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
+                ) : (
+                  <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
+                )}
               </View>
               <View style={chatRichStyles.mealCardInfo}>
                 <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(16) }]}>
@@ -179,7 +178,8 @@ const chatRichStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  mealCardImage: { width: 64, justifyContent: 'center', alignItems: 'center' },
+  mealCardImage: { width: 80, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  mealCardRealImage: { width: 80, height: 80 },
   mealCardEmoji: { fontSize: 30 },
   mealCardInfo: { flex: 1, padding: 12 },
   mealCardName: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 3 },
@@ -188,34 +188,9 @@ const chatRichStyles = StyleSheet.create({
   mealCardReason: { fontSize: 12, color: '#15803d', fontWeight: '700', marginTop: 5 },
 });
 
-// ---------- TrayMate Color Palette (from design slide) ----------
-const COLORS = {
-  primary: "#717644",       // Olive green
-  accent: "#f6a72d",        // Bright orange
-  secondary: "#d27028",     // Burnt orange
-  neutral: "#cbc2b4",       // Warm gray
-  support: "#b77f3f",       // Caramel
-
-  white: "#FFFFFF",
-  textDark: "#111827",
-  textMid: "#374151",
-  textLight: "#6B7280",
-  borderLight: "#E5E7EB",
-  surface: "#F3F4F6",
-};
-
-// ---------- Types ----------
-type Meal = {
-  id: string;
-  name: string;
-  meal_period: "Breakfast" | "Lunch" | "Dinner";
-  description: string;
-  time_range: string;
-  kcal: number;
-  sodium_mg: number;
-  protein_g: number;
-  tags?: string[];
-};
+// COLORS → imported from ../services/mealDisplayService.ts
+// DisplayMeal (aliased as Meal below) → imported from ../services/mealDisplayService.ts
+type Meal = DisplayMeal;
 
 type ChatMessage = {
   id: string;
@@ -242,6 +217,9 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "breakfast", value: "Breakfast" },
   { key: "lunch", value: "Lunch" },
   { key: "dinner", value: "Dinner" },
+  { key: "beverages", value: "Drinks" },
+  { key: "desserts", value: "Sides" },
+  { key: "seasonal", value: null },
 ];
 
 // ---------- AI Chat Component ----------
@@ -649,15 +627,71 @@ const AIAssistantChat = ({
   );
 };
 
+// ── Time-range availability check ────────────────────────────────────────────
+function parseTimeToMinutes(s: string): number {
+  const cleaned = s.trim().toLowerCase().replace(/\s/g, '');
+  const isPm = cleaned.includes('pm');
+  const isAm = cleaned.includes('am');
+  const num = parseInt(cleaned.replace(/[^0-9]/g, ''), 10);
+  if (isNaN(num)) return 0;
+  let hours = num;
+  if (isPm && hours !== 12) hours += 12;
+  if (isAm && hours === 12) hours = 0;
+  return hours * 60;
+}
+
+function isWithinTimeRange(timeRange: string, period?: string): boolean {
+  // Drinks and Sides are available all day
+  if (period === 'Drinks' || period === 'Sides') return true;
+  if (!timeRange || timeRange.trim() === '') return true;
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  // normalize en-dash / em-dash to hyphen
+  const normalized = timeRange.replace(/[–—]/g, '-');
+  const parts = normalized.split('-').map((p) => p.trim());
+  if (parts.length < 2) return true;
+  const start = parseTimeToMinutes(parts[0]);
+  const end   = parseTimeToMinutes(parts[1]);
+  return currentMins >= start && currentMins <= end;
+}
+
+/** Start minute of a time-range string, used for sorting */
+function timeRangeStartMinutes(timeRange: string): number {
+  if (!timeRange) return 0;
+  const normalized = timeRange.replace(/[–—]/g, '-');
+  const first = normalized.split('-')[0]?.trim() ?? '';
+  return parseTimeToMinutes(first);
+}
+
+/** Sort meals: available-now first (ordered by start time), then unavailable (ordered by start time) */
+function sortMealsByAvailability(meals: Meal[]): Meal[] {
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+  return [...meals].sort((a, b) => {
+    const aAvail = isWithinTimeRange(a.time_range, a.meal_period);
+    const bAvail = isWithinTimeRange(b.time_range, b.meal_period);
+    if (aAvail && !bAvail) return -1;
+    if (!aAvail && bAvail) return 1;
+    return timeRangeStartMinutes(a.time_range) - timeRangeStartMinutes(b.time_range);
+  });
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
-  const { t, scaled, language, notifications, getTouchTargetSize, theme } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
-  const [rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
+  const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
+  const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
+  const [showMealDetail, setShowMealDetail] = useState(false);
+  const [specialNote, setSpecialNote] = useState('');
+  const [availableDrinks, setAvailableDrinks] = useState<Meal[]>([]);
+  const [selectedDrink, setSelectedDrink] = useState<Meal | null>(null);
+  const [availableSides, setAvailableSides] = useState<Meal[]>([]);
+  const [selectedSide, setSelectedSide] = useState<Meal | null>(null);
 
   // Use the cart context
   const { addToCart, getCartCount } = useCart();
@@ -666,6 +700,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Activate this resident's settings when screen mounts
+  useEffect(() => {
+    setCurrentResidentId(route?.params?.residentId ?? null);
+  }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident name from route params or use localDataService
   const residentId = route?.params?.residentId as string | undefined;
@@ -679,14 +718,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
+  // Navigate to settings with resident context
+  const goToSettings = () => {
+    navigation.navigate('Settings', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
+  };
+
   // Fetch meals from API (async)
-  const loadMenu = useCallback(async (period: PeriodOption["value"]) => {
+  const loadMenu = useCallback(async (period: PeriodOption["value"], periodKey?: string) => {
     setMenuLoading(true);
     setError("");
 
     try {
-      // Pull from API-backed localDataService (async)
-      let serviceMeals = await MealService.getMealsByPeriod(period);
+      // Seasonal tab: fetch all meals then filter to seasonal only
+      let serviceMeals = periodKey === 'seasonal'
+        ? await MealService.getSeasonalMeals()
+        : await MealService.getMealsByPeriod(period);
 
       // Filter out meals that are unsafe for this resident's dietary restrictions
       const resId = residentId || ResidentService.getDefaultResident().id;
@@ -697,24 +743,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         );
       }
 
-      // Map service Meal -> screen Meal shape
-      const mapped: Meal[] = serviceMeals.map((m) => ({
-        id: String(m.id),
-        name: m.name,
-        meal_period: (m.mealPeriod === "All Day" ? "Lunch" : m.mealPeriod) as Meal["meal_period"],
-        description: m.description,
-        time_range: m.timeRange,
-        kcal: m.nutrition.calories,
-        sodium_mg: parseInt(
-          String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0",
-          10
-        ),
-        protein_g: parseInt(
-          String(m.nutrition.protein).replace(/[^\d]/g, "") || "0",
-          10
-        ),
-        tags: m.tags ?? [],
-      }));
+      // mapServiceMeal imported from mealDisplayService.ts
+      const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
+
+      // Pre-load drinks and sides for the add-on pickers in meal detail modal
+      const drinkServiceMeals = await MealService.getMealsByPeriod("Drinks");
+      setAvailableDrinks(drinkServiceMeals.map(mapServiceMeal));
+      const sidesServiceMeals = await MealService.getMealsByPeriod("Sides");
+      setAvailableSides(sidesServiceMeals.map(mapServiceMeal));
 
       setRawServiceMeals(serviceMeals);
       setMeals(mapped);
@@ -741,59 +777,111 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId, selectedPeriod.value]);
 
+  // Pre-load drinks & sides once on mount so add-on pickers are always ready
+  useEffect(() => {
+    MealService.getMealsByPeriod("Drinks").then(d => setAvailableDrinks(d.map(mapServiceMeal)));
+    MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
+  }, []);
+
   // Load menu and recommendation when component mounts or period changes
   useEffect(() => {
-    loadMenu(selectedPeriod.value);
+    loadMenu(selectedPeriod.value, selectedPeriod.key);
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadMenu(selectedPeriod.value);
+    await loadMenu(selectedPeriod.value, selectedPeriod.key);
     await loadRecommendation();
     setRefreshing(false);
-  }, [selectedPeriod.value, loadMenu, loadRecommendation]);
+  }, [selectedPeriod.value, selectedPeriod.key, loadMenu, loadRecommendation]);
+
+  // Open meal detail modal
+  const openMealDetail = (meal: Meal) => {
+    setSelectedMeal(meal);
+    setSpecialNote('');
+    setSelectedDrink(null);
+    setSelectedSide(null);
+    setShowMealDetail(true);
+  };
+
+  // Add meal (and optional drink) to cart from detail modal
+  const handleAddToCartFromModal = () => {
+    if (!selectedMeal) return;
+    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
+    if (selectedDrink) {
+      addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+    }
+    if (selectedSide) {
+      addToCart({ ...selectedSide, id: parseInt(selectedSide.id) });
+    }
+    setShowMealDetail(false);
+  };
 
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
+    const mealImg = !!item.imageUrl;
+    const available = isWithinTimeRange(item.time_range, item.meal_period);
     return (
       <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.7}
-        onPress={() => {
-          addToCart({ ...item, id: parseInt(item.id) });
-        }}
+        style={[
+          styles.card,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+          !available && styles.cardUnavailable,
+        ]}
+        activeOpacity={available ? 0.7 : 1}
+        onPress={() => { if (available) openMealDetail(item); }}
+        disabled={!available}
       >
+        {!available && (
+          <View style={styles.unavailableOverlay}>
+            <Feather name="clock" size={12} color="#717644" />
+            <Text style={styles.unavailableText}>Not available · {item.time_range}</Text>
+          </View>
+        )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
-          <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          {/* {mealImg ? (
+            <Image source={mealImg} style={styles.mealRealImage} resizeMode="contain" />
+          ) : (
+            <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
+          )} */}
+          {mealImg ? (
+            <Image source={{ uri: item.imageUrl }} style={styles.mealRealImage} resizeMode="cover" />
+          ) : (
+            <Image source={require('../styles/pictures/grandma.png')} style={{ width: 60, height: 60, opacity: 0.3 }} resizeMode="contain" />
+          )}
+          {/* Light frost over image for unavailable meals — image stays visible */}
+          {!available && (
+            <View style={styles.imageFrost} />
+          )}
           <View style={styles.mealImageOverlay}>
-            <Text style={[styles.mealImageLabel, { color: ph.accent }]}>
+            <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
               {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
         </View>
-        <View style={styles.cardContent}>
-          <Text style={[styles.cardTitle, { fontSize: scaled(20) }]}>
+        <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
             {translateMealName(item.name, language)}
           </Text>
-          <View style={styles.timeBadge}>
-            <Text style={[styles.timeBadgeText, { fontSize: scaled(14) }]}>
+          <View style={[styles.timeBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
+            <Text style={[styles.timeBadgeText, { fontSize: scaled(14), color: theme.accent }]}>
               {item.time_range}
             </Text>
           </View>
-          <Text style={[styles.cardDescription, { fontSize: scaled(15) }]}>
+          <Text style={[styles.cardDescription, { fontSize: scaled(15), color: theme.textSecondary }]}>
             {translateMealDescription(item.description, language)}
           </Text>
           <View style={styles.nutritionRow}>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
               {item.kcal} kcal
             </Text>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
               Sodium: {item.sodium_mg}mg
             </Text>
-            <Text style={[styles.nutritionItem, { fontSize: scaled(13) }]}>
+            <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
               Protein: {item.protein_g}g
             </Text>
           </View>
@@ -870,7 +958,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const listFooter = (
     <View style={styles.aiRecommendation}>
       <View style={styles.aiRecommendationIcon}>
-        <Text style={styles.aiRecommendationIconText}>👵</Text>
+        <Image
+          source={require('../styles/pictures/grandma.png')}
+          style={{ width: 38, height: 38 }}
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.aiRecommendationContent}>
         <Text style={[styles.aiRecommendationTitle, { fontSize: scaled(15) }]}>
@@ -916,11 +1008,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       ) : (
         <FlatList
-          key={`meal-list-cols-1`}
-          data={meals}
+          key={`meal-list-cols-2`}
+          data={sortMealsByAvailability(meals)}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMeal}
-          numColumns={1}
+          numColumns={2}
+          columnWrapperStyle={styles.gridRow}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
@@ -932,20 +1025,221 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         />
       )}
 
-      <View style={styles.floatingActions}>
-        <TouchableOpacity
-          style={[styles.floatingGrannyButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-          onPress={() => setShowAIChat(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.floatingGrannyEmoji}>👵</Text>
-        </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.floatingGrannyButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+        onPress={() => setShowAIChat(true)}
+        activeOpacity={0.85}
+      >
+        <Image source={require('../styles/pictures/grandma.png')} style={styles.floatingGrannyImage} resizeMode="contain" />
+      </TouchableOpacity>
+
+      <View style={styles.floatingTopActions}>
         {getCartCount() > 0 && (
-          <TouchableOpacity style={styles.floatingCartButton} onPress={goToCart} activeOpacity={0.85}>
-            <Text style={[styles.floatingCartText, { fontSize: scaled(16) }]}>🛒 {getCartCount()}</Text>
+          <TouchableOpacity
+            style={[styles.floatingCartButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+            onPress={goToCart}
+            accessibilityLabel="Cart"
+            activeOpacity={0.85}
+          >
+            <Feather name="shopping-cart" size={20} color="#FFFFFF" />
+            <View style={styles.headerCartBadge}>
+              <Text style={styles.headerCartBadgeText}>{getCartCount()}</Text>
+            </View>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          onPress={goToSettings}
+          style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+          accessibilityLabel="Settings"
+          accessibilityRole="button"
+          activeOpacity={0.85}
+        >
+          <Feather name="settings" size={22} color={theme.accent} />
+        </TouchableOpacity>
       </View>
+
+      {/* Meal Detail Modal */}
+      <Modal
+        visible={showMealDetail}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMealDetail(false)}
+      >
+        <View style={styles.detailModalRoot}>
+          <TouchableOpacity style={styles.detailBackdrop} activeOpacity={1} onPress={() => setShowMealDetail(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.detailSheetWrap}>
+            <View style={styles.detailSheet}>
+              <View style={styles.detailSheetHandle} />
+              <View style={styles.detailSheetHeader}>
+                <Text style={styles.detailSheetLabel}>Customize order</Text>
+                <TouchableOpacity
+                  style={styles.detailCloseButton}
+                  onPress={() => setShowMealDetail(false)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="x" size={20} color={COLORS.textMid} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.detailScrollContent}
+              >
+            {selectedMeal && (() => {
+              const ph = getMealPlaceholder(selectedMeal.name);
+              //const mealImg = getMealImage(selectedMeal.name);
+              const mealImg = !!selectedMeal.imageUrl;
+              return (
+                <>
+                  {/* Image */}
+                  <View style={[styles.detailImageWrap, { backgroundColor: ph.bg }]}>
+                    {/* {mealImg ? (
+                      <Image source={mealImg} style={styles.detailRealImage} resizeMode="contain" />
+                    ) : (
+                      <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
+                    )} */}
+                    {mealImg ? (
+                      <Image source={{ uri: selectedMeal.imageUrl }} style={styles.detailRealImage} resizeMode="cover" />
+                    ) : (
+                      <Image source={require('../styles/pictures/grandma.png')} style={{ width: 80, height: 80, opacity: 0.3 }} resizeMode="contain" />
+                    )}
+                  </View>
+                  {/* Info */}
+                  <View style={styles.detailBody}>
+                    <Text style={[styles.detailTitle, { fontSize: scaled(22) }]}>{translateMealName(selectedMeal.name, language)}</Text>
+                    <Text style={[styles.detailDesc, { fontSize: scaled(15) }]}>{translateMealDescription(selectedMeal.description, language)}</Text>
+                    <View style={styles.detailNutrRow}>
+                      <Text style={styles.detailNutr}>{selectedMeal.kcal} kcal</Text>
+                      <Text style={styles.detailNutr}>Sodium: {selectedMeal.sodium_mg}mg</Text>
+                      <Text style={styles.detailNutr}>Protein: {selectedMeal.protein_g}g</Text>
+                    </View>
+
+                    {/* Special Note */}
+                    <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>Special note for kitchen</Text>
+                    <TextInput
+                      style={styles.detailNoteInput}
+                      placeholder="e.g. No onions, extra sauce…"
+                      placeholderTextColor="#9CA3AF"
+                      value={specialNote}
+                      onChangeText={setSpecialNote}
+                      multiline
+                      maxLength={200}
+                    />
+
+                    {/* Add-on pickers: Drink & Side — horizontal row */}
+                    {selectedMeal.meal_period !== 'Drinks' && selectedMeal.meal_period !== 'Sides' && (availableDrinks.length > 0 || availableSides.length > 0) && (
+                      <>
+                        <View style={styles.addonRow}>
+                          {/* Drink picker */}
+                          {availableDrinks.length > 0 && (
+                            <View style={styles.addonCol}>
+                              <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
+                                Add a drink?
+                              </Text>
+                              <View style={styles.drinkPickerWrap}>
+                                <Picker
+                                  selectedValue={selectedDrink?.id ?? '__none__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__none__') {
+                                      setSelectedDrink(null);
+                                    } else {
+                                      const found = availableDrinks.find(d => d.id === val);
+                                      setSelectedDrink(found ?? null);
+                                    }
+                                  }}
+                                  style={styles.drinkPicker}
+                                  itemStyle={styles.drinkPickerItem}
+                                >
+                                  <Picker.Item label="— No drink —" value="__none__" />
+                                  {availableDrinks.map(drink => (
+                                    <Picker.Item
+                                      key={drink.id}
+                                      label={`${drink.name}  ·  ${drink.kcal} kcal`}
+                                      value={drink.id}
+                                    />
+                                  ))}
+                                </Picker>
+                              </View>
+                              {selectedDrink && (
+                                <View style={styles.drinkSelectedRow}>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
+                                      {selectedDrink.name}
+                                    </Text>
+                                    <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(11) }]}>
+                                      {selectedDrink.kcal} kcal · {selectedDrink.sodium_mg}mg Na
+                                    </Text>
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                          )}
+
+                          {/* Side picker */}
+                          {availableSides.length > 0 && (
+                            <View style={styles.addonCol}>
+                              <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
+                                Add a side?
+                              </Text>
+                              <View style={styles.drinkPickerWrap}>
+                                <Picker
+                                  selectedValue={selectedSide?.id ?? '__none__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__none__') {
+                                      setSelectedSide(null);
+                                    } else {
+                                      const found = availableSides.find(s => s.id === val);
+                                      setSelectedSide(found ?? null);
+                                    }
+                                  }}
+                                  style={styles.drinkPicker}
+                                  itemStyle={styles.drinkPickerItem}
+                                >
+                                  <Picker.Item label="— No side —" value="__none__" />
+                                  {availableSides.map(side => (
+                                    <Picker.Item
+                                      key={side.id}
+                                      label={`${side.name}  ·  ${side.kcal} kcal`}
+                                      value={side.id}
+                                    />
+                                  ))}
+                                </Picker>
+                              </View>
+                              {selectedSide && (
+                                <View style={styles.drinkSelectedRow}>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
+                                      {selectedSide.name}
+                                    </Text>
+                                    <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(11) }]}>
+                                      {selectedSide.kcal} kcal · {selectedSide.sodium_mg}mg Na
+                                    </Text>
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      </>
+                    )}
+                  </View>
+                </>
+              );
+            })()}
+              </ScrollView>
+              <View style={styles.detailFooter}>
+                <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
+                  <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
+                    {selectedDrink || selectedSide
+                      ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
+                      : 'Add to Cart'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
       {/* AI Assistant Chat Modal */}
       <AIAssistantChat
@@ -987,6 +1281,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: COLORS.surface,
   },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    marginLeft: 8,
+  },
+  settingsButtonText: {
+    fontSize: 22,
+  },
   backArrow: {
     width: 12,
     height: 12,
@@ -1014,6 +1320,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flex: 1,
+    paddingRight: 72,
   },
   title: {
     fontSize: 32,
@@ -1026,52 +1333,93 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 22,
   },
-  floatingActions: {
-    position: 'absolute',
-    right: 16,
-    bottom: 22,
-    zIndex: 10,
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    alignItems: 'flex-end',
   },
-  floatingGrannyButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  headerCartButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 7,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
-  floatingGrannyEmoji: {
-    fontSize: 25,
-  },
-  floatingCartButton: {
-    backgroundColor: COLORS.secondary,
-    borderRadius: 18,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    minWidth: 84,
+  headerCartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  floatingCartText: {
-    fontSize: 16,
+  headerCartBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  floatingGrannyButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 22,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  floatingGrannyImage: {
+    width: 38,
+    height: 38,
+  },
+  floatingTopActions: {
+    position: 'absolute',
+    top: 18,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    zIndex: 12,
+  },
+  floatingCartButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  floatingSettingsButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   tabs: {
     flexDirection: 'row',
@@ -1106,11 +1454,16 @@ const styles = StyleSheet.create({
     paddingBottom: 160,
     paddingHorizontal: 16,
   },
+  gridRow: {
+    justifyContent: 'space-between',
+  },
   card: {
     flex: 1,
+    maxWidth: '48.5%',
     backgroundColor: COLORS.white,
     borderRadius: 18,
     marginTop: 14,
+    marginHorizontal: 4,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 10,
@@ -1121,28 +1474,35 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mealImageContainer: {
-    height: 122,
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
+  },
+  mealRealImage: {
+    width: '100%',
+    height: 200,
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   mealImageEmoji: {
     fontSize: 56,
   },
   mealImageOverlay: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    top: 10,
+    right: 10,
+    backgroundColor: '#D27028',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
   },
   mealImageLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
   cardContent: {
     padding: 16,
@@ -1207,6 +1567,41 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.support,
+  },
+  cardUnavailable: {
+    borderColor: '#DDD0B8',
+    borderStyle: 'dashed',
+  },
+  unavailableOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F0EFE6',
+    borderWidth: 1,
+    borderColor: '#717644',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.10,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  unavailableText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#717644',
+    letterSpacing: 0.1,
+  },
+  imageFrost: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(245,243,238,0.55)',
+    zIndex: 1,
   },
   aiRecommendationIcon: {
     width: 36,
@@ -1277,6 +1672,202 @@ const styles = StyleSheet.create({
   retryText: {
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  // Meal Detail Modal
+  detailBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  detailModalRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    justifyContent: 'flex-end',
+  },
+  detailSheetWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    position: 'relative',
+  },
+  detailSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '82%',
+    width: '100%',
+    overflow: 'hidden',
+    marginBottom: 0,
+    paddingBottom: 0,
+  },
+  detailSheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  detailSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailSheetLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textMid,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  detailCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailScrollContent: {
+    paddingBottom: 20,
+  },
+  detailImageWrap: {
+    height: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  detailRealImage: {
+    width: '100%',
+    height: 220,
+  },
+  detailImageEmoji: {
+    fontSize: 72,
+  },
+  detailBody: {
+    padding: 20,
+  },
+  detailTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginBottom: 6,
+  },
+  detailDesc: {
+    fontSize: 15,
+    color: COLORS.textLight,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  detailNutrRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  detailNutr: {
+    fontSize: 13,
+    color: COLORS.textMid,
+    fontWeight: '600',
+    backgroundColor: COLORS.surface,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  detailSectionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textDark,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  detailNoteInput: {
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: COLORS.textDark,
+    minHeight: 60,
+    backgroundColor: COLORS.surface,
+    textAlignVertical: 'top',
+  },
+  // Drink Picker
+  drinkPickerWrap: {
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surface,
+    marginBottom: 8,
+  },
+  drinkPicker: {
+    height: 50,
+    color: COLORS.textDark,
+  },
+  drinkPickerItem: {
+    fontSize: 15,
+    color: COLORS.textDark,
+  },
+  drinkSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  drinkSelectedEmoji: {
+    fontSize: 26,
+  },
+  drinkSelectedName: {
+    fontWeight: '700',
+    color: COLORS.textDark,
+  },
+  drinkSelectedMeta: {
+    color: COLORS.textMid,
+    marginTop: 2,
+  },
+  addonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  addonCol: {
+    flex: 1,
+  },
+  detailFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: COLORS.white,
+  },
+  detailAddBtn: {
+    backgroundColor: COLORS.secondary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: COLORS.secondary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  detailAddBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
 
