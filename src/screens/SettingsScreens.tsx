@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -62,14 +62,11 @@ function SettingsScreen({ navigation, route }: any) {
   const residentName: string =
     localResident?.fullName ?? route?.params?.residentName ?? '';
 
-  const dietaryPills: string[] = useMemo(() => {
-    if (localResident) {
-      return localResident.dietaryRestrictions.map(r => r.name);
-    }
-    const fromParams = route?.params?.dietaryRestrictions;
-    if (Array.isArray(fromParams) && fromParams.length > 0) return fromParams as string[];
-    return [];
-  }, [localResident, route?.params?.dietaryRestrictions]);
+  const dietaryPills: string[] = localResident
+    ? localResident.dietaryRestrictions.map(r => r.name)
+    : Array.isArray(route?.params?.dietaryRestrictions) && route.params.dietaryRestrictions.length > 0
+      ? (route.params.dietaryRestrictions as string[])
+      : [];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
