@@ -44,7 +44,10 @@ import {
   translateMealPeriod,
   translateMealTag,
   translateMealTimeRange,
+  hasMealNameTranslation,
+  setCachedMealTranslations,
 } from "../services/mealLocalization";
+import { translateMealNamesWithGemini } from "../services/geminiService";
 
 import { geminiChat } from "../services/geminiService";
 import { Picker } from "@react-native-picker/picker";
@@ -816,6 +819,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setRawServiceMeals(serviceMeals);
       setMeals(mapped);
       setMenuLoading(false);
+
+      // Translate any API/kitchen meals not in the static lookup table
+      const unknownNames = mapped.map(m => m.name).filter(n => !hasMealNameTranslation(n));
+      if (unknownNames.length > 0) {
+        translateMealNamesWithGemini(unknownNames).then(results => {
+          if (Object.keys(results).length > 0) {
+            setCachedMealTranslations(results);
+            // Trigger re-render with fresh copy so translated names show
+            setMeals(prev => [...prev]);
+          }
+        });
+      }
     } catch {
       setError("Failed to load meals");
       setMenuLoading(false);

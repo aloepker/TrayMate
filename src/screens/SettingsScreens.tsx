@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
+import { ResidentService } from '../services/localDataService';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -55,6 +56,21 @@ function SettingsScreen({ navigation, route }: any) {
     setCurrentResidentId(residentId);
   }, [route?.params?.residentId, setCurrentResidentId]);
 
+  // Derive resident info and dietary restrictions
+  const residentId = route?.params?.residentId as string | undefined;
+  const localResident = residentId ? ResidentService.getResidentById(residentId) : null;
+  const residentName: string =
+    localResident?.fullName ?? route?.params?.residentName ?? '';
+
+  const dietaryPills: string[] = useMemo(() => {
+    if (localResident) {
+      return localResident.dietaryRestrictions.map(r => r.name);
+    }
+    const fromParams = route?.params?.dietaryRestrictions;
+    if (Array.isArray(fromParams) && fromParams.length > 0) return fromParams as string[];
+    return [];
+  }, [localResident, route?.params?.dietaryRestrictions]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
@@ -68,7 +84,12 @@ function SettingsScreen({ navigation, route }: any) {
           <Feather name="chevron-left" size={22} color={theme.accent} />
           <Text style={[styles.backText, { fontSize: scaled(16), color: theme.accent }]}>{t.back.replace(/^[←↩⬅]\s*/, '')}</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontSize: scaled(22), color: theme.textPrimary }]}>{t.settings}</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.headerTitle, { fontSize: scaled(22), color: theme.textPrimary }]}>{t.settings}</Text>
+          {residentName ? (
+            <Text style={[styles.headerSubtitle, { fontSize: scaled(13), color: theme.textSecondary }]}>{residentName}</Text>
+          ) : null}
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -209,15 +230,15 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.dietaryRestrictions}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <View style={styles.pillContainer}>
-              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>Low Sodium</Text>
-              </View>
-              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>Heart Healthy</Text>
-              </View>
-              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>No Shellfish</Text>
-              </View>
+              {dietaryPills.length > 0 ? (
+                dietaryPills.map((pill, i) => (
+                  <View key={i} style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
+                    <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>{pill}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={[styles.noPillsText, { fontSize: scaled(13), color: theme.textSecondary }]}>None recorded</Text>
+              )}
             </View>
             <View style={[styles.caregiverNotice, { backgroundColor: hc ? '#1A1A00' : '#FEF9F0' }]}>
               <Feather name="lock" size={14} color="#8A7A5A" style={{ marginTop: 2 }} />
@@ -447,6 +468,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4A4A4A',
   },
+  headerSubtitle: {
+    color: '#8A8A8A',
+    marginTop: 2,
+  },
   placeholder: {
     width: 60,
   },
@@ -470,6 +495,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 12,
   },
   sectionIcon: {
@@ -595,6 +621,10 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#8A7A5A',
     lineHeight: 20,
+  },
+  noPillsText: {
+    fontStyle: 'italic',
+    marginBottom: 4,
   },
   // Action Cards
   actionCard: {

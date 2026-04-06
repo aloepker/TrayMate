@@ -158,8 +158,42 @@ const TIME_RANGE_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string
   '5pm - 7pm': { Español: '5 p. m. - 7 p. m.', Français: '17 h - 19 h', 中文: '下午5点 - 晚上7点' },
 };
 
+// ── Dynamic translation cache ──────────────────────────────────────────────
+// Populated at runtime via translateMealNamesWithGemini for API/kitchen meals
+// not present in the static tables above.
+const DYNAMIC_NAME_CACHE: Record<string, Partial<Record<AppLanguage, string>>> = {};
+
+/**
+ * Store Gemini-translated names into the in-memory cache.
+ * Call this after translateMealNamesWithGemini resolves.
+ */
+export function setCachedMealTranslations(
+  results: Record<string, { Español: string; Français: string; 中文: string }>,
+): void {
+  for (const [name, translations] of Object.entries(results)) {
+    DYNAMIC_NAME_CACHE[name] = {
+      Español: translations.Español,
+      Français: translations.Français,
+      中文: translations['中文'],
+    };
+  }
+}
+
+/**
+ * Returns true if this meal name already has a static translation entry
+ * (so we don't waste an API call on it).
+ */
+export function hasMealNameTranslation(name: string): boolean {
+  return name in MEAL_NAME_TRANSLATIONS || name in DYNAMIC_NAME_CACHE;
+}
+
 export const translateMealName = (name: string, language: AppLanguage): string => {
-  return MEAL_NAME_TRANSLATIONS[name]?.[language] ?? name;
+  if (language === 'English') return name;
+  return (
+    MEAL_NAME_TRANSLATIONS[name]?.[language] ??
+    DYNAMIC_NAME_CACHE[name]?.[language] ??
+    name
+  );
 };
 
 export const translateMealDescription = (description: string, language: AppLanguage): string => {

@@ -338,6 +338,48 @@ export class GeminiChatService {
 // Singleton for the BrowseMealOptions chat modal
 export const geminiChat = new GeminiChatService();
 
+/**
+ * Batch-translate meal names/descriptions that aren't in the static lookup table.
+ * Returns a map of { name → { Español, Français, 中文 } }.
+ * Tries each model in fallback order; returns empty object on total failure.
+ */
+export async function translateMealNamesWithGemini(
+  names: string[],
+): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (names.length === 0) return {};
+
+  const prompt = `Translate these English food/meal names into Spanish (Español), French (Français), and Chinese (中文).
+Return ONLY valid JSON — no markdown, no explanation — exactly like this example:
+{"Chicken Noodle Soup":{"Español":"Sopa de Fideos con Pollo","Français":"Soupe de Nouilles au Poulet","中文":"鸡肉面条汤"}}
+
+Names to translate:
+${names.join('\n')}`;
+
+  for (const model of GEMINI_CONFIG.models) {
+    try {
+      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+      };
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      // Strip markdown code fences if present
+      const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+      return JSON.parse(clean);
+    } catch {
+      continue;
+    }
+  }
+  return {};
+}
+
 // Factory for creating independent sessions (e.g. the standalone screen)
 export function createGeminiChat(): GeminiChatService {
   return new GeminiChatService();
