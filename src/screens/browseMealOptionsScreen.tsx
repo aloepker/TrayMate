@@ -718,7 +718,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   // --- all hooks at the top, unconditionally, in fixed order ---
-  const { addToCart, getCartCount, orders, getOrdersForResident } = useCart();
+  const { addToCart, getCartCount, orders, getOrdersForResident, fetchOrderHistory } = useCart();
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -737,7 +737,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
-  const [autoSuggest, setAutoSuggest] = useState<{ period: string; meal: Meal } | null>(null);
+  const [autoSuggest, setAutoSuggest] = useState<{ period: string; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
 
   // derived (not hooks)
@@ -856,13 +856,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
   }, []);
 
+  // Fetch real backend order history on mount for accurate auto-suggest
+  useEffect(() => {
+    if (residentId) fetchOrderHistory(residentId);
+  }, [residentId]);
+
   // Load menu and recommendation when component mounts or period changes
   useEffect(() => {
     loadMenu(selectedPeriod.value, selectedPeriod.key);
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
 
-  // 2-hour pre-meal auto-suggest from past orders
+  // 2-hour pre-meal auto-suggest from past orders (includes drink + dessert)
   useEffect(() => {
     if (autoSuggestDismissed || meals.length === 0) return;
 
@@ -880,21 +885,42 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     );
     if (hasOrderForPeriod) return;
 
-    // Pick a past meal for this period from order history
-    const pastMeal = resOrders
-      .flatMap((o) => o.items)
-      .find((i) => i.meal_period === upcoming.label);
+    const allPastItems = resOrders.flatMap((o) => o.items);
 
+    // Pick main meal from past orders or fall back to first available
+    const pastMeal = allPastItems.find((i) => i.meal_period === upcoming.label);
+    let mainMeal: Meal | null = null;
     if (pastMeal) {
-      // Match to current available meals list
-      const match = meals.find((m) => String(m.id) === String(pastMeal.id) || m.name === pastMeal.name);
-      if (match) setAutoSuggest({ period: upcoming.label, meal: match });
-    } else {
-      // No past order — pick the top available meal for that period
-      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label);
-      if (periodMeals.length > 0) setAutoSuggest({ period: upcoming.label, meal: periodMeals[0] });
+      mainMeal = meals.find((m) => String(m.id) === String(pastMeal.id) || m.name === pastMeal.name) ?? null;
     }
-  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident]);
+    if (!mainMeal) {
+      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label);
+      mainMeal = periodMeals[0] ?? null;
+    }
+    if (!mainMeal) return;
+
+    // Pick drink from past orders or fall back to first available drink
+    const pastDrink = allPastItems.find((i) => i.meal_period === 'Drinks');
+    let suggestDrink: Meal | undefined;
+    if (pastDrink) {
+      suggestDrink = availableDrinks.find((d) => String(d.id) === String(pastDrink.id) || d.name === pastDrink.name);
+    }
+    if (!suggestDrink && availableDrinks.length > 0) {
+      suggestDrink = availableDrinks[0];
+    }
+
+    // Pick dessert/side from past orders or fall back to first available side
+    const pastDessert = allPastItems.find((i) => i.meal_period === 'Sides');
+    let suggestDessert: Meal | undefined;
+    if (pastDessert) {
+      suggestDessert = availableSides.find((s) => String(s.id) === String(pastDessert.id) || s.name === pastDessert.name);
+    }
+    if (!suggestDessert && availableSides.length > 0) {
+      suggestDessert = availableSides[0];
+    }
+
+    setAutoSuggest({ period: upcoming.label, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
+  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -1157,33 +1183,79 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           )}
         </View>
 
-        {/* Auto-suggest row — only when active */}
+        {/* Auto-suggest rows — main meal + optional drink + dessert */}
         {autoSuggest && !autoSuggestDismissed && (
           <>
             <View style={styles.bottomCardDivider} />
-            <View style={styles.bottomCardSuggestRow}>
+            {/* Header row */}
+            <View style={styles.bottomCardSuggestHeader}>
               <Feather name="clock" size={13} color="#4A5C2A" />
-              <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13) }]}>
-                <Text style={styles.bottomCardSuggestPeriod}>{autoSuggest.period}</Text>
-                {' in ~2 hrs — '}
+              <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(12) }]}>
+                {autoSuggest.period}{' '}in ~2 hrs — from past orders
+              </Text>
+              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
+                <Feather name="x" size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            {/* Main meal row */}
+            <View style={styles.bottomCardSuggestRow}>
+              <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                <Text style={styles.bottomCardSuggestLabel}>Meal: </Text>
                 <Text style={styles.bottomCardMealName}>{autoSuggest.meal.name}</Text>
-                {' from past orders'}
               </Text>
               <TouchableOpacity
                 style={styles.bottomCardSuggestConfirm}
                 onPress={() => {
                   const m = autoSuggest.meal;
                   addToCart({ id: Number(m.id), name: m.name, meal_period: m.meal_period as any, description: m.description, kcal: m.kcal, sodium_mg: m.sodium_mg, protein_g: m.protein_g, tags: m.tags });
-                  setAutoSuggestDismissed(true);
-                  setAutoSuggest(null);
                 }}
               >
                 <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
-                <Feather name="x" size={14} color="#9CA3AF" />
-              </TouchableOpacity>
             </View>
+            {/* Drink row */}
+            {autoSuggest.drink && (
+              <View style={styles.bottomCardSuggestRow}>
+                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                  <Text style={styles.bottomCardSuggestLabel}>Drink: </Text>
+                  <Text style={styles.bottomCardMealName}>{autoSuggest.drink.name}</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.bottomCardSuggestConfirm}
+                  onPress={() => {
+                    const d = autoSuggest.drink!;
+                    addToCart({ id: Number(d.id), name: d.name, meal_period: d.meal_period as any, description: d.description, kcal: d.kcal, sodium_mg: d.sodium_mg, protein_g: d.protein_g, tags: d.tags });
+                  }}
+                >
+                  <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* Dessert row */}
+            {autoSuggest.dessert && (
+              <View style={styles.bottomCardSuggestRow}>
+                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                  <Text style={styles.bottomCardSuggestLabel}>Side: </Text>
+                  <Text style={styles.bottomCardMealName}>{autoSuggest.dessert.name}</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.bottomCardSuggestConfirm}
+                  onPress={() => {
+                    const s = autoSuggest.dessert!;
+                    addToCart({ id: Number(s.id), name: s.name, meal_period: s.meal_period as any, description: s.description, kcal: s.kcal, sodium_mg: s.sodium_mg, protein_g: s.protein_g, tags: s.tags });
+                  }}
+                >
+                  <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* Dismiss all */}
+            <TouchableOpacity
+              style={styles.bottomCardSuggestDismiss}
+              onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }}
+            >
+              <Text style={[styles.bottomCardSuggestDismissText, { fontSize: scaled(12) }]}>Dismiss all</Text>
+            </TouchableOpacity>
           </>
         )}
       </View>
@@ -1916,16 +1988,28 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#DDD5C0',
   },
+  bottomCardSuggestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bottomCardSuggestTitle: {
+    flex: 1,
+    fontWeight: '700',
+    color: '#4A5C2A',
+  },
   bottomCardSuggestRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flexWrap: 'wrap',
   },
   bottomCardSuggestText: {
     color: '#555',
-    flex: 1,
     lineHeight: 18,
+  },
+  bottomCardSuggestLabel: {
+    fontWeight: '600',
+    color: '#777',
   },
   bottomCardSuggestPeriod: {
     fontWeight: '700',
@@ -1941,6 +2025,14 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 12,
+  },
+  bottomCardSuggestDismiss: {
+    alignSelf: 'flex-start',
+    paddingVertical: 2,
+  },
+  bottomCardSuggestDismissText: {
+    color: '#9CA3AF',
+    textDecorationLine: 'underline',
   },
   cardUnavailable: {
     borderColor: '#DDD0B8',
