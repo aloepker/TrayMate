@@ -529,31 +529,36 @@ const AIAssistantChat = ({
     >
       <View style={chatStyles.overlay}>
         <TouchableOpacity style={chatStyles.backdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View 
-          style={[
-            chatStyles.container,
-            { transform: [{ translateX: slideAnim }] }
-          ]}
-        >
-          {/* Header */}
+        <Animated.View style={[chatStyles.container, { transform: [{ translateX: slideAnim }] }]}>
+
+          {/* ── Header ── */}
           <View style={chatStyles.header}>
-            <View style={chatStyles.headerIcon}>
-              <Text style={chatStyles.headerIconText}>👵</Text>
+            <View style={chatStyles.headerAvatarWrap}>
+              <Image
+                source={require('../styles/pictures/grandma.png')}
+                style={chatStyles.headerAvatar}
+                resizeMode="contain"
+              />
             </View>
             <View style={chatStyles.headerText}>
-              <Text style={[chatStyles.headerTitle, { fontSize: scaled(20) }]}>{t.grannyGBT}</Text>
-              <Text style={[chatStyles.headerSubtitle, { fontSize: scaled(15) }]}>{t.mealAdvisorFor} {residentName}</Text>
+              <View style={chatStyles.headerTitleRow}>
+                <Text style={[chatStyles.headerTitle, { fontSize: scaled(19) }]}>{t.grannyGBT}</Text>
+                <View style={[chatStyles.statusPill, aiAvailable ? chatStyles.aiOn : chatStyles.aiOff]}>
+                  <Text style={[chatStyles.statusText, { fontSize: scaled(11) }]}>
+                    {aiAvailable ? '✦ AI' : '○ Offline'}
+                  </Text>
+                </View>
               </View>
-              {/* AI status badge */}
-              <View style={[chatStyles.statusBadge, aiAvailable ? chatStyles.aiOn : chatStyles.aiOff]}>
-                <Text style={chatStyles.statusText}>{aiAvailable ? '✨ AI' : '💤 Offline'}</Text>
-              </View>
-            <TouchableOpacity onPress={onClose} style={chatStyles.closeButton}>
-              <Text style={[chatStyles.closeButtonText, { fontSize: scaled(18) }]}>✕</Text>
+              <Text style={[chatStyles.headerSubtitle, { fontSize: scaled(13) }]}>
+                {t.mealAdvisorFor} {residentName}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={chatStyles.closeButton} hitSlop={10}>
+              <Feather name="x" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Messages */}
+          {/* ── Messages ── */}
           <ScrollView
             ref={scrollViewRef}
             style={chatStyles.messagesContainer}
@@ -562,21 +567,16 @@ const AIAssistantChat = ({
             keyboardShouldPersistTaps="handled"
           >
             {messages.map((message) => (
-              <View key={message.id}>
+              <View key={message.id} style={message.role === 'user' ? chatStyles.userRow : chatStyles.assistantRow}>
                 {message.role === 'assistant' && (
-                  <View style={chatStyles.avatarRow}>
-                    <View style={chatStyles.avatarBadge}>
-                      <Text style={chatStyles.avatarEmoji}>👵</Text>
-                    </View>
-                    <Text style={[chatStyles.avatarLabel, { fontSize: scaled(12) }]}>{t.grannyGBT}</Text>
+                  <View style={chatStyles.avatarBadge}>
+                    <Image source={require('../styles/pictures/grandma.png')} style={chatStyles.bubbleAvatar} resizeMode="contain" />
                   </View>
                 )}
-                <View
-                  style={[
-                    chatStyles.messageBubble,
-                    message.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble
-                  ]}
-                >
+                <View style={[
+                  chatStyles.messageBubble,
+                  message.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble,
+                ]}>
                   <ChatRichText
                     text={message.content}
                     isUser={message.role === 'user'}
@@ -586,8 +586,8 @@ const AIAssistantChat = ({
                   />
                   <Text style={[
                     chatStyles.timestamp,
-                    { fontSize: scaled(11) },
-                    message.role === 'user' && chatStyles.userTimestamp
+                    { fontSize: scaled(10) },
+                    message.role === 'user' && chatStyles.userTimestamp,
                   ]}>
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
@@ -595,12 +595,9 @@ const AIAssistantChat = ({
               </View>
             ))}
             {isTyping && (
-              <View>
-                <View style={chatStyles.avatarRow}>
-                  <View style={chatStyles.avatarBadge}>
-                    <Text style={chatStyles.avatarEmoji}>👵</Text>
-                  </View>
-                  <Text style={[chatStyles.avatarLabel, { fontSize: scaled(12) }]}>{t.grannyGBT}</Text>
+              <View style={chatStyles.assistantRow}>
+                <View style={chatStyles.avatarBadge}>
+                  <Image source={require('../styles/pictures/grandma.png')} style={chatStyles.bubbleAvatar} resizeMode="contain" />
                 </View>
                 <View style={[chatStyles.messageBubble, chatStyles.assistantBubble]}>
                   <Text style={[chatStyles.typingText, { fontSize: scaled(14) }]}>{t.thinking}</Text>
@@ -609,48 +606,41 @@ const AIAssistantChat = ({
             )}
           </ScrollView>
 
-          {/* Quick Questions */}
+          {/* ── Quick Questions ── */}
           <View style={chatStyles.quickQuestionsContainer}>
-            <Text style={[chatStyles.quickQuestionsLabel, { fontSize: scaled(13) }]}>{t.quickQuestionsLabel}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={chatStyles.quickQuestionsRow}>
-                {QUICK_QUESTIONS.map((question, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={chatStyles.quickQuestionButton}
-                    onPress={() => handleQuickQuestion(question)}
-                  >
-                    <Text style={[chatStyles.quickQuestionText, { fontSize: scaled(14) }]}>{question}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <Text style={[chatStyles.quickQuestionsLabel, { fontSize: scaled(12) }]}>{t.quickQuestionsLabel}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+              {QUICK_QUESTIONS.map((question, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={chatStyles.quickQuestionButton}
+                  onPress={() => handleQuickQuestion(question)}
+                >
+                  <Text style={[chatStyles.quickQuestionText, { fontSize: scaled(13) }]}>{question}</Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
 
-          {/* Input */}
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
+          {/* ── Input ── */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={chatStyles.inputContainer}>
               <TextInput
-                style={[chatStyles.input, { fontSize: scaled(16) }]}
+                style={[chatStyles.input, { fontSize: scaled(15) }]}
                 value={inputText}
                 onChangeText={setInputText}
                 placeholder={t.typeYourMessage}
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor="#A8A89A"
                 multiline
                 maxLength={500}
                 onSubmitEditing={handleSend}
               />
-              <TouchableOpacity 
-                style={[
-                  chatStyles.sendButton,
-                  !inputText.trim() && chatStyles.sendButtonDisabled
-                ]} 
+              <TouchableOpacity
+                style={[chatStyles.sendButton, !inputText.trim() && chatStyles.sendButtonDisabled]}
                 onPress={handleSend}
                 disabled={!inputText.trim()}
               >
-                <Text style={[chatStyles.sendButtonText, { fontSize: scaled(20) }]}>➤</Text>
+                <Feather name="send" size={18} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -2224,212 +2214,220 @@ const chatStyles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   container: {
-    width: SCREEN_WIDTH * 0.85,
-    maxWidth: 400,
-    backgroundColor: COLORS.white,
+    width: SCREEN_WIDTH * 0.88,
+    maxWidth: 440,
+    backgroundColor: '#F7F4EE',
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: -5, height: 0 },
-    elevation: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    shadowOffset: { width: -6, height: 0 },
+    elevation: 14,
+    flexDirection: 'column',
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
+    backgroundColor: '#4A5C2A',
+    paddingTop: 18,
+    paddingBottom: 16,
     paddingHorizontal: 16,
+    gap: 12,
   },
-  headerIcon: {
+  headerAvatarWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  headerAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  headerIconText: {
-    fontSize: 20,
   },
   headerText: {
     flex: 1,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
   },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  aiOn: {
+    backgroundColor: 'rgba(52,211,153,0.85)',
+  },
+  aiOff: {
+    backgroundColor: 'rgba(156,163,175,0.75)',
+  },
   headerSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255,255,255,0.75)',
     marginTop: 2,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  closeButtonText: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  avatarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-    marginLeft: 4,
-  },
-  avatarBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#f6a72d',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 5,
-  },
-  avatarEmoji: {
-    fontSize: 12,
-  },
-  avatarLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#b77f3f',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginRight: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  aiOn: {
-    backgroundColor: 'rgba(52, 211, 153, 0.9)'
-  },
-  aiOff: {
-    backgroundColor: 'rgba(107, 114, 128, 0.9)'
-  },
+
+  // Messages
   messagesContainer: {
     flex: 1,
-    backgroundColor: COLORS.neutral,
+    backgroundColor: '#F0EDE5',
   },
   messagesContent: {
     padding: 16,
-    paddingBottom: 30,
+    paddingBottom: 24,
+    gap: 4,
+  },
+  assistantRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginBottom: 10,
+  },
+  userRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 10,
+  },
+  avatarBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FDE8C0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#F6C97E',
+  },
+  bubbleAvatar: {
+    width: 24,
+    height: 24,
   },
   messageBubble: {
-    maxWidth: '85%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
+    maxWidth: '82%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
   },
   assistantBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4A5C2A',
     borderBottomRightRadius: 4,
   },
-  messageText: {
-    fontSize: 16,
-    color: COLORS.textMid,
-    lineHeight: 24,
-  },
-  userMessageText: {
-    color: '#FFFFFF',
-  },
   timestamp: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginTop: 6,
+    fontSize: 10,
+    color: '#A8A29E',
+    marginTop: 5,
   },
   userTimestamp: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255,255,255,0.55)',
     textAlign: 'right',
   },
   typingText: {
-    fontSize: 14,
     color: '#9CA3AF',
     fontStyle: 'italic',
   },
+
+  // Quick questions
   quickQuestionsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: '#EDE8DF',
   },
   quickQuestionsLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 10,
-  },
-  quickQuestionsRow: {
-    flexDirection: 'row',
-    gap: 8,
+    fontWeight: '700',
+    color: '#A8A29E',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   quickQuestionButton: {
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    backgroundColor: '#F5F0E8',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: '#DDD8CC',
   },
   quickQuestionText: {
-    fontSize: 15,
-    color: COLORS.textMid,
-    fontWeight: '500',
+    color: '#4A5C2A',
+    fontWeight: '600',
   },
+
+  // Input
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 12,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: '#EDE8DF',
     gap: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 22,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: COLORS.textDark,
-    maxHeight: 140,
+    paddingVertical: 11,
+    color: '#2C2C2C',
+    maxHeight: 120,
+    borderWidth: 1,
+    borderColor: '#DDD8CC',
   },
   sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.accent,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4A5C2A',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#4A5C2A',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: '#C8C3B8',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   sendButtonText: {
     fontSize: 20,
