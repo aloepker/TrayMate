@@ -717,8 +717,10 @@ function getCurrentMealPeriod(): string | null {
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
+  // --- all hooks at the top, unconditionally, in fixed order ---
+  const { addToCart, getCartCount, orders, getOrdersForResident } = useCart();
+
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
-  const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
   const [meals, setMeals] = useState<Meal[]>([]);
   const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
@@ -730,20 +732,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [selectedDrink, setSelectedDrink] = useState<Meal | null>(null);
   const [availableSides, setAvailableSides] = useState<Meal[]>([]);
   const [selectedSide, setSelectedSide] = useState<Meal | null>(null);
-
-  // Use the cart context
-  const { addToCart, getCartCount, orders, getOrdersForResident } = useCart();
-
   const [menuLoading, setMenuLoading] = useState<boolean>(true);
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
-  const activePeriod = getCurrentMealPeriod();
-
-  // Auto-suggest from past orders (2-hour pre-meal reminder)
   const [autoSuggest, setAutoSuggest] = useState<{ period: string; meal: Meal } | null>(null);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
+
+  // derived (not hooks)
+  const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
+  const activePeriod = getCurrentMealPeriod();
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
