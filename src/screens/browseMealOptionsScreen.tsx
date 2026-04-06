@@ -850,16 +850,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId, selectedPeriod.value, route?.params]);
 
-  // Pre-load drinks & sides once on mount so add-on pickers are always ready
+  // Pre-load drinks, sides, and backend order history once on mount
   useEffect(() => {
     MealService.getMealsByPeriod("Drinks").then(d => setAvailableDrinks(d.map(mapServiceMeal)));
     MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
-  }, []);
-
-  // Fetch real backend order history on mount for accurate auto-suggest
-  useEffect(() => {
     if (residentId) fetchOrderHistory(residentId);
-  }, [residentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load menu and recommendation when component mounts or period changes
   useEffect(() => {
