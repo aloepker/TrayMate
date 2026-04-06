@@ -713,6 +713,24 @@ function getCurrentMealPeriod(): string | null {
   return found ? found.label : null;
 }
 
+/** Returns the next upcoming meal period and how many minutes until it starts */
+function getNextMealPeriod(): { period: typeof MEAL_SCHEDULE[0]; minsUntil: number } | null {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const next = MEAL_SCHEDULE.find((s) => s.start > mins);
+  if (next) return { period: next, minsUntil: next.start - mins };
+  // After dinner — wrap to tomorrow's breakfast
+  const breakfast = MEAL_SCHEDULE[0];
+  return { period: breakfast, minsUntil: 24 * 60 - mins + breakfast.start };
+}
+
+function formatMinsUntil(mins: number): string {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -737,7 +755,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
-  const [autoSuggest, setAutoSuggest] = useState<{ period: string; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
+  const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
 
   // derived (not hooks)
@@ -864,16 +882,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
 
-  // 2-hour pre-meal auto-suggest from past orders (includes drink + dessert)
+  // Auto-suggest next upcoming meal from past orders (always visible, time-aware)
   useEffect(() => {
     if (autoSuggestDismissed || meals.length === 0) return;
 
-    const now = new Date();
-    const mins = now.getHours() * 60 + now.getMinutes();
-
-    // Windows: 2 hrs before each period start
-    const upcoming = MEAL_SCHEDULE.find((s) => mins >= s.start - 120 && mins < s.start);
-    if (!upcoming) return;
+    const next = getNextMealPeriod();
+    if (!next) return;
+    const upcoming = next.period;
 
     // Check if resident already has a current order for this period
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
@@ -916,7 +931,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       suggestDessert = availableSides[0];
     }
 
-    setAutoSuggest({ period: upcoming.label, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
+    setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
   }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides]);
 
   // Handle refresh
@@ -1152,29 +1167,44 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           {recLoading ? (
             <ActivityIndicator color="#4A5C2A" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
           ) : recommendation ? (
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={() => {
-                const found = meals.find(
-                  (m) => m.name === recommendation.meal_name || translateMealName(m.name, language) === recommendation.meal_name
-                );
-                if (found) openMealDetail(found);
-              }}
-              style={styles.bottomCardRecRow}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>
-                  {recommendation.reason}{' '}
-                  <Text style={styles.bottomCardMealName}>
-                    {translateMealName(recommendation.meal_name, language)}
-                  </Text>
-                </Text>
-              </View>
-              <View style={styles.bottomCardOrderBtn}>
-                <Feather name="plus" size={14} color="#FFF" />
-                <Text style={styles.bottomCardOrderBtnText}>Order</Text>
-              </View>
-            </TouchableOpacity>
+            (() => {
+              // Find meal to check availability
+              const recMeal = meals.find(
+                (m) => m.name === recommendation.meal_name || translateMealName(m.name, language) === recommendation.meal_name
+              );
+              const recSchedule = recMeal
+                ? MEAL_SCHEDULE.find((s) => s.label === recMeal.meal_period)
+                : null;
+              const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+              const isServing = recSchedule
+                ? nowMins >= recSchedule.start && nowMins <= recSchedule.end
+                : true;
+              return (
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => { if (recMeal) openMealDetail(recMeal); }}
+                  style={styles.bottomCardRecRow}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>
+                      {recommendation.reason}{' '}
+                      <Text style={styles.bottomCardMealName}>
+                        {translateMealName(recommendation.meal_name, language)}
+                      </Text>
+                    </Text>
+                    {!isServing && recSchedule && (
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11) }]}>
+                        Not serving now · Available {recMeal?.time_range || `${recSchedule.start / 60}–${recSchedule.end / 60}`}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.bottomCardOrderBtn}>
+                    <Feather name="plus" size={14} color="#FFF" />
+                    <Text style={styles.bottomCardOrderBtnText}>Order</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })()
           ) : (
             <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>{t.noRecommendation}</Text>
           )}
@@ -1188,7 +1218,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.bottomCardSuggestHeader}>
               <Feather name="clock" size={13} color="#4A5C2A" />
               <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(12) }]}>
-                {autoSuggest.period}{' '}in ~2 hrs — from past orders
+                {autoSuggest.period} in {formatMinsUntil(autoSuggest.minsUntil)} — from past orders
               </Text>
               <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
                 <Feather name="x" size={14} color="#9CA3AF" />
@@ -1980,6 +2010,11 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+  bottomCardAvailBadge: {
+    color: '#B45309',
+    marginTop: 3,
+    fontWeight: '600',
   },
   bottomCardDivider: {
     height: 1,
