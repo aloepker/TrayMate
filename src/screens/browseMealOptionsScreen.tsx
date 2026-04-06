@@ -1114,40 +1114,77 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   );
 
   const listFooter = (
-    <View style={styles.aiRecommendation}>
-      <View style={styles.aiRecommendationIcon}>
-        <Image
-          source={require('../styles/pictures/grandma.png')}
-          style={{ width: 38, height: 38 }}
-          resizeMode="contain"
-        />
+    <View style={styles.bottomCard}>
+      {/* Grandma avatar */}
+      <View style={styles.bottomCardAvatar}>
+        <Image source={require('../styles/pictures/grandma.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />
       </View>
-      <View style={styles.aiRecommendationContent}>
-        <Text style={[styles.aiRecommendationTitle, { fontSize: scaled(15) }]}>
-          {t.recommendAMeal} — {residentName}
-        </Text>
-        {recLoading ? (
-          <ActivityIndicator color="#2563EB" size="small" />
-        ) : recommendation ? (
-          <Text style={[styles.aiRecommendationText, { fontSize: scaled(16) }]}>
-            {recommendation.reason}{' '}
-            <Text
-              style={[styles.aiRecommendationHighlight, styles.aiRecommendationTappable]}
+
+      <View style={{ flex: 1, gap: 10 }}>
+        {/* Recommendation row */}
+        <View>
+          <Text style={[styles.bottomCardLabel, { fontSize: scaled(12) }]}>
+            GrannyGBT · {residentName}
+          </Text>
+          {recLoading ? (
+            <ActivityIndicator color="#4A5C2A" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
+          ) : recommendation ? (
+            <TouchableOpacity
+              activeOpacity={0.75}
               onPress={() => {
                 const found = meals.find(
                   (m) => m.name === recommendation.meal_name || translateMealName(m.name, language) === recommendation.meal_name
                 );
                 if (found) openMealDetail(found);
               }}
+              style={styles.bottomCardRecRow}
             >
-              {translateMealName(recommendation.meal_name, language)}
-            </Text>
-            <Text style={styles.aiRecommendationText}>{' — tap to order.'}</Text>
-          </Text>
-        ) : (
-          <Text style={[styles.aiRecommendationText, { fontSize: scaled(16) }]}>
-            {t.noRecommendation}
-          </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>
+                  {recommendation.reason}{' '}
+                  <Text style={styles.bottomCardMealName}>
+                    {translateMealName(recommendation.meal_name, language)}
+                  </Text>
+                </Text>
+              </View>
+              <View style={styles.bottomCardOrderBtn}>
+                <Feather name="plus" size={14} color="#FFF" />
+                <Text style={styles.bottomCardOrderBtnText}>Order</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>{t.noRecommendation}</Text>
+          )}
+        </View>
+
+        {/* Auto-suggest row — only when active */}
+        {autoSuggest && !autoSuggestDismissed && (
+          <>
+            <View style={styles.bottomCardDivider} />
+            <View style={styles.bottomCardSuggestRow}>
+              <Feather name="clock" size={13} color="#4A5C2A" />
+              <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13) }]}>
+                <Text style={styles.bottomCardSuggestPeriod}>{autoSuggest.period}</Text>
+                {' in ~2 hrs — '}
+                <Text style={styles.bottomCardMealName}>{autoSuggest.meal.name}</Text>
+                {' from past orders'}
+              </Text>
+              <TouchableOpacity
+                style={styles.bottomCardSuggestConfirm}
+                onPress={() => {
+                  const m = autoSuggest.meal;
+                  addToCart({ id: Number(m.id), name: m.name, meal_period: m.meal_period as any, description: m.description, kcal: m.kcal, sodium_mg: m.sodium_mg, protein_g: m.protein_g, tags: m.tags });
+                  setAutoSuggestDismissed(true);
+                  setAutoSuggest(null);
+                }}
+              >
+                <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
+                <Feather name="x" size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </View>
     </View>
@@ -1166,51 +1203,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
         </View>
       ) : null}
-
-      {/* 2-hour pre-meal auto-suggest banner */}
-      {autoSuggest && !autoSuggestDismissed && (
-        <View style={styles.autoSuggestBanner}>
-          <View style={styles.autoSuggestLeft}>
-            <Feather name="clock" size={16} color="#4A5C2A" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.autoSuggestTitle}>
-                {autoSuggest.period} in under 2 hours
-              </Text>
-              <Text style={styles.autoSuggestBody}>
-                We picked <Text style={styles.autoSuggestMeal}>{autoSuggest.meal.name}</Text> based on past orders — want to go with it?
-              </Text>
-            </View>
-          </View>
-          <View style={styles.autoSuggestActions}>
-            <TouchableOpacity
-              style={styles.autoSuggestConfirm}
-              onPress={() => {
-                const m = autoSuggest.meal;
-                addToCart({
-                  id: Number(m.id),
-                  name: m.name,
-                  meal_period: m.meal_period as any,
-                  description: m.description,
-                  kcal: m.kcal,
-                  sodium_mg: m.sodium_mg,
-                  protein_g: m.protein_g,
-                  tags: m.tags,
-                });
-                setAutoSuggestDismissed(true);
-                setAutoSuggest(null);
-              }}
-            >
-              <Text style={styles.autoSuggestConfirmText}>Order</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.autoSuggestDeny}
-              onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }}
-            >
-              <Text style={styles.autoSuggestDenyText}>Dismiss</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       {/* Main Content */}
       {menuLoading ? (
@@ -1854,6 +1846,101 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.support,
+  },
+  // Combined bottom card (recommendation + auto-suggest)
+  bottomCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#F5F2EA',
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#DDD5C0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  bottomCardAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FDE8C0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#F6C97E',
+    overflow: 'hidden',
+  },
+  bottomCardLabel: {
+    fontWeight: '700',
+    color: '#6D6040',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  bottomCardRecRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bottomCardRecText: {
+    color: '#3C3C3C',
+    lineHeight: 20,
+    flex: 1,
+  },
+  bottomCardMealName: {
+    fontWeight: '800',
+    color: '#2D4018',
+  },
+  bottomCardOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#4A5C2A',
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  bottomCardOrderBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  bottomCardDivider: {
+    height: 1,
+    backgroundColor: '#DDD5C0',
+  },
+  bottomCardSuggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  bottomCardSuggestText: {
+    color: '#555',
+    flex: 1,
+    lineHeight: 18,
+  },
+  bottomCardSuggestPeriod: {
+    fontWeight: '700',
+    color: '#4A5C2A',
+  },
+  bottomCardSuggestConfirm: {
+    backgroundColor: '#4A5C2A',
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  bottomCardSuggestConfirmText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 12,
   },
   cardUnavailable: {
     borderColor: '#DDD0B8',
