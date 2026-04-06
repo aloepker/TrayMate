@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -36,6 +36,7 @@ import {
   ResidentService,
   RecommendationService,
   Meal as ServiceMeal,
+  Resident,
 } from "../services/localDataService";
 import {
   translateMealDescription,
@@ -47,11 +48,6 @@ import {
 
 import { geminiChat } from "../services/geminiService";
 import { Picker } from "@react-native-picker/picker";
-import {
-  getCaregiverResidents,
-  getResidents,
-  Resident as BackendResident,
-} from "../services/api";
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -210,12 +206,6 @@ type Recommendation = {
   dietary_restrictions: string[];
 };
 
-type ResidentMealProfile = {
-  name: string;
-  dietaryRestrictions: string[];
-  foodAllergies: string[];
-};
-
 
 // ---------- Period Tabs ----------
 type PeriodOption = {
@@ -264,230 +254,6 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "desserts", value: "Sides" },
   { key: "seasonal", value: null },
 ];
-
-const PERIOD_SCHEDULES: Record<string, { timeRange: string; label: string }> = {
-  Breakfast: { timeRange: "7 am - 10 am", label: "Breakfast" },
-  Lunch: { timeRange: "11 am - 2 pm", label: "Lunch" },
-  Dinner: { timeRange: "4 pm - 7 pm", label: "Dinner" },
-  Drinks: { timeRange: "7 am - 7 pm", label: "Kitchen Open" },
-  Sides: { timeRange: "7 am - 7 pm", label: "Kitchen Open" },
-  "All Day": { timeRange: "7 am - 7 pm", label: "Kitchen Open" },
-};
-
-const ALLERGEN_KEYWORDS = [
-  "egg",
-  "eggs",
-  "dairy",
-  "milk",
-  "lactose",
-  "gluten",
-  "wheat",
-  "soy",
-  "fish",
-  "shellfish",
-  "shrimp",
-  "crab",
-  "lobster",
-  "nut",
-  "nuts",
-  "peanut",
-  "peanuts",
-  "sesame",
-];
-
-const normalizeRestrictionEntries = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => {
-      if (typeof entry === "string") return entry.trim();
-      if (entry && typeof entry === "object" && "name" in entry) {
-        return String((entry as { name?: unknown }).name ?? "").trim();
-      }
-      return String(entry ?? "").trim();
-    })
-    .filter(Boolean);
-};
-
-const dedupeStrings = (values: string[]) => {
-  const seen = new Set<string>();
-  return values.filter((value) => {
-    const key = value.trim().toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
-
-const isLikelyAllergen = (value: string) => {
-  const normalized = value.trim().toLowerCase();
-  return ALLERGEN_KEYWORDS.some((keyword) => normalized.includes(keyword));
-};
-
-const formatTimeRangeDisplay = (timeRange: string) =>
-  timeRange
-    .replace(/[–—]/g, "-")
-    .replace(/(\d)(am|pm)/gi, "$1 $2")
-    .replace(/\s*-\s*/g, " - ")
-    .trim();
-
-const getScheduleTimeRange = (period?: string, fallback?: string) => {
-  const schedule = period ? PERIOD_SCHEDULES[period] : undefined;
-  if (schedule) return schedule.timeRange;
-  if (fallback?.trim()) return formatTimeRangeDisplay(fallback);
-  return PERIOD_SCHEDULES["All Day"].timeRange;
-};
-
-const getResidentMealProfile = (
-  backendResident?: BackendResident | null,
-  localResident?: ReturnType<typeof ResidentService.getResidentById>,
-  routeParams?: any,
-): ResidentMealProfile => {
-  const localDietaryRestrictions = localResident?.dietaryRestrictions.map((item) => item.name) ?? [];
-  const routeDietaryRestrictions = normalizeRestrictionEntries(routeParams?.dietaryRestrictions);
-  const routeFoodAllergies = normalizeRestrictionEntries(routeParams?.foodAllergies);
-  const backendDietaryRestrictions = backendResident?.dietaryRestrictions ?? [];
-  const backendFoodAllergies = backendResident?.foodAllergies ?? [];
-
-  return {
-    name:
-      localResident?.fullName ??
-      backendResident?.name ??
-      routeParams?.residentName ??
-      ResidentService.getDefaultResident().fullName,
-    dietaryRestrictions: dedupeStrings([
-      ...localDietaryRestrictions,
-      ...backendDietaryRestrictions,
-      ...routeDietaryRestrictions,
-    ]),
-    foodAllergies: dedupeStrings([
-      ...backendFoodAllergies,
-      ...routeFoodAllergies,
-      ...routeDietaryRestrictions.filter(isLikelyAllergen),
-    ]),
-  };
-};
-
-const isMealSafeForProfile = (
-  meal: ServiceMeal,
-  profile: ResidentMealProfile,
-  localResident?: ReturnType<typeof ResidentService.getResidentById>,
-) => {
-  if (localResident) {
-    return ResidentService.isMealSafeForResident(meal, localResident);
-  }
-
-  const restrictions = dedupeStrings([
-    ...profile.foodAllergies,
-    ...profile.dietaryRestrictions.filter(isLikelyAllergen),
-  ]).map((item) => item.toLowerCase());
-
-  if (restrictions.length === 0) return true;
-
-  const allergens = meal.allergenInfo.map((item) => item.toLowerCase());
-  const ingredients = meal.ingredients.map((item) => item.toLowerCase());
-
-  return !restrictions.some((restriction) => {
-    if (allergens.some((allergen) => allergen.includes(restriction) || restriction.includes(allergen))) {
-      return true;
-    }
-
-    if (restriction.includes("shellfish")) {
-      return ingredients.some((ingredient) =>
-        ingredient.includes("shrimp") ||
-        ingredient.includes("crab") ||
-        ingredient.includes("lobster")
-      );
-    }
-
-    return ingredients.some((ingredient) => ingredient.includes(restriction));
-  });
-};
-
-const buildProfileRecommendation = (
-  meals: ServiceMeal[],
-  profile: ResidentMealProfile,
-  localResident?: ReturnType<typeof ResidentService.getResidentById>,
-): Recommendation | null => {
-  const safeMeals = meals.filter((meal) => isMealSafeForProfile(meal, profile, localResident));
-  const candidateMeals = safeMeals;
-  if (candidateMeals.length === 0) return null;
-
-  const preferenceRestrictions = profile.dietaryRestrictions.map((item) => item.toLowerCase());
-
-  const scored = candidateMeals.map((meal) => {
-    let score = 0;
-    const reasons: string[] = [];
-    const sodium = parseInt(String(meal.nutrition.sodium).replace(/[^\d]/g, ""), 10) || 0;
-    const protein = parseInt(String(meal.nutrition.protein).replace(/[^\d]/g, ""), 10) || 0;
-    const tags = meal.tags.map((item) => item.toLowerCase());
-
-    if (profile.foodAllergies.length > 0 && safeMeals.includes(meal)) {
-      score += 40;
-      reasons.push(`free of ${profile.foodAllergies.join(", ").toLowerCase()}`);
-    }
-
-    if (preferenceRestrictions.some((item) => item.includes("low sodium")) && sodium <= 450) {
-      score += 20;
-      reasons.push("low sodium");
-    }
-
-    if (preferenceRestrictions.some((item) => item.includes("heart")) && tags.some((tag) => tag.includes("heart healthy"))) {
-      score += 18;
-      reasons.push("heart healthy");
-    }
-
-    if (preferenceRestrictions.some((item) => item.includes("vegetarian")) && tags.some((tag) => tag.includes("vegetarian"))) {
-      score += 18;
-      reasons.push("vegetarian friendly");
-    }
-
-    if (preferenceRestrictions.some((item) => item.includes("vegan")) && tags.some((tag) => tag.includes("vegan"))) {
-      score += 18;
-      reasons.push("vegan friendly");
-    }
-
-    if (protein >= 20) {
-      score += 10;
-      reasons.push("high protein");
-    }
-
-    if (meal.isSeasonal) {
-      score += 5;
-      reasons.push("seasonal special");
-    }
-
-    if (score === 0) {
-      reasons.push("a solid fit for today's menu");
-    }
-
-    return { meal, score, reasons };
-  });
-
-  const top = scored.sort((a, b) => b.score - a.score)[0];
-  if (!top) return null;
-
-  const whyText = `It's ${top.reasons.join(", ")} for ${profile.name}. We recommend the`;
-
-  return {
-    meal_name: top.meal.name,
-    reason: whyText,
-    dietary_restrictions: profile.dietaryRestrictions,
-  };
-};
-
-const getDefaultPeriodForNow = (now: Date): PeriodOption => {
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  if (currentMinutes >= parseTimeToMinutes("7am") && currentMinutes <= parseTimeToMinutes("10am")) {
-    return PERIOD_KEYS.find((period) => period.key === "breakfast") ?? PERIOD_KEYS[0];
-  }
-  if (currentMinutes >= parseTimeToMinutes("11am") && currentMinutes <= parseTimeToMinutes("2pm")) {
-    return PERIOD_KEYS.find((period) => period.key === "lunch") ?? PERIOD_KEYS[0];
-  }
-  if (currentMinutes >= parseTimeToMinutes("4pm") && currentMinutes <= parseTimeToMinutes("7pm")) {
-    return PERIOD_KEYS.find((period) => period.key === "dinner") ?? PERIOD_KEYS[0];
-  }
-  return PERIOD_KEYS[0];
-};
 
 // ---------- AI Chat Component ----------
 const AIAssistantChat = ({
@@ -907,12 +673,14 @@ function parseTimeToMinutes(s: string): number {
   return hours * 60;
 }
 
-function isWithinTimeRange(timeRange: string, period?: string, now: Date = new Date()): boolean {
-  const effectiveTimeRange = getScheduleTimeRange(period, timeRange);
-  if (!effectiveTimeRange || effectiveTimeRange.trim() === '') return true;
+function isWithinTimeRange(timeRange: string, period?: string): boolean {
+  // Drinks and Sides are available all day
+  if (period === 'Drinks' || period === 'Sides') return true;
+  if (!timeRange || timeRange.trim() === '') return true;
+  const now = new Date();
   const currentMins = now.getHours() * 60 + now.getMinutes();
   // normalize en-dash / em-dash to hyphen
-  const normalized = effectiveTimeRange.replace(/[–—]/g, '-');
+  const normalized = timeRange.replace(/[–—]/g, '-');
   const parts = normalized.split('-').map((p) => p.trim());
   if (parts.length < 2) return true;
   const start = parseTimeToMinutes(parts[0]);
@@ -921,31 +689,45 @@ function isWithinTimeRange(timeRange: string, period?: string, now: Date = new D
 }
 
 /** Start minute of a time-range string, used for sorting */
-function timeRangeStartMinutes(timeRange: string, period?: string): number {
-  const effectiveTimeRange = getScheduleTimeRange(period, timeRange);
-  if (!effectiveTimeRange) return 0;
-  const normalized = effectiveTimeRange.replace(/[–—]/g, '-');
+function timeRangeStartMinutes(timeRange: string): number {
+  if (!timeRange) return 0;
+  const normalized = timeRange.replace(/[–—]/g, '-');
   const first = normalized.split('-')[0]?.trim() ?? '';
   return parseTimeToMinutes(first);
 }
 
 /** Sort meals: available-now first (ordered by start time), then unavailable (ordered by start time) */
-function sortMealsByAvailability(meals: Meal[], now: Date = new Date()): Meal[] {
+function sortMealsByAvailability(meals: Meal[]): Meal[] {
+  const now = new Date();
+  const currentMins = now.getHours() * 60 + now.getMinutes();
   return [...meals].sort((a, b) => {
-    const aAvail = isWithinTimeRange(a.time_range, a.meal_period, now);
-    const bAvail = isWithinTimeRange(b.time_range, b.meal_period, now);
+    const aAvail = isWithinTimeRange(a.time_range, a.meal_period);
+    const bAvail = isWithinTimeRange(b.time_range, b.meal_period);
     if (aAvail && !bAvail) return -1;
     if (!aAvail && bAvail) return 1;
-    return timeRangeStartMinutes(a.time_range, a.meal_period) - timeRangeStartMinutes(b.time_range, b.meal_period);
+    return timeRangeStartMinutes(a.time_range) - timeRangeStartMinutes(b.time_range);
   });
+}
+
+// ---------- Meal Schedule (iPad device time) ----------
+const MEAL_SCHEDULE = [
+  { label: 'Breakfast', start: 7 * 60, end: 10 * 60, color: '#D97706', icon: '☀️' },
+  { label: 'Lunch',     start: 11 * 60, end: 14 * 60, color: '#4A7A60', icon: '🍽️' },
+  { label: 'Dinner',    start: 16 * 60, end: 19 * 60, color: '#5C5FA8', icon: '🌙' },
+];
+
+function getCurrentMealPeriod(): string | null {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const found = MEAL_SCHEDULE.find((s) => mins >= s.start && mins <= s.end);
+  return found ? found.label : null;
 }
 
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
-  const [deviceNow, setDeviceNow] = useState<Date>(() => new Date());
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(() => getDefaultPeriodForNow(new Date()));
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
   const [meals, setMeals] = useState<Meal[]>([]);
   const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
@@ -966,92 +748,29 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [backendResident, setBackendResident] = useState<BackendResident | null>(null);
+  const [showBrowseSupport, setShowBrowseSupport] = useState(false);
+  const activePeriod = getCurrentMealPeriod();
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
     setCurrentResidentId(route?.params?.residentId ?? null);
   }, [route?.params?.residentId, setCurrentResidentId]);
 
-  useEffect(() => {
-    const timer = setInterval(() => setDeviceNow(new Date()), 60_000);
-    return () => clearInterval(timer);
-  }, []);
-
+  // Get resident name from route params or use localDataService
   const residentId = route?.params?.residentId as string | undefined;
-  const routeResidentName = route?.params?.residentName;
-  const routeDietaryRestrictions = route?.params?.dietaryRestrictions;
-  const routeFoodAllergies = route?.params?.foodAllergies;
-  const localResident = residentId ? ResidentService.getResidentById(residentId) : ResidentService.getDefaultResident();
-  const residentProfile = useMemo(
-    () =>
-      getResidentMealProfile(backendResident, localResident, {
-        residentName: routeResidentName,
-        dietaryRestrictions: routeDietaryRestrictions,
-        foodAllergies: routeFoodAllergies,
-      }),
-    [backendResident, localResident, routeDietaryRestrictions, routeFoodAllergies, routeResidentName],
-  );
-  const residentName = residentProfile.name;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadBackendResident = async () => {
-      if (!residentId || localResident) {
-        setBackendResident(null);
-        return;
-      }
-
-      try {
-        const caregiverResidents = await getCaregiverResidents();
-        const match = caregiverResidents.find((resident) => String(resident.id) === residentId);
-        if (!cancelled && match) {
-          setBackendResident(match);
-          return;
-        }
-      } catch {
-        // Try admin resident endpoint next.
-      }
-
-      try {
-        const residents = await getResidents();
-        const match = residents.find((resident) => String(resident.id) === residentId);
-        if (!cancelled) {
-          setBackendResident(match ?? null);
-        }
-      } catch {
-        if (!cancelled) {
-          setBackendResident(null);
-        }
-      }
-    };
-
-    loadBackendResident();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [residentId, localResident]);
+  const residentName =
+    (residentId && ResidentService.getResidentById(residentId)?.fullName) ||
+    route?.params?.residentName ||
+    ResidentService.getDefaultResident().fullName;
 
   // Navigate to cart screen with resident context
   const goToCart = () => {
-    navigation.navigate('Cart', {
-      residentId,
-      residentName,
-      dietaryRestrictions: residentProfile.dietaryRestrictions,
-      foodAllergies: residentProfile.foodAllergies,
-    });
+    navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
   // Navigate to settings with resident context
   const goToSettings = () => {
-    navigation.navigate('Settings', {
-      residentId,
-      residentName,
-      dietaryRestrictions: residentProfile.dietaryRestrictions,
-      foodAllergies: residentProfile.foodAllergies,
-    });
+    navigation.navigate('Settings', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
   // Fetch meals from API (async)
@@ -1066,12 +785,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         : await MealService.getMealsByPeriod(period);
 
       // Filter out meals that are unsafe for this resident's dietary restrictions
-      if (localResident) {
+      const resId = residentId || ResidentService.getDefaultResident().id;
+      const resident = ResidentService.getResidentById(resId);
+      if (resident) {
         serviceMeals = serviceMeals.filter((m) =>
-          ResidentService.isMealSafeForResident(m, localResident)
+          ResidentService.isMealSafeForResident(m, resident)
         );
-      } else {
-        serviceMeals = serviceMeals.filter((m) => isMealSafeForProfile(m, residentProfile));
       }
 
       // mapServiceMeal imported from mealDisplayService.ts
@@ -1090,29 +809,53 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setError("Failed to load meals");
       setMenuLoading(false);
     }
-  }, [localResident, residentProfile]);
+  }, [residentId]);
 
-  // Fetch recommendation from API (async)
+  // Fetch recommendation — works with both local and backend residents
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
 
     try {
       const resId = residentId || ResidentService.getDefaultResident().id;
-      const rec = localResident
-        ? await RecommendationService.getTopRecommendation(resId, selectedPeriod.value)
-        : buildProfileRecommendation(
-            await MealService.getMealsByPeriod(selectedPeriod.value),
-            residentProfile,
-            localResident,
-          );
+      const localResident = ResidentService.getResidentById(resId);
+
+      let rec;
+      if (localResident) {
+        // local resident — use normal path
+        rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
+      } else {
+        // backend resident — build a virtual resident from route params
+        const rawAllergies: string[] = route?.params?.dietaryRestrictions ?? [];
+        const virtualResident: Resident = {
+          id: resId,
+          firstName: (route?.params?.residentName ?? 'Resident').split(' ')[0],
+          lastName: '',
+          fullName: route?.params?.residentName ?? 'Resident',
+          email: '',
+          phone: '',
+          roomNumber: '',
+          role: 'resident',
+          dietaryRestrictions: rawAllergies.map((name: string) => ({
+            type: 'allergy' as const,
+            name,
+            severity: 'moderate' as const,
+          })),
+          nutritionGoals: { dailyCalories: 1800, maxSodium: 2000, minProtein: 45, maxCholesterol: 250, maxSugar: 40 },
+          dislikedIngredients: [],
+          favoriteMealIds: [],
+          isActive: true,
+        };
+        rec = await RecommendationService.getTopRecommendationForResident(virtualResident, selectedPeriod.value);
+      }
+
       setRecommendation(rec);
       setRecLoading(false);
     } catch {
       setRecommendation(null);
       setRecLoading(false);
     }
-  }, [localResident, residentId, residentProfile, selectedPeriod.value]);
+  }, [residentId, selectedPeriod.value, route?.params]);
 
   // Pre-load drinks & sides once on mount so add-on pickers are always ready
   useEffect(() => {
@@ -1160,8 +903,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
     const mealImg = !!item.imageUrl;
-    const available = isWithinTimeRange(item.time_range, item.meal_period, deviceNow);
-    const scheduleLabel = getScheduleTimeRange(item.meal_period, item.time_range);
+    const available = isWithinTimeRange(item.time_range, item.meal_period);
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
     return (
       <TouchableOpacity
@@ -1177,7 +919,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         {!available && (
           <View style={styles.unavailableOverlay}>
             <Feather name="clock" size={12} color="#717644" />
-            <Text style={styles.unavailableText}>Not available · {scheduleLabel}</Text>
+            <Text style={styles.unavailableText}>Not available · {item.time_range}</Text>
           </View>
         )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
@@ -1210,7 +952,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </Text>
           <View style={[styles.timeBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
             <Text style={[styles.timeBadgeText, { fontSize: scaled(14), color: theme.accent }]}>
-              {scheduleLabel}
+              {item.time_range}
             </Text>
           </View>
           <Text style={[styles.cardDescription, { fontSize: scaled(15), color: theme.textSecondary }]}>
@@ -1279,6 +1021,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </View>
 
+      {/* Kitchen Schedule */}
+      <View style={styles.scheduleRow}>
+        <Feather name="clock" size={13} color={pt.subColor} />
+        <Text style={[styles.scheduleLabel, { color: pt.subColor }]}>Kitchen open 7 am – 7 pm  ·  </Text>
+        {MEAL_SCHEDULE.map((s) => {
+          const isActive = activePeriod === s.label;
+          return (
+            <View key={s.label} style={[styles.schedulePill, isActive && { backgroundColor: s.color }]}>
+              <Text style={[styles.schedulePillText, isActive && styles.schedulePillTextActive]}>
+                {s.icon} {s.label} {s.label === 'Breakfast' ? '7–10am' : s.label === 'Lunch' ? '11am–2pm' : '4–7pm'}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
       {/* Period Tabs */}
       <View style={styles.tabs}>
         {PERIOD_KEYS.map((period) => {
@@ -1304,29 +1062,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </TouchableOpacity>
           );
         })}
-      </View>
-
-      <View style={styles.scheduleCard}>
-        <View style={styles.scheduleHeaderRow}>
-          <Text style={[styles.scheduleTitle, { color: pt.titleColor }]}>Schedule</Text>
-          <Text style={[styles.scheduleStatus, { color: isWithinTimeRange(PERIOD_SCHEDULES["All Day"].timeRange, "All Day", deviceNow) ? COLORS.primary : COLORS.secondary }]}>
-            {isWithinTimeRange(PERIOD_SCHEDULES["All Day"].timeRange, "All Day", deviceNow)
-              ? `Kitchen open now · ${deviceNow.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-              : `Kitchen closed now · ${deviceNow.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
-          </Text>
-        </View>
-        <Text style={[styles.scheduleLine, { color: pt.subColor }]}>
-          Breakfast {PERIOD_SCHEDULES.Breakfast.timeRange}
-        </Text>
-        <Text style={[styles.scheduleLine, { color: pt.subColor }]}>
-          Lunch {PERIOD_SCHEDULES.Lunch.timeRange}
-        </Text>
-        <Text style={[styles.scheduleLine, { color: pt.subColor }]}>
-          Dinner {PERIOD_SCHEDULES.Dinner.timeRange}
-        </Text>
-        <Text style={[styles.scheduleFootnote, { color: pt.subColor }]}>
-          Kitchen open 7 am - 7 pm based on this iPad's time.
-        </Text>
       </View>
     </View>
   );
@@ -1385,7 +1120,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       ) : (
         <FlatList
           key={`meal-list-cols-2`}
-          data={sortMealsByAvailability(meals, deviceNow)}
+          data={sortMealsByAvailability(meals)}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMeal}
           numColumns={2}
@@ -1425,16 +1160,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         )}
         <TouchableOpacity
           style={[styles.floatingUpcomingBtn, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
-          onPress={() => navigation.navigate('UpcomingMeals', {
-            residentId,
-            residentName,
-            dietaryRestrictions: residentProfile.dietaryRestrictions,
-            foodAllergies: residentProfile.foodAllergies,
-          })}
+          onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
           accessibilityLabel="My Orders"
           activeOpacity={0.85}
         >
           <Feather name="calendar" size={20} color={pt.tabActiveBg} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setShowBrowseSupport(true)}
+          style={[styles.floatingSupportButton, { minHeight: touchTarget, minWidth: touchTarget, backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
+          accessibilityLabel="Support"
+          activeOpacity={0.85}
+        >
+          <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={goToSettings}
@@ -1638,6 +1376,45 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         residentId={residentId || ResidentService.getDefaultResident().id}
         dietaryRestrictions={route?.params?.dietaryRestrictions || []}
       />
+
+      {/* Browse Support Modal */}
+      <Modal visible={showBrowseSupport} transparent animationType="fade" onRequestClose={() => setShowBrowseSupport(false)}>
+        <View style={styles.supportBackdrop}>
+          <View style={styles.supportCard}>
+            <View style={styles.supportCardHeader}>
+              <Text style={styles.supportCardTitle}>Need Help?</Text>
+              <TouchableOpacity onPress={() => setShowBrowseSupport(false)} hitSlop={10}>
+                <Feather name="x" size={22} color="#1A1A1A" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.supportCardSub}>Contact your care team or kitchen staff for assistance with meal orders.</Text>
+
+            <View style={styles.scheduleCardBlock}>
+              <Text style={styles.scheduleCardTitle}>Kitchen Hours</Text>
+              {MEAL_SCHEDULE.map((s) => {
+                const isActive = activePeriod === s.label;
+                return (
+                  <View key={s.label} style={[styles.scheduleCardRow, isActive && styles.scheduleCardRowActive]}>
+                    <Text style={styles.scheduleCardIcon}>{s.icon}</Text>
+                    <Text style={[styles.scheduleCardLabel, isActive && styles.scheduleCardLabelActive]}>
+                      {s.label}
+                    </Text>
+                    <Text style={[styles.scheduleCardTime, isActive && styles.scheduleCardLabelActive]}>
+                      {s.label === 'Breakfast' ? '7:00 am – 10:00 am' : s.label === 'Lunch' ? '11:00 am – 2:00 pm' : '4:00 pm – 7:00 pm'}
+                    </Text>
+                    {isActive && <View style={styles.scheduleActiveDot} />}
+                  </View>
+                );
+              })}
+              <Text style={styles.scheduleKitchenNote}>Kitchen open 7 am – 7 pm daily</Text>
+            </View>
+
+            <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
+              <Text style={styles.supportCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1851,40 +1628,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-  },
-  scheduleCard: {
-    marginTop: 18,
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderWidth: 1,
-    borderColor: 'rgba(113,118,68,0.18)',
-    gap: 6,
-  },
-  scheduleHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 2,
-  },
-  scheduleTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  scheduleStatus: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  scheduleLine: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  scheduleFootnote: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 2,
   },
   tab: {
     paddingVertical: 12,
@@ -2339,6 +2082,153 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // Schedule banner in header
+  scheduleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  scheduleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  schedulePill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  schedulePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#555',
+  },
+  schedulePillTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+
+  // Support button in floating actions
+  floatingSupportButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(113,118,68,0.25)',
+    shadowColor: '#717644',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+
+  // Support modal
+  supportBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  supportCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 480,
+  },
+  supportCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  supportCardTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1A1A1A',
+  },
+  supportCardSub: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  scheduleCardBlock: {
+    backgroundColor: '#F8F7F3',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+  },
+  scheduleCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4A4A4A',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scheduleCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+    gap: 8,
+  },
+  scheduleCardRowActive: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  scheduleCardIcon: {
+    fontSize: 16,
+  },
+  scheduleCardLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    width: 72,
+  },
+  scheduleCardLabelActive: {
+    color: '#1D4ED8',
+  },
+  scheduleCardTime: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+  },
+  scheduleActiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
+  },
+  scheduleKitchenNote: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  supportCloseBtn: {
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  supportCloseBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
 
