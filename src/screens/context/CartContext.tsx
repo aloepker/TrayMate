@@ -237,8 +237,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       }));
 
       // Fully replace orders for this resident with backend data (prevents duplicates)
+      // Use String() compare to handle numeric vs string ID mismatch
       setOrders((prev) => [
-        ...prev.filter((o) => o.residentId !== userId),
+        ...prev.filter((o) => String(o.residentId) !== String(userId)),
         ...backendOrders,
       ]);
     } catch (err: any) {
@@ -253,7 +254,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getOrdersForResident = (residentId: string): Order[] => {
-    return orders.filter((o) => o.residentId === residentId);
+    // Use String() compare — backend may return numeric IDs while route params are strings
+    return orders.filter((o) => String(o.residentId) === String(residentId));
   };
 
   /** Wipe all locally cached orders (e.g. on logout or dev reset) */

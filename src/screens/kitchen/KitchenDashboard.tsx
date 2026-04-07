@@ -1008,9 +1008,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const orderNote = item.order.note || item.order.specialInstructions || "";
             const isReplying = replyingTo === item.order.id;
 
-            // Per-order notification: messages sent for this order's resident
+            // Per-order messages: match by order ID tag in text (e.g. "[Order #123]")
+            // Falls back to all resident messages if no tag prefix found
+            const orderTag = `[Order #${item.order.id}]`;
             const orderMessages = messages.filter(
-              (m) => m.residentId === item.order.userId
+              (m) => m.residentId === item.order.userId &&
+                     (m.text.startsWith(orderTag) || !m.text.match(/^\[Order #\d+\]/))
             );
             const unreadOrderMsgs = orderMessages.filter((m) => !m.read).length;
 

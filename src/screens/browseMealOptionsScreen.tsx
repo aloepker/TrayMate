@@ -799,9 +799,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const resId = residentId || ResidentService.getDefaultResident().id;
       const resident = ResidentService.getResidentById(resId);
       if (resident) {
+        // Local DB resident — use full safety check
         serviceMeals = serviceMeals.filter((m) =>
           ResidentService.isMealSafeForResident(m, resident)
         );
+      } else {
+        // API/backend resident — filter using both dietaryRestrictions AND foodAllergies from caregiver
+        const allRestrictions = [
+          ...(route?.params?.dietaryRestrictions ?? []),
+          ...(route?.params?.foodAllergies ?? []),
+        ].map((r: string) => r.toLowerCase());
+        if (allRestrictions.length > 0) {
+          serviceMeals = serviceMeals.filter((m) => {
+            const mealAllergens = m.allergenInfo.map((a) => a.toLowerCase());
+            return !mealAllergens.some((allergen) =>
+              allRestrictions.some((r) => r.includes(allergen) || allergen.includes(r))
+            );
+          });
+        }
       }
 
       // mapServiceMeal imported from mealDisplayService.ts
@@ -849,7 +864,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
       } else {
         // backend resident — build a virtual resident from route params
-        const rawAllergies: string[] = route?.params?.dietaryRestrictions ?? [];
+        // Combine both dietaryRestrictions AND foodAllergies from caregiver dashboard
+        const rawAllergies: string[] = [
+          ...(route?.params?.dietaryRestrictions ?? []),
+          ...(route?.params?.foodAllergies ?? []),
+        ];
         const virtualResident: Resident = {
           id: resId,
           firstName: (route?.params?.residentName ?? 'Resident').split(' ')[0],

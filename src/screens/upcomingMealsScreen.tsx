@@ -33,10 +33,19 @@ const COLORS = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Returns true if the given date is today. */
-function isToday(date: Date): boolean {
-  const d = new Date(date);
+/** Returns true if the given date is today.
+ *  Handles backend "YYYY-MM-DD" strings which parse as UTC midnight
+ *  and would appear as "yesterday" in local timezones west of UTC.
+ */
+function isToday(date: Date | string): boolean {
+  const raw = typeof date === 'string' ? date : date.toISOString();
+  // If it's a bare date string (no time component), compare date parts directly
+  const datePart = raw.slice(0, 10); // "YYYY-MM-DD"
   const now = new Date();
+  const todayPart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (datePart === todayPart) return true;
+  // Fallback: compare using local date fields
+  const d = new Date(date);
   return (
     d.getFullYear() === now.getFullYear() &&
     d.getMonth()    === now.getMonth()    &&
