@@ -50,6 +50,7 @@ import {
 import { translateMealNamesWithGemini } from "../services/geminiService";
 
 import { geminiChat } from "../services/geminiService";
+import { useClock } from '../context/useClock';
 import { Picker } from "@react-native-picker/picker";
 
 
@@ -666,11 +667,10 @@ function parseTimeToMinutes(s: string): number {
   return hours * 60;
 }
 
-function isWithinTimeRange(timeRange: string, period?: string): boolean {
+function isWithinTimeRange(timeRange: string, period?: string, now: Date = new Date()): boolean {
   // Drinks and Sides are available all day
   if (period === 'Drinks' || period === 'Sides') return true;
   if (!timeRange || timeRange.trim() === '') return true;
-  const now = new Date();
   const currentMins = now.getHours() * 60 + now.getMinutes();
   // normalize en-dash / em-dash to hyphen
   const normalized = timeRange.replace(/[–—]/g, '-');
@@ -690,12 +690,10 @@ function timeRangeStartMinutes(timeRange: string): number {
 }
 
 /** Sort meals: available-now first (ordered by start time), then unavailable (ordered by start time) */
-function sortMealsByAvailability(meals: Meal[]): Meal[] {
-  const now = new Date();
-  const currentMins = now.getHours() * 60 + now.getMinutes();
+function sortMealsByAvailability(meals: Meal[], now: Date = new Date()): Meal[] {
   return [...meals].sort((a, b) => {
-    const aAvail = isWithinTimeRange(a.time_range, a.meal_period);
-    const bAvail = isWithinTimeRange(b.time_range, b.meal_period);
+    const aAvail = isWithinTimeRange(a.time_range, a.meal_period, now);
+    const bAvail = isWithinTimeRange(b.time_range, b.meal_period, now);
     if (aAvail && !bAvail) return -1;
     if (!aAvail && bAvail) return 1;
     return timeRangeStartMinutes(a.time_range) - timeRangeStartMinutes(b.time_range);
@@ -709,16 +707,14 @@ const MEAL_SCHEDULE = [
   { label: 'Dinner',    start: 16 * 60, end: 19 * 60, color: '#5C5FA8', icon: '🌙' },
 ];
 
-function getCurrentMealPeriod(): string | null {
-  const now = new Date();
+function getCurrentMealPeriod(now: Date = new Date()): string | null {
   const mins = now.getHours() * 60 + now.getMinutes();
   const found = MEAL_SCHEDULE.find((s) => mins >= s.start && mins <= s.end);
   return found ? found.label : null;
 }
 
 /** Returns the next upcoming meal period and how many minutes until it starts */
-function getNextMealPeriod(): { period: typeof MEAL_SCHEDULE[0]; minsUntil: number } | null {
-  const now = new Date();
+function getNextMealPeriod(now: Date = new Date()): { period: typeof MEAL_SCHEDULE[0]; minsUntil: number } | null {
   const mins = now.getHours() * 60 + now.getMinutes();
   const next = MEAL_SCHEDULE.find((s) => s.start > mins);
   if (next) return { period: next, minsUntil: next.start - mins };
@@ -739,6 +735,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   // --- all hooks at the top, unconditionally, in fixed order ---
+  const { currentTime } = useClock();
   const { addToCart, getCartCount, orders, getOrdersForResident, fetchOrderHistory } = useCart();
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
@@ -763,7 +760,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // derived (not hooks)
   const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
-  const activePeriod = getCurrentMealPeriod();
+  const activePeriod = getCurrentMealPeriod(currentTime);
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -901,7 +898,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   useEffect(() => {
     if (autoSuggestDismissed || meals.length === 0) return;
 
-    const next = getNextMealPeriod();
+    const next = getNextMealPeriod(currentTime);
     if (!next) return;
     const upcoming = next.period;
 
@@ -947,7 +944,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
 
     setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
-  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides]);
+  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -983,7 +980,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
     const mealImg = !!item.imageUrl;
-    const available = isWithinTimeRange(item.time_range, item.meal_period);
+    const available = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
     return (
       <TouchableOpacity
@@ -998,7 +995,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       >
         {!available && (
           <View style={styles.unavailableOverlay}>
-            <Feather name="clock" size={12} color="#717644" />
+            <Feather name="clock" size={13} color="#717644" />
             <Text style={styles.unavailableText}>Not available · {item.time_range}</Text>
           </View>
         )}
@@ -1118,21 +1115,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
             activeOpacity={0.85}
           >
-            <Feather name="calendar" size={18} color={pt.tabActiveBg} />
+            <Feather name="calendar" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={() => setShowBrowseSupport(true)}
             activeOpacity={0.85}
           >
-            <Feather name="help-circle" size={18} color={pt.tabActiveBg} />
+            <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
             activeOpacity={0.85}
           >
-            <Feather name="settings" size={18} color={pt.tabActiveBg} />
+            <Feather name="settings" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1190,7 +1187,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               const recSchedule = recMeal
                 ? MEAL_SCHEDULE.find((s) => s.label === recMeal.meal_period)
                 : null;
-              const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+              const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
               const isServing = recSchedule
                 ? nowMins >= recSchedule.start && nowMins <= recSchedule.end
                 : true;
@@ -1327,7 +1324,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       ) : (
         <FlatList
           key={`meal-list-cols-2`}
-          data={sortMealsByAvailability(meals)}
+          data={sortMealsByAvailability(meals, currentTime)}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMeal}
           numColumns={2}
@@ -1675,9 +1672,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -2106,7 +2103,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   unavailableText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#717644',
     letterSpacing: 0.1,
