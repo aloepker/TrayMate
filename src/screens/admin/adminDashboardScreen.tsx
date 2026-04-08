@@ -1198,20 +1198,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#6B7280"
   },
-  msgKitchenBtn: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    marginLeft: 8,
-  },
-  msgKitchenText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#D87000',
-  },
   composeSheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
