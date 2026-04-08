@@ -155,7 +155,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       'Remove all of today\'s orders from your queue?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: clearAllOrders },
+        { text: 'Clear', style: 'destructive', onPress: () => clearAllOrders(residentId) },
       ],
     );
   };

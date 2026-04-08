@@ -566,7 +566,18 @@ export async function getOrderHistoryApi(
 }
 
 /**
- * 4) Get all orders for a given date and meal period.
+ * 4) Delete a single order by backend ID.
+ *    DELETE /mealOrders/{orderId}
+ *    Returns 204 No Content on success.
+ */
+export async function deleteOrderApi(orderId: number): Promise<void> {
+  await request<void>(`/mealOrders/${orderId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * 5) Get all orders for a given date and meal period.
  *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD
  */
 export async function searchOrdersApi(

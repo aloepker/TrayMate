@@ -3,6 +3,7 @@ import {
   placeOrderApi,
   replaceOrderApi,
   getOrderHistoryApi,
+  deleteOrderApi,
   type MealOrderResponse,
 } from '../../services/api';
 
@@ -45,8 +46,8 @@ type CartContextType = {
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
   fetchOrderHistory: (userId: string) => Promise<void>;
-  clearAllOrders: () => void;
-  removeOrder: (orderId: string) => void;
+  clearAllOrders: (residentId?: string) => Promise<void>;
+  removeOrder: (orderId: string) => Promise<void>;
 };
 
 // Create the context
@@ -258,15 +259,45 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     return orders.filter((o) => String(o.residentId) === String(residentId));
   };
 
-  /** Wipe all locally cached orders (e.g. on logout or dev reset) */
-  const clearAllOrders = () => {
-    setOrders([]);
-    setCart([]);
+  /**
+   * Remove a single order — deletes from backend first, then local state.
+   * Falls back to local-only removal if backend call fails.
+   */
+  const removeOrder = async (orderId: string): Promise<void> => {
+    const order = orders.find((o) => o.id === orderId);
+    if (order?.backendId) {
+      try {
+        await deleteOrderApi(order.backendId);
+      } catch (err: any) {
+        console.warn('Backend delete failed, removing locally only:', err?.message);
+      }
+    }
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
   };
 
-  /** Remove a single order by id */
-  const removeOrder = (orderId: string) => {
-    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+  /**
+   * Clear all orders for a specific resident (or all if no residentId).
+   * Deletes each order from the backend, then clears local state.
+   */
+  const clearAllOrders = async (residentId?: string): Promise<void> => {
+    const toDelete = residentId
+      ? orders.filter((o) => String(o.residentId) === String(residentId))
+      : orders;
+
+    // Delete from backend in parallel, ignoring individual failures
+    await Promise.allSettled(
+      toDelete
+        .filter((o) => o.backendId != null)
+        .map((o) => deleteOrderApi(o.backendId!))
+    );
+
+    // Remove cleared orders from local state
+    if (residentId) {
+      setOrders((prev) => prev.filter((o) => String(o.residentId) !== String(residentId)));
+    } else {
+      setOrders([]);
+      setCart([]);
+    }
   };
 
   return (
