@@ -208,6 +208,7 @@ type Recommendation = {
   meal_name: string;
   reason: string;
   dietary_restrictions: string[];
+  targetPeriod?: string; // upcoming period this recommendation targets
 };
 
 
@@ -746,6 +747,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [showMealDetail, setShowMealDetail] = useState(false);
   const [specialNote, setSpecialNote] = useState('');
+  const [recPeriodMeals, setRecPeriodMeals] = useState<Meal[]>([]); // meals for the recommended period
   const [availableDrinks, setAvailableDrinks] = useState<Meal[]>([]);
   const [selectedDrink, setSelectedDrink] = useState<Meal | null>(null);
   const [availableSides, setAvailableSides] = useState<Meal[]>([]);
@@ -849,7 +851,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId]);
 
-  // Fetch recommendation — works with both local and backend residents
+  // Fetch recommendation — always targets the NEXT upcoming meal period so
+  // GrannyGBT's suggestion matches the auto-suggest card below it.
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
@@ -858,10 +861,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const resId = residentId || ResidentService.getDefaultResident().id;
       const localResident = ResidentService.getResidentById(resId);
 
+      // Use the next upcoming meal period (same logic as auto-suggest card)
+      const nextPeriod = getNextMealPeriod(new Date());
+      const targetPeriod = nextPeriod?.period.label ?? selectedPeriod.value;
+
       let rec;
       if (localResident) {
         // local resident — use normal path
-        rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
+        rec = await RecommendationService.getTopRecommendation(resId, targetPeriod as any);
       } else {
         // backend resident — build a virtual resident from route params
         // Combine both dietaryRestrictions AND foodAllergies from caregiver dashboard
@@ -888,10 +895,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           favoriteMealIds: [],
           isActive: true,
         };
-        rec = await RecommendationService.getTopRecommendationForResident(virtualResident, selectedPeriod.value);
+        rec = await RecommendationService.getTopRecommendationForResident(virtualResident, targetPeriod as any);
       }
 
-      setRecommendation(rec);
+      // Pre-load meals for the target period so the card can open meal details
+      const targetMeals = await MealService.getMealsByPeriod(targetPeriod as any);
+      setRecPeriodMeals(targetMeals.map(mapServiceMeal));
+
+      setRecommendation(rec ? { ...rec, targetPeriod: targetPeriod ?? undefined } : null);
       setRecLoading(false);
     } catch {
       setRecommendation(null);
@@ -1199,16 +1210,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <ActivityIndicator color="#4A5C2A" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
           ) : recommendation ? (
             (() => {
-              // Find meal to check availability
-              const recMeal = meals.find(
+              // Find the recommended meal — search the period-specific cache first,
+              // then fall back to the currently displayed meals list
+              const allSearchable = [...recPeriodMeals, ...meals];
+              const recMeal = allSearchable.find(
                 (m) => m.name === recommendation.meal_name || translateMealName(m.name, language) === recommendation.meal_name
               );
-              const recSchedule = recMeal
-                ? MEAL_SCHEDULE.find((s) => s.label === recMeal.meal_period)
-                : null;
+              // Use the target period's schedule for availability check
+              const targetSched = recommendation.targetPeriod
+                ? MEAL_SCHEDULE.find((s) => s.label === recommendation.targetPeriod)
+                : recMeal
+                  ? MEAL_SCHEDULE.find((s) => s.label === recMeal.meal_period)
+                  : null;
               const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
-              const isServing = recSchedule
-                ? nowMins >= recSchedule.start && nowMins <= recSchedule.end
+              const isServing = targetSched
+                ? nowMins >= targetSched.start && nowMins <= targetSched.end
                 : true;
               return (
                 <TouchableOpacity
@@ -1223,9 +1239,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                         {translateMealName(recommendation.meal_name, language)}
                       </Text>
                     </Text>
-                    {!isServing && recSchedule && (
+                    {!isServing && targetSched && (
                       <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11) }]}>
-                        Not serving now · Available {recMeal?.time_range || `${recSchedule.start / 60}–${recSchedule.end / 60}`}
+                        Not serving now · Available {recMeal?.time_range || `${targetSched.start / 60}am–${targetSched.end / 60 > 12 ? (targetSched.end / 60 - 12) + 'pm' : targetSched.end / 60 + 'am'}`}
                       </Text>
                     )}
                   </View>
