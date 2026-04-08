@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Feather from 'react-native-vector-icons/Feather';
 import {
   View,
@@ -8,9 +8,10 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Animated,
 } from 'react-native';
-import { useCart } from './context/CartContext';
 import type { Order } from './context/CartContext';
+import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
@@ -73,6 +74,38 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // ── Soft-delete / undo state ───────────────────────────────────────────────
+  // pendingDeleteIds: orders visually hidden but not yet deleted from backend
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  // undoBanner: shown for 5s after a soft-delete
+  const [undoBanner, setUndoBanner] = useState<{ label: string; onUndo: () => void } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoFadeAnim = useRef(new Animated.Value(0)).current;
+
+  const showUndoBanner = (label: string, onUndo: () => void) => {
+    // Clear any existing timer
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoBanner({ label, onUndo });
+    // Fade in
+    Animated.timing(undoFadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    // Auto-dismiss after 5 s
+    undoTimer.current = setTimeout(() => {
+      Animated.timing(undoFadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+        setUndoBanner(null);
+      });
+    }, 5000);
+  };
+
+  const dismissUndoBanner = () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    Animated.timing(undoFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+      setUndoBanner(null);
+    });
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
   const residentId        = route?.params?.residentId as string | undefined;
   const residentName      = route?.params?.residentName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
@@ -89,9 +122,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     return unsub;
   }, [fetchOrderHistory, residentId, navigation]);
 
-  // ── Only show today's orders ──────────────────────────────────────────────
+  // ── Only show today's orders, excluding soft-deleted ones ─────────────────
   const allResidentOrders = residentId ? getOrdersForResident(residentId) : orders;
-  const residentOrders    = allResidentOrders.filter((o) => isToday(o.placedAt));
+  const residentOrders    = allResidentOrders
+    .filter((o) => isToday(o.placedAt))
+    .filter((o) => !pendingDeleteIds.has(o.id));
 
   const activeOrders    = residentOrders.filter((o) => o.status !== 'completed');
   const completedOrders = residentOrders.filter((o) => o.status === 'completed');
@@ -149,24 +184,71 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
+  // Soft-delete a single order — hides it instantly, confirms with backend after 5s
+  const handleRemoveOrder = (orderId: string) => {
+    // Mark as pending-delete (visually hidden)
+    setPendingDeleteIds((prev) => new Set(prev).add(orderId));
+
+    showUndoBanner('Order removed', () => {
+      // Undo → restore
+      setPendingDeleteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      dismissUndoBanner();
+    });
+
+    // After 5s, actually delete
+    setTimeout(() => {
+      setPendingDeleteIds((prev) => {
+        if (!prev.has(orderId)) return prev; // already undone
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      removeOrder(orderId);
+    }, 5000);
+  };
+
+  // Clear All — confirm first, then soft-delete with 10s undo window
   const handleClearAll = () => {
     Alert.alert(
       'Clear All Orders',
-      'Remove all of today\'s orders from your queue?',
+      "Remove all of today's orders for this resident?",
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => clearAllOrders(residentId) },
-      ],
-    );
-  };
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            // Save the current order IDs so undo can restore
+            const idsToDelete = residentOrders.map((o) => o.id);
+            idsToDelete.forEach((id) =>
+              setPendingDeleteIds((prev) => new Set(prev).add(id))
+            );
 
-  const handleRemoveOrder = (orderId: string) => {
-    Alert.alert(
-      'Remove Order',
-      'Remove this order from your queue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => removeOrder(orderId) },
+            showUndoBanner(`${idsToDelete.length} orders removed`, () => {
+              // Undo → restore all
+              setPendingDeleteIds((prev) => {
+                const next = new Set(prev);
+                idsToDelete.forEach((id) => next.delete(id));
+                return next;
+              });
+              dismissUndoBanner();
+            });
+
+            // After 10s, actually delete
+            setTimeout(() => {
+              setPendingDeleteIds((prev) => {
+                const next = new Set(prev);
+                idsToDelete.forEach((id) => next.delete(id));
+                return next;
+              });
+              clearAllOrders(residentId);
+            }, 10000);
+          },
+        },
       ],
     );
   };
@@ -480,6 +562,17 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           </>
         )}
       </ScrollView>
+
+      {/* ── Undo Banner ────────────────────────────────────────────────────── */}
+      {undoBanner && (
+        <Animated.View style={[styles.undoBanner, { opacity: undoFadeAnim }]}>
+          <Feather name="trash-2" size={16} color="#FFF" />
+          <Text style={styles.undoBannerText}>{undoBanner.label}</Text>
+          <TouchableOpacity style={styles.undoBtn} onPress={undoBanner.onUndo}>
+            <Text style={styles.undoBtnText}>Undo</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -911,6 +1004,43 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   browseMenuText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
+
+  // Undo banner
+  undoBanner: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  undoBannerText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  undoBtn: {
+    backgroundColor: '#4A7A60',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  undoBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
 });
 
 export default UpcomingMealsScreen;
