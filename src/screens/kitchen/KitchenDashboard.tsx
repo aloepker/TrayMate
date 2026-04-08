@@ -754,9 +754,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   useEffect(() => {
     fetchAllOrders();
-    // Auto-refresh every 30 s so resident deletions and status changes stay in sync
-    const interval = setInterval(fetchAllOrders, 30_000);
-    return () => clearInterval(interval);
   }, []);
 
   // ── apply a status change to a single order ──

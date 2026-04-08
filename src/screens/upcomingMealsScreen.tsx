@@ -13,6 +13,7 @@ import {
 import type { Order } from './context/CartContext';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
+import { useKitchenMessages } from './context/KitchenMessageContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
 
@@ -71,6 +72,7 @@ function minutesUntilReady(placedAt: Date): number {
 function UpcomingMealsScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
+  const { messages: kitchenMessages, markRead: markKitchenMsgRead } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -108,6 +110,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
 
   const residentId        = route?.params?.residentId as string | undefined;
   const residentName      = route?.params?.residentName || 'Resident';
+  const residentRoom      = route?.params?.roomNumber as string | undefined;
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
   const foodAllergies: string[] = route?.params?.foodAllergies ?? [];
 
@@ -348,7 +351,12 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           </View>
                           <View>
                             <Text style={styles.confirmTitle}>Order Confirmed</Text>
-                            <Text style={styles.confirmId}>#{order.backendId ?? order.id.slice(-6).toUpperCase()}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <Text style={styles.confirmId}>Order #{order.backendId ?? order.id.slice(-6).toUpperCase()}</Text>
+                              {residentRoom ? (
+                                <Text style={styles.confirmRoom}>· Room {residentRoom}</Text>
+                              ) : null}
+                            </View>
                           </View>
                         </View>
                         <View style={styles.confirmRight}>
@@ -478,6 +486,47 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           </View>
                         );
                       })}
+
+                      {/* ── Kitchen Messages for this order ── */}
+                      {(() => {
+                        const backendId = order.backendId;
+                        const orderTag = backendId ? `[Order #${backendId}]` : null;
+                        const orderMsgs = kitchenMessages.filter(
+                          (m) =>
+                            String(m.residentId) === String(residentId) &&
+                            (orderTag
+                              ? m.text.startsWith(orderTag)
+                              : !m.text.match(/^\[Order #\d+\]/))
+                        );
+                        if (orderMsgs.length === 0) return null;
+                        return (
+                          <View style={styles.kitchenMsgSection}>
+                            <View style={styles.kitchenMsgHeader}>
+                              <Feather name="message-square" size={13} color="#4A5C2A" />
+                              <Text style={[styles.kitchenMsgTitle, { fontSize: scaled(11) }]}>
+                                Message from Kitchen
+                              </Text>
+                            </View>
+                            {orderMsgs.map((msg) => {
+                              // Strip the [Order #N] prefix before showing to resident
+                              const cleanText = orderTag
+                                ? msg.text.replace(orderTag, '').trim()
+                                : msg.text;
+                              if (!msg.read) markKitchenMsgRead(msg.id);
+                              return (
+                                <View key={msg.id} style={styles.kitchenMsgBubble}>
+                                  <Text style={[styles.kitchenMsgText, { fontSize: scaled(13) }]}>
+                                    {cleanText}
+                                  </Text>
+                                  <Text style={[styles.kitchenMsgTime, { fontSize: scaled(10) }]}>
+                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </Text>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      })()}
 
                       {/* Expanded nutrition */}
                       {expanded && (
@@ -765,9 +814,14 @@ const styles = StyleSheet.create({
   },
   confirmId: {
     fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginTop: 1,
+  },
+  confirmRoom: {
+    fontSize: 11,
     fontWeight: '500',
     color: COLORS.textMuted,
-    marginTop: 1,
   },
   confirmRight: {
     alignItems: 'flex-end',
@@ -1040,6 +1094,45 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+
+  // Kitchen messages on order card
+  kitchenMsgSection: {
+    marginTop: 10,
+    marginBottom: 2,
+    borderTopWidth: 1,
+    borderTopColor: '#E2DFD8',
+    paddingTop: 10,
+  },
+  kitchenMsgHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  kitchenMsgTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4A5C2A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  kitchenMsgBubble: {
+    backgroundColor: '#F0EFE6',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#DDD0B8',
+  },
+  kitchenMsgText: {
+    color: '#1A1A1A',
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  kitchenMsgTime: {
+    color: '#5C5C5C',
+    marginTop: 4,
   },
 });
 
