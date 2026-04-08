@@ -684,14 +684,23 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         if (resp.ok) {
           const data = await resp.json();
           const list = Array.isArray(data) ? data : (data?.content ?? data?.data ?? []);
+          // Helper: extract string values from arrays that may contain objects
+          const toStrings = (arr: any): string[] => {
+            if (!arr) return [];
+            if (typeof arr === 'string') return arr.split(',').map((s: string) => s.trim()).filter(Boolean);
+            if (!Array.isArray(arr)) return [];
+            return arr
+              .map((v: any) => (typeof v === 'object' && v !== null ? (v.name ?? v.label ?? v.value ?? '') : String(v ?? '')))
+              .filter(Boolean);
+          };
           setBackendResidents(list.map((r: any) => ({
             id: String(r.id),
             name: String(r.fullName ?? r.name ?? [r.firstName, r.lastName].filter(Boolean).join(" ") ?? ""),
             room: String(r.roomNumber ?? r.room ?? ""),
-            dietaryRestrictions: Array.isArray(r.dietaryRestrictions) ? r.dietaryRestrictions : [],
-            medicalConditions: Array.isArray(r.medicalConditions) ? r.medicalConditions : [],
-            foodAllergies: Array.isArray(r.foodAllergies) ? r.foodAllergies : [],
-            medications: Array.isArray(r.medications) ? r.medications : [],
+            dietaryRestrictions: toStrings(r.dietaryRestrictions),
+            medicalConditions: toStrings(r.medicalConditions),
+            foodAllergies: toStrings(r.foodAllergies),
+            medications: toStrings(r.medications),
           })));
         }
       } catch { /* silently ignore */ }
@@ -1038,7 +1047,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                       <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
                       {resident?.room ? (
-                        <Text style={s.roomLabel}>Rm {resident.room}</Text>
+                        <Text style={s.roomLabel}>Room {resident.room}</Text>
                       ) : null}
                     </View>
                     {/* Order # + period pill */}
@@ -1175,6 +1184,30 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                     );
                   })}
                 </View>
+
+                {/* ── Sent kitchen messages for this order — shown inline ── */}
+                {orderMessages.length > 0 && (
+                  <View style={s.inlineMsgSection}>
+                    <View style={s.inlineMsgHeader}>
+                      <Feather name="message-square" size={11} color={C.primary} />
+                      <Text style={s.inlineMsgLabel}>Messages sent</Text>
+                    </View>
+                    {orderMessages.map((msg) => {
+                      const orderTag = `[Order #${item.order.id}]`;
+                      const cleanText = msg.text.startsWith(orderTag)
+                        ? msg.text.replace(orderTag, '').trim()
+                        : msg.text;
+                      return (
+                        <View key={msg.id} style={s.inlineMsgBubble}>
+                          <Text style={s.inlineMsgText}>{cleanText}</Text>
+                          <Text style={s.inlineMsgMeta}>
+                            {msg.fromName} · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
 
                 {/* ── Message / reply to resident ── */}
                 <View style={s.replySection}>
@@ -1726,6 +1759,47 @@ const s = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: C.border,
+  },
+
+  // Inline message thread on card
+  inlineMsgSection: {
+    marginTop: 10,
+    marginBottom: 4,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10,
+    gap: 6,
+  },
+  inlineMsgHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 2,
+  },
+  inlineMsgLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  inlineMsgBubble: {
+    backgroundColor: C.primaryLight,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#DDD0B8',
+  },
+  inlineMsgText: {
+    fontSize: 13,
+    color: C.text,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  inlineMsgMeta: {
+    fontSize: 10,
+    color: C.textMuted,
+    marginTop: 4,
   },
 
   // Empty state
