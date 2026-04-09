@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.traymate.backend.auth.model.User;
+import com.traymate.backend.auth.repository.UserRepository;
 import com.traymate.backend.messaging.dto.ChatResponse;
 import com.traymate.backend.messaging.dto.MessageResponse;
 import com.traymate.backend.messaging.dto.SendMessageRequest;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 public class MessageService {
 
     private final MessageRepository repository;
+    private final UserRepository userRepository;
 
     public MessageResponse sendMessage(Long senderId, SendMessageRequest req){
 
@@ -67,56 +70,83 @@ public class MessageService {
         return messages;
     }
 
-    // public List<Message> getChats(Long userId){
-    //     List<Message> allMessages =
-    //             repository.findBySenderIdOrReceiverIdOrderByCreatedAtDesc(userId, userId);
-        
-    //     // Map to store latest message per user
-    //     Map<Long, Message> latestChats = new HashMap<>();
+//     public List<ChatResponse> getChats(Long userId){
 
-    //     for (Message msg : allMessages) {
+//         List<Message> allMessages =
+//                 repository.findBySenderIdOrReceiverIdOrderByCreatedAtDesc(userId, userId);
 
-    //         Long otherUserId = msg.getSenderId().equals(userId)
-    //                 ? msg.getReceiverId()
-    //                 : msg.getSenderId();
+//         Map<Long, Message> latestChats = new HashMap<>();
 
-    //         // keep only latest message per user
-    //         if (!latestChats.containsKey(otherUserId)) {
-    //             latestChats.put(otherUserId, msg);
-    //         }
-    //     }
+//         for (Message msg : allMessages) {
 
-    //     return new ArrayList<>(latestChats.values());
-    // }
+//             Long otherUserId = msg.getSenderId().equals(userId)
+//                     ? msg.getReceiverId()
+//                     : msg.getSenderId();
 
-    public List<ChatResponse> getChats(Long userId){
+//             //keep only latest message per user
+//             if (!latestChats.containsKey(otherUserId)) {
+//                 latestChats.put(otherUserId, msg);
+//             }
+//         }
 
-        List<Message> allMessages =
-                repository.findBySenderIdOrReceiverIdOrderByCreatedAtDesc(userId, userId);
+//         //convert to DTO
+//         return latestChats.values().stream()
+//                 .map(msg -> ChatResponse.builder()
+//                         .id(msg.getId())
+//                         .content(msg.getContent())
+//                         .createdAt(msg.getCreatedAt())
+//                         .isRead(msg.getIsRead())
+//                         .build())
+//                 .toList();
+//     }
 
-        Map<Long, Message> latestChats = new HashMap<>();
+        //new chat function
+        public List<ChatResponse> getChats(Long userId) {
 
-        for (Message msg : allMessages) {
+                List<Message> allMessages =
+                        repository.findBySenderIdOrReceiverIdOrderByCreatedAtDesc(userId, userId);
 
-            Long otherUserId = msg.getSenderId().equals(userId)
-                    ? msg.getReceiverId()
-                    : msg.getSenderId();
+                Map<Long, Message> latestChats = new HashMap<>();
 
-            //keep only latest message per user
-            if (!latestChats.containsKey(otherUserId)) {
-                latestChats.put(otherUserId, msg);
-            }
+                for (Message msg : allMessages) {
+
+                        Long otherUserId = msg.getSenderId().equals(userId)
+                                ? msg.getReceiverId()
+                                : msg.getSenderId();
+
+                        // keep only latest message per user
+                        if (!latestChats.containsKey(otherUserId)) {
+                        latestChats.put(otherUserId, msg);
+                        }
+                }
+
+                //convert to DTO WITH names
+                return latestChats.values().stream()
+                        .map(msg -> {
+
+                                User sender = userRepository.findById(msg.getSenderId())
+                                        .orElseThrow();
+
+                                User receiver = userRepository.findById(msg.getReceiverId())
+                                        .orElseThrow();
+
+                                return ChatResponse.builder()
+                                        .id(msg.getId())
+                                        .content(msg.getContent())
+                                        .createdAt(msg.getCreatedAt())
+                                        .isRead(msg.getIsRead())
+
+                                        //IDs
+                                        .senderId(msg.getSenderId())
+                                        .receiverId(msg.getReceiverId())
+
+                                        //Names
+                                        .senderName(sender.getFullName())
+                                        .receiverName(receiver.getFullName())
+
+                                        .build();
+                        })
+                        .toList();
         }
-
-        //convert to DTO
-        return latestChats.values().stream()
-                .map(msg -> ChatResponse.builder()
-                        .id(msg.getId())
-                        .content(msg.getContent())
-                        .createdAt(msg.getCreatedAt())
-                        .isRead(msg.getIsRead())
-                        .build())
-                .toList();
-    }
     
 }
