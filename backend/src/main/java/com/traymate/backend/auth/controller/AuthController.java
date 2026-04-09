@@ -2,10 +2,13 @@ package com.traymate.backend.auth.controller;
 
 
 import com.traymate.backend.auth.dto.*;
+import com.traymate.backend.auth.model.User;
+import com.traymate.backend.auth.repository.UserRepository;
 import com.traymate.backend.auth.service.AuthService;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserRepository userRepository;
 
     /**
      *register a new user.
@@ -46,5 +50,20 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@RequestBody LoginRequest req) {
         return authService.login(req);
+    }
+
+    @GetMapping("/me")
+    public MeResponse getCurrentUser(Authentication authentication) {
+
+        String email = authentication.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow();
+
+        return MeResponse.builder()
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .role(user.getRole().toString())
+                .build();
     }
 }
