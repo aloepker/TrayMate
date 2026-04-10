@@ -61,6 +61,8 @@ export type DisplayMeal = {
   imageUrl?: string;
   tags?: string[];
   isSeasonal?: boolean;
+  /** Allergen names for dietary restriction checks */
+  allergens?: string[];
   /** Optional special note added by the user in the detail modal */
   specialNote?: string;
 };
@@ -200,5 +202,6 @@ export const mapServiceMeal = (m: ServiceMeal): DisplayMeal => ({
   protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
   imageUrl: m.imageUrl,
   tags: m.tags ?? [],
+  allergens: m.allergenInfo ?? [],
   isSeasonal: m.isSeasonal ?? false,
 });

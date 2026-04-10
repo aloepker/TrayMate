@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
+import { useCart } from './context/CartContext';
 import { ResidentService } from '../services/localDataService';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -49,6 +50,9 @@ function SettingsScreen({ navigation, route }: any) {
   } = useSettings();
   const touchTarget = getTouchTargetSize();
   const hc = accessibility.highContrastMode;
+
+  const { orders, removeOrder, getOrdersForResident } = useCart();
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -315,6 +319,84 @@ function SettingsScreen({ navigation, route }: any) {
             onPress={() => navigation.navigate('AIMealAssistant')}
           />
         </View>
+
+        {/* ==================== ORDER HISTORY (30 DAYS) ==================== */}
+        {(() => {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const allOrders = residentId ? getOrdersForResident(residentId) : orders;
+          const recentOrders = allOrders
+            .filter(o => new Date(o.placedAt) >= thirtyDaysAgo)
+            .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+
+          return (
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                onPress={() => setShowOrderHistory(v => !v)}
+              >
+                <Feather name="rotate-ccw" size={16} color={theme.textSecondary} />
+                <Text style={[styles.sectionTitle, { fontSize: scaled(14), color: theme.textSecondary, flex: 1 }]}>
+                  ORDER HISTORY (30 DAYS)
+                </Text>
+                <Feather name={showOrderHistory ? 'chevron-up' : 'chevron-down'} size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
+
+              {showOrderHistory && (
+                <View style={[styles.card, { backgroundColor: theme.surface, marginTop: 10 }]}>
+                  {recentOrders.length === 0 ? (
+                    <Text style={[styles.noHistoryText, { fontSize: scaled(14), color: theme.textSecondary }]}>
+                      No orders in the last 30 days.
+                    </Text>
+                  ) : (
+                    recentOrders.map((order, idx) => {
+                      const placed = new Date(order.placedAt);
+                      const dateStr = placed.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+                      const timeStr = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <View key={order.id}>
+                          {idx > 0 && <View style={styles.divider} />}
+                          <View style={styles.historyRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.historyDate, { fontSize: scaled(12), color: theme.textSecondary }]}>
+                                {dateStr} · {timeStr}
+                              </Text>
+                              {order.items.map((item, i) => (
+                                <Text key={i} style={[styles.historyMeal, { fontSize: scaled(14), color: theme.textPrimary }]}>
+                                  {item.name}
+                                </Text>
+                              ))}
+                              {order.backendId && (
+                                <Text style={[styles.historyOrderId, { fontSize: scaled(11), color: theme.textSecondary }]}>
+                                  Order #{order.backendId}
+                                </Text>
+                              )}
+                            </View>
+                            <TouchableOpacity
+                              style={styles.historyDeleteBtn}
+                              onPress={() =>
+                                Alert.alert(
+                                  'Delete Order',
+                                  'Remove this order from your history?',
+                                  [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: 'Delete', style: 'destructive', onPress: () => removeOrder(order.id) },
+                                  ],
+                                )
+                              }
+                            >
+                              <Feather name="trash-2" size={15} color={theme.danger} />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              )}
+            </View>
+          );
+        })()}
 
         {/* ==================== ACCOUNT ==================== */}
         <View style={styles.section}>
@@ -699,6 +781,34 @@ const styles = StyleSheet.create({
   accountLabel: {
     fontWeight: '500',
     color: '#4A4A4A',
+  },
+
+  // Order history
+  noHistoryText: {
+    padding: 16,
+    textAlign: 'center',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  historyDate: {
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  historyMeal: {
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  historyOrderId: {
+    marginTop: 2,
+  },
+  historyDeleteBtn: {
+    padding: 6,
+    marginLeft: 8,
+    marginTop: 2,
   },
 });
 

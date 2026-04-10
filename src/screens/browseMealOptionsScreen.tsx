@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   SafeAreaView,
@@ -941,14 +942,29 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     const allPastItems = resOrders.flatMap((o) => o.items);
 
-    // Pick main meal from past orders or fall back to first available
+    // Resident dietary restrictions — used to filter auto-suggest candidates
+    const allRestrictions: string[] = [
+      ...(route?.params?.dietaryRestrictions ?? []),
+      ...(route?.params?.foodAllergies ?? []),
+    ].map((r: string) => r.toLowerCase());
+
+    const isSafeForResident = (m: Meal): boolean => {
+      if (allRestrictions.length === 0) return true;
+      const allergens = (m.allergens ?? []).map((a: string) => a.toLowerCase());
+      return !allRestrictions.some(r =>
+        allergens.some(a => a.includes(r) || r.includes(a))
+      );
+    };
+
+    // Pick main meal from past orders or fall back to first safe available
     const pastMeal = allPastItems.find((i) => i.meal_period === upcoming.label);
     let mainMeal: Meal | null = null;
     if (pastMeal) {
-      mainMeal = meals.find((m) => String(m.id) === String(pastMeal.id) || m.name === pastMeal.name) ?? null;
+      const candidate = meals.find((m) => String(m.id) === String(pastMeal.id) || m.name === pastMeal.name);
+      if (candidate && isSafeForResident(candidate)) mainMeal = candidate;
     }
     if (!mainMeal) {
-      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label);
+      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label && isSafeForResident(m));
       mainMeal = periodMeals[0] ?? null;
     }
     if (!mainMeal) return;
@@ -993,17 +1009,41 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setShowMealDetail(true);
   };
 
-  // Add meal (and optional drink) to cart from detail modal
+  // Check if a meal conflicts with the resident's dietary profile
+  const getRestrictionConflicts = (meal: Meal): string[] => {
+    const allRestrictions: string[] = [
+      ...(route?.params?.dietaryRestrictions ?? []),
+      ...(route?.params?.foodAllergies ?? []),
+    ];
+    if (allRestrictions.length === 0) return [];
+    const allergens = (meal.allergens ?? []).map((a: string) => a.toLowerCase());
+    return allRestrictions.filter(r =>
+      allergens.some(a => a.includes(r.toLowerCase()) || r.toLowerCase().includes(a))
+    );
+  };
+
+  // Add meal (and optional drink) to cart from detail modal — with dietary warning
   const handleAddToCartFromModal = () => {
     if (!selectedMeal) return;
-    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
-    if (selectedDrink) {
-      addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+    const conflicts = getRestrictionConflicts(selectedMeal);
+    const doAdd = () => {
+      addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
+      if (selectedDrink) addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+      if (selectedSide)  addToCart({ ...selectedSide,  id: parseInt(selectedSide.id)  });
+      setShowMealDetail(false);
+    };
+    if (conflicts.length > 0) {
+      Alert.alert(
+        '⚠️ Dietary Restriction Alert',
+        `This meal contains: ${conflicts.join(', ')}.\n\nThis conflicts with the resident\'s recorded profile. Do you still want to order?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Order Anyway', style: 'destructive', onPress: doAdd },
+        ],
+      );
+    } else {
+      doAdd();
     }
-    if (selectedSide) {
-      addToCart({ ...selectedSide, id: parseInt(selectedSide.id) });
-    }
-    setShowMealDetail(false);
   };
 
   // Render individual meal item for FlatList
@@ -1012,12 +1052,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const mealImg = !!item.imageUrl;
     const available = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
+    const conflicts = getRestrictionConflicts(item);
+    const hasConflict = conflicts.length > 0;
     return (
       <TouchableOpacity
         style={[
           styles.card,
           { backgroundColor: theme.surface, borderColor: theme.border },
           !available && styles.cardUnavailable,
+          hasConflict && { borderColor: '#FCA5A5', borderWidth: 1.5 },
         ]}
         activeOpacity={available ? 0.7 : 1}
         onPress={() => { if (available) openMealDetail(item); }}
@@ -1054,9 +1097,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
-          <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
-            {translateMealName(item.name, language)}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
+              {translateMealName(item.name, language)}
+            </Text>
+            {hasConflict && (
+              <View style={styles.restrictionBadge}>
+                <Feather name="alert-triangle" size={11} color="#DC2626" />
+                <Text style={styles.restrictionBadgeText}>Restricted</Text>
+              </View>
+            )}
+          </View>
           <View style={[styles.timeBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
             <Text style={[styles.timeBadgeText, { fontSize: scaled(14), color: theme.accent }]}>
               {item.time_range}
@@ -1936,7 +1987,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: COLORS.textDark,
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  restrictionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginBottom: 4,
+  },
+  restrictionBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   timeBadge: {
     alignSelf: 'flex-start',

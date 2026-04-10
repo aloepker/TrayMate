@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
+import StaffChatModal from "../components/StaffChatModal";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident } from "../../services/api";
@@ -41,7 +42,7 @@ const C = {
 };
 
 type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
-type Status = "pending" | "preparing" | "ready" | "served";
+type Status = "pending" | "preparing" | "ready" | "served" | "cancelled" | "substitution_requested";
 
 // ─── Base URL + API helpers ────────────────────────────────────────────────────
 const BASE = "https://traymate-auth.onrender.com";
@@ -648,7 +649,7 @@ const support = StyleSheet.create({
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
-  const { messages, unreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
+  const { messages, unreadCount, staffUnreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
 
   const [orders, setOrders] = useState<ApiOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -658,7 +659,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
+  const [showStaffChat, setShowStaffChat] = useState(false);   // replaces showMessages bell
+  const [showMessages, setShowMessages] = useState(false);    // kept for per-order inbox modal
   const [showSupport, setShowSupport] = useState(false);
 
   // Per-order messaging
@@ -853,6 +855,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       fromRole: "kitchen",
       fromName: loggedInEmail ?? "Kitchen Staff",
       text: `[Order #${orderId}] ${replyText.trim()}`,
+      channel: 'order',
     });
     Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}${roomStr}'s order #${orderId}.`);
     setReplyText("");
@@ -861,11 +864,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   // Status chip styling
   const statusStyle = (s: Status | string) => {
-    if (s === "pending")   return { bg: C.warningBg,  text: C.warning,  icon: "clock"         as const };
-    if (s === "preparing") return { bg: "#FEE2E2",    text: C.danger,   icon: "loader"        as const };
-    if (s === "ready")     return { bg: C.successBg,  text: C.success,  icon: "check-circle"  as const };
-    if (s === "served")    return { bg: "#E0F2FE",    text: "#0369A1",  icon: "check-square"  as const };
-    return                        { bg: C.surface,    text: C.textMuted, icon: "help-circle"  as const };
+    if (s === "pending")                return { bg: C.warningBg,  text: C.warning,  icon: "clock"         as const };
+    if (s === "preparing")              return { bg: "#FEE2E2",    text: C.danger,   icon: "loader"        as const };
+    if (s === "ready")                  return { bg: C.successBg,  text: C.success,  icon: "check-circle"  as const };
+    if (s === "served")                 return { bg: "#E0F2FE",    text: "#0369A1",  icon: "check-square"  as const };
+    if (s === "cancelled")              return { bg: "#F3F4F6",    text: "#6B7280",  icon: "x-circle"      as const };
+    if (s === "substitution_requested") return { bg: "#FEF3C7",    text: C.warning,  icon: "refresh-cw"    as const };
+    return                                     { bg: C.surface,    text: C.textMuted, icon: "help-circle"  as const };
   };
 
   return (
@@ -884,13 +889,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             <Feather name="plus-circle" size={20} color={C.primary} />
           </TouchableOpacity>
 
-          {/* Messages bell */}
-          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowMessages(true)}>
-            <Feather name="bell" size={20} color={C.primary} />
-            {unreadCount > 0 && (
+          {/* Staff chat icon (replaces bell) */}
+          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowStaffChat(true)}>
+            <Feather name="message-square" size={20} color={C.primary} />
+            {staffUnreadCount > 0 && (
               <View style={s.bellBadge}>
                 <Text style={s.bellBadgeText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {staffUnreadCount > 9 ? "9+" : staffUnreadCount}
                 </Text>
               </View>
             )}
@@ -1185,6 +1190,84 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   })}
                 </View>
 
+                {/* ── Cancel / Substitution actions ── */}
+                <View style={s.orderActionsRow}>
+                  <TouchableOpacity
+                    style={[s.orderActionBtn, { borderColor: C.danger }]}
+                    onPress={() =>
+                      Alert.alert(
+                        'Cancel Order',
+                        `Cancel Order #${item.order.id} for ${resident?.name ?? 'resident'}?`,
+                        [
+                          { text: 'No', style: 'cancel' },
+                          {
+                            text: 'Yes, Cancel',
+                            style: 'destructive',
+                            onPress: () => {
+                              handleStatusChange(item.order.id, 'cancelled');
+                              sendMessage({
+                                residentId: item.order.userId,
+                                residentName: resident?.name ?? item.order.userId,
+                                residentRoom: resident?.room ?? '',
+                                fromRole: 'kitchen',
+                                fromName: loggedInEmail ?? 'Kitchen Staff',
+                                text: `[Order #${item.order.id}] Your order has been cancelled by the kitchen. Please contact staff for assistance.`,
+                                channel: 'order',
+                              });
+                            },
+                          },
+                        ],
+                      )
+                    }
+                  >
+                    <Feather name="x-circle" size={13} color={C.danger} />
+                    <Text style={[s.orderActionText, { color: C.danger }]}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.orderActionBtn, { borderColor: C.warning }]}
+                    onPress={() => {
+                      setReplyingTo(item.order.id);
+                      setReplyText('Substitution available: ');
+                    }}
+                  >
+                    <Feather name="refresh-cw" size={13} color={C.warning} />
+                    <Text style={[s.orderActionText, { color: C.warning }]}>Substitution</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* ── Resident messages sent to kitchen for this order ── */}
+                {(() => {
+                  const orderTag = `[Order #${item.order.id}]`;
+                  const residentMsgs = messages.filter(
+                    m => m.residentId === item.order.userId &&
+                         m.fromRole === 'resident' &&
+                         m.channel === 'order' &&
+                         m.text.startsWith(orderTag)
+                  );
+                  if (residentMsgs.length === 0) return null;
+                  return (
+                    <View style={s.residentMsgSection}>
+                      <View style={s.residentMsgHeader}>
+                        <Feather name="user" size={11} color="#1d4ed8" />
+                        <Text style={s.residentMsgLabel}>Resident messages</Text>
+                      </View>
+                      {residentMsgs.map(msg => {
+                        const clean = msg.text.replace(orderTag, '').trim();
+                        if (!msg.read) markRead(msg.id);
+                        return (
+                          <View key={msg.id} style={s.residentMsgBubble}>
+                            <Text style={s.residentMsgText}>{clean}</Text>
+                            <Text style={s.residentMsgMeta}>
+                              {msg.fromName} · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })()}
+
                 {/* ── Sent kitchen messages for this order — shown inline ── */}
                 {orderMessages.length > 0 && (
                   <View style={s.inlineMsgSection}>
@@ -1245,6 +1328,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           })
         )}
       </ScrollView>
+
+      {/* ── Staff Chat Modal ── */}
+      <StaffChatModal
+        visible={showStaffChat}
+        onClose={() => setShowStaffChat(false)}
+        senderName={loggedInEmail ?? 'Kitchen Staff'}
+        senderRole="kitchen"
+      />
 
       {/* ── Seasonal Meal Modal ── */}
       <SeasonalMealModal
@@ -1759,6 +1850,69 @@ const s = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: C.border,
+  },
+
+  // Cancel / Substitution action row
+  orderActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  orderActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    backgroundColor: C.surface,
+  },
+  orderActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Resident → Kitchen messages on card
+  residentMsgSection: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10,
+    gap: 6,
+  },
+  residentMsgHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 2,
+  },
+  residentMsgLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1d4ed8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  residentMsgBubble: {
+    backgroundColor: '#DBEAFE',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  residentMsgText: {
+    fontSize: 13,
+    color: '#1e3a8a',
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  residentMsgMeta: {
+    fontSize: 10,
+    color: '#3b82f6',
+    marginTop: 4,
   },
 
   // Inline message thread on card

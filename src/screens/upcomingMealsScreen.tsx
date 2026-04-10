@@ -5,6 +5,7 @@ import {
   Text,
   Image,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   ScrollView,
   Alert,
@@ -72,9 +73,13 @@ function minutesUntilReady(placedAt: Date): number {
 function UpcomingMealsScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
-  const { messages: kitchenMessages, markRead: markKitchenMsgRead } = useKitchenMessages();
+  const { messages: kitchenMessages, markRead: markKitchenMsgRead, sendMessage: sendKitchenMessage } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // ── Resident → Kitchen compose state ──────────────────────────────────────
+  const [replyingToOrder, setReplyingToOrder] = useState<string | null>(null); // local order id
+  const [residentReplyText, setResidentReplyText] = useState('');
 
   // ── Soft-delete / undo state ───────────────────────────────────────────────
   // pendingDeleteIds: orders visually hidden but not yet deleted from backend
@@ -110,7 +115,24 @@ function UpcomingMealsScreen({ navigation, route }: any) {
 
   const residentId        = route?.params?.residentId as string | undefined;
   const residentName      = route?.params?.residentName || 'Resident';
-  const residentRoom      = route?.params?.roomNumber as string | undefined;
+  const residentRoom      = (route?.params?.roomNumber ?? route?.params?.room) as string | undefined;
+
+  const handleSendResidentMessage = (order: any) => {
+    if (!residentReplyText.trim()) return;
+    const backendId = order.backendId;
+    const tag = backendId ? `[Order #${backendId}] ` : '';
+    sendKitchenMessage({
+      residentId: residentId ?? '',
+      residentName,
+      residentRoom: residentRoom ?? '',
+      fromRole: 'resident',
+      fromName: residentName,
+      text: `${tag}${residentReplyText.trim()}`,
+      channel: 'order',
+    });
+    setResidentReplyText('');
+    setReplyingToOrder(null);
+  };
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
   const foodAllergies: string[] = route?.params?.foodAllergies ?? [];
 
@@ -527,6 +549,43 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           </View>
                         );
                       })()}
+
+                      {/* ── Resident → Kitchen compose ── */}
+                      <View style={styles.residentComposeSection}>
+                        {replyingToOrder === order.id ? (
+                          <View style={styles.residentComposeRow}>
+                            <TextInput
+                              style={styles.residentComposeInput}
+                              value={residentReplyText}
+                              onChangeText={setResidentReplyText}
+                              placeholder="Message to kitchen..."
+                              placeholderTextColor="#ABABAB"
+                              multiline
+                              autoFocus
+                            />
+                            <TouchableOpacity
+                              style={styles.residentSendBtn}
+                              onPress={() => handleSendResidentMessage(order)}
+                            >
+                              <Feather name="send" size={14} color="#FFF" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.residentCancelBtn}
+                              onPress={() => { setReplyingToOrder(null); setResidentReplyText(''); }}
+                            >
+                              <Feather name="x" size={14} color={COLORS.textMuted} />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.residentComposeToggle}
+                            onPress={() => { setReplyingToOrder(order.id); setResidentReplyText(''); }}
+                          >
+                            <Feather name="message-circle" size={14} color={COLORS.primary} />
+                            <Text style={styles.residentComposeToggleText}>Message Kitchen</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
 
                       {/* Expanded nutrition */}
                       {expanded && (
@@ -1094,6 +1153,59 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+
+  // Resident → Kitchen compose
+  residentComposeSection: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 10,
+  },
+  residentComposeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  residentComposeInput: {
+    flex: 1,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: COLORS.text,
+    minHeight: 40,
+    maxHeight: 90,
+  },
+  residentSendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  residentCancelBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  residentComposeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  residentComposeToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
 
   // Kitchen messages on order card
