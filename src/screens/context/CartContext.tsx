@@ -57,6 +57,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [cart, setCart] = useState<Meal[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [deletedBackendIds, setDeletedBackendIds] = useState<Set<number>>(new Set());
 
   const addToCart = (meal: Meal) => {
     setCart((prev) => [...prev, meal]);
@@ -139,6 +140,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Success — backend returned 201
       const newOrder = buildLocalOrder(rid, response.id);
+      setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       return { order: newOrder };
     } catch (err: any) {
@@ -214,7 +216,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       const history = await getOrderHistoryApi(userId);
       if (!history || history.length === 0) return;
 
-      const backendOrders: Order[] = history.map((entry) => ({
+      const backendOrders: Order[] = history
+      .filter((entry) => !deletedBackendIds.has(entry.order.id))
+      .map((entry) => ({
         id: `backend_${entry.order.id}`,
         backendId: entry.order.id,
         residentId: entry.order.userId,
@@ -237,11 +241,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         },
       }));
 
-      // Fully replace orders for this resident with backend data (prevents duplicates)
+      // Merge: keep local-only orders (no backendId) + replace backend orders
       // Use String() compare to handle numeric vs string ID mismatch
       setOrders((prev) => [
         ...prev.filter((o) => String(o.residentId) !== String(userId)),
         ...backendOrders,
+        // Preserve local-only orders for this resident that have no backend record yet
+        ...prev.filter((o) => String(o.residentId) === String(userId) && !o.backendId),
       ]);
     } catch (err: any) {
       console.warn('Failed to fetch order history:', err?.message);
@@ -266,6 +272,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const removeOrder = async (orderId: string): Promise<void> => {
     const order = orders.find((o) => o.id === orderId);
     if (order?.backendId) {
+      // Track this ID so fetchOrderHistory won't re-add it even if delete fails
+      setDeletedBackendIds((prev) => new Set(prev).add(order.backendId!));
       try {
         await deleteOrderApi(order.backendId);
       } catch (err: any) {
