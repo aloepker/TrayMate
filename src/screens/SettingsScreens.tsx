@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
-import { useCart } from './context/CartContext';
+
 import { ResidentService } from '../services/localDataService';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -51,8 +51,7 @@ function SettingsScreen({ navigation, route }: any) {
   const touchTarget = getTouchTargetSize();
   const hc = accessibility.highContrastMode;
 
-  const { orders, removeOrder, getOrdersForResident } = useCart();
-  const [showOrderHistory, setShowOrderHistory] = useState(false);
+
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
