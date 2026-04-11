@@ -1,6 +1,7 @@
 // src/screens/caregiver/caregiverDashboardScreen.tsx
 
 import React, { useEffect, useMemo, useState } from "react";
+import MessagesModal from "../components/messaging/MessagesModal";
 import {
   View,
   Text,
@@ -55,6 +56,8 @@ export default function CaregiverDashboardScreen({
 
   // Controls resident detail popup
   const [showResidentModal, setShowResidentModal] = useState(false);
+
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
 
   // -----------------------------
   // Initial data load
@@ -197,6 +200,13 @@ export default function CaregiverDashboardScreen({
         </View>
 
         <View style={styles.topBarRight}>
+            <Pressable
+              style={styles.logoutBtn}
+              onPress={() => setShowMessagesModal(true)}
+         >
+              <Text style={styles.logoutText}>Messages</Text>
+            </Pressable>
+
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -437,6 +447,11 @@ export default function CaregiverDashboardScreen({
           </View>
         </View>
       </Modal>
+
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
 
     </SafeAreaView>
   );

@@ -1,3 +1,4 @@
+// src/screens/kitchen/KitchenDashboard.tsx
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
@@ -18,6 +19,7 @@ import { MealService } from "../../services/localDataService";
 import { getMealImage, getMealPlaceholder } from "../../services/mealDisplayService";
 import { clearAuth, getAuthToken } from "../../services/storage";
 import { getResidents, Resident as ApiResident } from "../../services/api";
+import MessagesModal from "../components/messaging/MessagesModal";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -409,6 +411,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
 
   // Compose message state
   const [composeResident, setComposeResident] = useState<{ id: string; name: string; room: string; restrictions: string[] } | null>(null);
@@ -553,6 +556,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               </View>
             )}
           </TouchableOpacity>
+
+            <TouchableOpacity style={s.bellBtn} onPress={() => setShowMessagesModal(true)}>
+              <Feather name="message-circle" size={22} color={C.primary} />
+            </TouchableOpacity>
+
           {/* Logout */}
           <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
             <Feather name="log-out" size={18} color={C.danger} />
@@ -816,6 +824,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         onClose={() => setShowCompose(false)}
         onSend={handleSendMessage}
       />
+
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
+
     </SafeAreaView>
   );
 };

@@ -1,3 +1,5 @@
+// src/screens/admin/adminDashboardScreen.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -21,6 +23,7 @@ import Feather from "react-native-vector-icons/Feather";
  */
 import AddResidentModal from "../components/AddResidentModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import MessagesModal from "../components/messaging/MessagesModal";
 
 import {
   Caregiver,
@@ -48,6 +51,7 @@ type DeleteKind = "resident" | "caregiver" | "kitchen";
 
 export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   // ---- Core Data State ----
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
@@ -335,6 +339,17 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
         <View style={styles.topBarRight}>
+<Pressable
+  style={styles.logoutBtn}
+  onPress={() => {
+    console.log("messages pressed");
+    setShowMessagesModal(true);
+  }}
+>
+  <Text style={styles.logoutText}>Messages</Text>
+</Pressable>
+
+
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -684,6 +699,12 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
       </Modal>
+
+      {/* MESSAGES MODAL */}
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
 
     </SafeAreaView>
   );
