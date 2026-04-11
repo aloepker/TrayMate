@@ -302,71 +302,8 @@ function SettingsScreen({ navigation, route }: any) {
             title={t.orderHistory} desc={t.orderHistoryDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
-            onPress={() => setShowOrderHistory(v => !v)}
-            rightIcon={showOrderHistory ? 'chevron-up' : 'chevron-right'}
+            onPress={() => navigation.navigate('OrderHistory', { residentId, residentName })}
           />
-
-          {/* ── Order history inline panel ── */}
-          {showOrderHistory && (() => {
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const allOrders = residentId ? getOrdersForResident(residentId) : orders;
-            const recentOrders = allOrders
-              .filter(o => new Date(o.placedAt) >= thirtyDaysAgo)
-              .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
-            return (
-              <View style={[styles.card, { backgroundColor: theme.surface, marginBottom: 8 }]}>
-                {recentOrders.length === 0 ? (
-                  <Text style={[styles.noHistoryText, { fontSize: scaled(14), color: theme.textSecondary }]}>
-                    No orders in the last 30 days.
-                  </Text>
-                ) : (
-                  recentOrders.map((order, idx) => {
-                    const placed = new Date(order.placedAt);
-                    const dateStr = placed.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-                    const timeStr = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    return (
-                      <View key={order.id}>
-                        {idx > 0 && <View style={styles.divider} />}
-                        <View style={styles.historyRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.historyDate, { fontSize: scaled(12), color: theme.textSecondary }]}>
-                              {dateStr} · {timeStr}
-                            </Text>
-                            {order.items.map((item, i) => (
-                              <Text key={i} style={[styles.historyMeal, { fontSize: scaled(14), color: theme.textPrimary }]}>
-                                {item.name}
-                              </Text>
-                            ))}
-                            {order.backendId && (
-                              <Text style={[styles.historyOrderId, { fontSize: scaled(11), color: theme.textSecondary }]}>
-                                Order #{order.backendId}
-                              </Text>
-                            )}
-                          </View>
-                          <TouchableOpacity
-                            style={styles.historyDeleteBtn}
-                            onPress={() =>
-                              Alert.alert(
-                                'Delete Order',
-                                'Remove this order from your history?',
-                                [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { text: 'Delete', style: 'destructive', onPress: () => removeOrder(order.id) },
-                                ],
-                              )
-                            }
-                          >
-                            <Feather name="trash-2" size={15} color={theme.danger} />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-            );
-          })()}
 
           <ActionRow
             featherIcon="calendar" bg="#F6D7B8"
