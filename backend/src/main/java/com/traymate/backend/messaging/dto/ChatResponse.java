@@ -12,4 +12,9 @@ public class ChatResponse {
     private String content;
     private LocalDateTime createdAt;
     private Boolean isRead;
+
+    private Long senderId;
+    private Long receiverId;
+    private String senderName;
+    private String receiverName;
 }
