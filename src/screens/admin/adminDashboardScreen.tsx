@@ -16,8 +16,6 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import Feather from "react-native-vector-icons/Feather";
-import { useKitchenMessages } from "../context/KitchenMessageContext";
-import StaffChatModal from "../components/StaffChatModal";
 import { getUserEmail } from "../../services/storage";
 /**
  * FILE PATHS
@@ -56,9 +54,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ---- Staff Chat ----
-  const { staffUnreadCount } = useKitchenMessages();
-  const [showStaffChat, setShowStaffChat] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string>('Admin');
   useEffect(() => {
     getUserEmail().then(e => { if (e) setAdminEmail(e); });
@@ -346,17 +341,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
         <View style={styles.topBarRight}>
-          {/* Staff chat button */}
-          <Pressable style={styles.chatIconBtn} onPress={() => setShowStaffChat(true)}>
-            <Feather name="message-square" size={20} color="#6D6B3B" />
-            {staffUnreadCount > 0 && (
-              <View style={styles.chatBadge}>
-                <Text style={styles.chatBadgeText}>
-                  {staffUnreadCount > 9 ? '9+' : staffUnreadCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -365,14 +349,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </Pressable>
         </View>
       </View>
-
-      {/* Staff Chat Modal */}
-      <StaffChatModal
-        visible={showStaffChat}
-        onClose={() => setShowStaffChat(false)}
-        senderName={adminEmail}
-        senderRole="admin"
-      />
 
       {loading ? (
         <View style={styles.loadingWrap}>
