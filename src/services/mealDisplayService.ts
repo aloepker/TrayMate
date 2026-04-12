@@ -65,6 +65,12 @@ export type DisplayMeal = {
   allergens?: string[];
   /** Optional special note added by the user in the detail modal */
   specialNote?: string;
+  /**
+   * Whether the kitchen has marked this meal as available.
+   * Unavailable meals are still shown in the list but rendered
+   * in a disabled state so residents know what's off the menu today.
+   */
+  isAvailable?: boolean;
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -204,4 +210,5 @@ export const mapServiceMeal = (m: ServiceMeal): DisplayMeal => ({
   tags: m.tags ?? [],
   allergens: m.allergenInfo ?? [],
   isSeasonal: m.isSeasonal ?? false,
+  isAvailable: m.isAvailable !== false,
 });

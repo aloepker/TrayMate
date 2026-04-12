@@ -35,6 +35,23 @@ const KitchenMessageContext = createContext<KitchenMessageContextType | undefine
 
 // ---------- Backend helpers (graceful fallback) ----------
 
+/** Derive a human-readable department from the message's fromRole. */
+function departmentFromRole(role: KitchenMessage['fromRole']): string {
+  switch (role) {
+    case 'kitchen':   return 'Kitchen';
+    case 'admin':     return 'Administration';
+    case 'caregiver': return 'Caregiver';
+    case 'resident':  return 'Resident';
+    default:          return 'Staff';
+  }
+}
+
+/**
+ * Persist a chat message to the backend.
+ * Body includes explicit `senderName`, `senderRole`, `department`, and
+ * `sentAt` fields so any simple REST backend can store the full audit
+ * trail without having to interpret legacy shorthand fields.
+ */
 async function apiPostMessage(msg: KitchenMessage): Promise<void> {
   try {
     const tok = await getAuthToken();
@@ -44,7 +61,24 @@ async function apiPostMessage(msg: KitchenMessage): Promise<void> {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        ...msg,
+        // Legacy / in-app fields
+        id: msg.id,
+        residentId: msg.residentId,
+        residentName: msg.residentName,
+        residentRoom: msg.residentRoom,
+        orderId: msg.orderId ?? null,
+        channel: msg.channel,
+        text: msg.text,
+        read: msg.read,
+        // Explicit, backend-friendly fields
+        senderName: msg.fromName,
+        senderRole: msg.fromRole,
+        department: departmentFromRole(msg.fromRole),
+        sentAt: msg.timestamp.toISOString(),
+        sentDate: msg.timestamp.toISOString().slice(0, 10), // YYYY-MM-DD
+        // Back-compat aliases
+        fromName: msg.fromName,
+        fromRole: msg.fromRole,
         timestamp: msg.timestamp.toISOString(),
       }),
     });
@@ -66,10 +100,10 @@ async function apiFetchMessages(): Promise<KitchenMessage[]> {
       orderId: m.orderId != null ? Number(m.orderId) : undefined,
       residentName: String(m.residentName ?? ''),
       residentRoom: String(m.residentRoom ?? ''),
-      fromRole: m.fromRole ?? 'kitchen',
-      fromName: String(m.fromName ?? ''),
+      fromRole: (m.senderRole ?? m.fromRole ?? 'kitchen') as KitchenMessage['fromRole'],
+      fromName: String(m.senderName ?? m.fromName ?? ''),
       text: String(m.text ?? ''),
-      timestamp: new Date(m.timestamp ?? m.createdAt ?? Date.now()),
+      timestamp: new Date(m.sentAt ?? m.timestamp ?? m.createdAt ?? Date.now()),
       read: Boolean(m.read),
       channel: m.channel === 'staff' ? 'staff' : 'order',
     }));

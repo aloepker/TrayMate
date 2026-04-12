@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,22 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
+  Modal,
+  Pressable,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
+import { useKitchenMessages } from './context/KitchenMessageContext';
 import { translateMealName } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
 
 const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount, getOrdersForResident } = useCart();
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { messages: kitchenMessages, markRead: markKitchenMsgRead } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
+  const [showNotifCenter, setShowNotifCenter] = useState(false);
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -44,6 +49,28 @@ const HomeScreen = ({ navigation, route }: any) => {
   const residentOrders = residentId ? getOrdersForResident(residentId) : orders;
   const activeOrders = residentOrders.filter((o) => o.status !== 'completed');
   const cartCount = getCartCount();
+
+  // Kitchen messages directed at this resident (excludes caregiver-only alerts
+  // that are only meaningful on the caregiver dashboard). Newest first.
+  const residentNotifications = useMemo(() => {
+    if (!residentId) return [];
+    return kitchenMessages
+      .filter(
+        (m) =>
+          String(m.residentId) === String(residentId) &&
+          m.fromRole === 'kitchen' &&
+          !m.text.startsWith('[Caregiver Alert]')
+      )
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [kitchenMessages, residentId]);
+
+  const unreadResidentMsgs = residentNotifications.filter((m) => !m.read).length;
+
+  const openNotifCenter = () => {
+    setShowNotifCenter(true);
+    // Mark everything visible as read
+    residentNotifications.forEach((m) => { if (!m.read) markKitchenMsgRead(m.id); });
+  };
 
   // Get current time of day for greeting
   const hour = new Date().getHours();
@@ -84,12 +111,30 @@ const HomeScreen = ({ navigation, route }: any) => {
               </View>
             )}
           </View>
-          <TouchableOpacity
-            style={[styles.avatarButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-            onPress={() => navWithResident('Settings')}
-          >
-            <Text style={[styles.avatarText, { fontSize: scaled(16) }]}>{initials}</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            {/* Notification bell — shows count of unread kitchen messages */}
+            <TouchableOpacity
+              style={[styles.bellButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+              onPress={openNotifCenter}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
+              <Feather name="bell" size={22} color="#717644" />
+              {unreadResidentMsgs > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadResidentMsgs > 9 ? '9+' : unreadResidentMsgs}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.avatarButton, { minHeight: touchTarget, minWidth: touchTarget }]}
+              onPress={() => navWithResident('Settings')}
+            >
+              <Text style={[styles.avatarText, { fontSize: scaled(16) }]}>{initials}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Upcoming Meals Preview (orders) */}
@@ -238,6 +283,75 @@ const HomeScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ── Notification Center Modal ── */}
+      <Modal
+        visible={showNotifCenter}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowNotifCenter(false)}
+      >
+        <Pressable style={styles.notifBackdrop} onPress={() => setShowNotifCenter(false)}>
+          <Pressable style={[styles.notifSheet, { backgroundColor: theme.surface }]} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.notifHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Feather name="bell" size={18} color="#717644" />
+                <Text style={[styles.notifTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>Notifications</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowNotifCenter(false)} hitSlop={10}>
+                <Feather name="x" size={22} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={{ padding: 16, gap: 12 }}>
+              {residentNotifications.length === 0 ? (
+                <View style={styles.notifEmpty}>
+                  <Feather name="inbox" size={40} color="#D1D5DB" />
+                  <Text style={[styles.notifEmptyText, { color: theme.textSecondary }]}>
+                    No messages from the kitchen yet.
+                  </Text>
+                </View>
+              ) : (
+                residentNotifications.map((msg) => {
+                  const isCancel = /cancelled|⛔/i.test(msg.text);
+                  const isSub = /substitution|🔄/i.test(msg.text);
+                  const accent = isCancel ? '#DC2626' : isSub ? '#D97706' : '#1d4ed8';
+                  const bg = isCancel ? '#FEE2E2' : isSub ? '#FEF3C7' : '#EFF6FF';
+                  const icon = isCancel ? 'x-circle' : isSub ? 'refresh-cw' : 'bell';
+                  const label = isCancel ? 'Cancelled' : isSub ? 'Substitution' : 'Message';
+                  // Strip known prefixes for cleaner display
+                  const cleanText = msg.text
+                    .replace(/^\[Order #\d+\]\s*/, '')
+                    .replace(/^⛔\s*CANCELLED\s*[—-]?\s*/i, '')
+                    .replace(/^🔄\s*SUBSTITUTION\s*[·:]?\s*/i, '')
+                    .trim();
+                  return (
+                    <View key={msg.id} style={[styles.notifCard, { backgroundColor: bg, borderColor: accent }]}>
+                      <View style={styles.notifCardHeader}>
+                        <Feather name={icon as any} size={14} color={accent} />
+                        <Text style={[styles.notifCardLabel, { color: accent }]}>{label}</Text>
+                        {msg.orderId != null && (
+                          <Text style={styles.notifCardOrderId}>Order #{msg.orderId}</Text>
+                        )}
+                        <Text style={styles.notifCardTime}>
+                          {new Date(msg.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                          {' · '}
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                      <Text style={[styles.notifCardText, { fontSize: scaled(14), color: theme.textPrimary }]}>
+                        {cleanText}
+                      </Text>
+                      <Text style={[styles.notifCardFrom, { color: theme.textSecondary }]}>
+                        From {msg.fromName || 'Kitchen'}
+                      </Text>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -295,6 +409,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#92400E',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   avatarButton: {
     width: 48,
@@ -427,6 +578,81 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#B0A898',
     fontWeight: '300',
+  },
+
+  // Notification center modal
+  notifBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  notifSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+    paddingBottom: 24,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  notifTitle: {
+    fontWeight: '800',
+  },
+  notifEmpty: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 10,
+  },
+  notifEmptyText: {
+    fontSize: 14,
+  },
+  notifCard: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+    gap: 6,
+  },
+  notifCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  notifCardLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  notifCardOrderId: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  notifCardTime: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginLeft: 'auto' as any,
+  },
+  notifCardText: {
+    fontWeight: '500',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  notifCardFrom: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
 });
 

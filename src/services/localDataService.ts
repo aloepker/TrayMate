@@ -137,12 +137,15 @@ async function fetchAllMealsFromApi(): Promise<Meal[]> {
 }
 
 async function fetchAvailableMealsFromApi(): Promise<Meal[]> {
+  // We intentionally fetch ALL meals (not just /menu/available) so that
+  // unavailable items can still be shown (greyed out) in the UI. The
+  // `isAvailable` flag is preserved on each meal for the screen to use.
   try {
-    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/available`);
+    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu`);
     return Array.isArray(data) ? data.map(apiMealToMeal) : [];
   } catch (error) {
-    console.warn("Backend /menu/available unreachable, using fallback meals:", error);
-    return FALLBACK_MEALS.filter((m) => m.isAvailable);
+    console.warn("Backend /menu unreachable, using fallback meals:", error);
+    return FALLBACK_MEALS;
   }
 }
 
@@ -162,22 +165,24 @@ async function fetchMealsByPeriodFromApi(period: Meal["mealPeriod"]): Promise<Me
 }
 
 async function fetchDrinksFromApi(): Promise<Meal[]> {
+  // Keep unavailable drinks in the list so the UI can show them greyed-out.
   try {
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/drinks`);
     return Array.isArray(data) ? data.map(apiMealToMeal) : [];
   } catch (error) {
     console.warn("Backend /menu/period/drinks unreachable, using fallback drinks:", error);
-    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealPeriod === "Drinks");
+    return FALLBACK_MEALS.filter((m) => m.mealPeriod === "Drinks");
   }
 }
 
 async function fetchSidesFromApi(): Promise<Meal[]> {
+  // Keep unavailable sides in the list so the UI can show them greyed-out.
   try {
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/sides`);
     return Array.isArray(data) ? data.map(apiMealToMeal) : [];
   } catch (error) {
     console.warn("Backend /menu/period/sides unreachable, using fallback sides:", error);
-    return FALLBACK_MEALS.filter((m) => m.isAvailable && m.mealPeriod === "Sides");
+    return FALLBACK_MEALS.filter((m) => m.mealPeriod === "Sides");
   }
 }
 // Fallback meals for when the API is unreachable
@@ -409,44 +414,29 @@ export const MealService = {
   getMealsByPeriod: async (
     period: Meal["mealPeriod"] | null
   ): Promise<Meal[]> => {
+    // fetchAvailableMealsFromApi now returns ALL meals (including
+    // unavailable ones) so the UI can show them greyed-out.
     const meals = await fetchAvailableMealsFromApi();
 
-  if (!period) {
-    return meals.filter(
-      (m) => m.mealType !== "Beverage" && m.mealType !== "Side"
-    );
-  }
+    if (!period) {
+      return meals.filter(
+        (m) => m.mealType !== "Beverage" && m.mealType !== "Side"
+      );
+    }
 
-  // if (period === "Drinks") {
-  //   return meals.filter(
-  //     (m) => m.isAvailable && m.mealType === "Beverage"
-  //   );
-  // }
+    if (period === "Drinks") {
+      return await fetchDrinksFromApi();
+    }
 
-  // if (period === "Sides") {
-  //   return meals.filter(
-  //     (m) => m.isAvailable && m.mealType === "Side"
-  //     );
-  // }
-  if (period === "Drinks") {
-    const drinks = await fetchDrinksFromApi();
-    return drinks.filter((m) => m.isAvailable);
-  }
+    if (period === "Sides") {
+      return await fetchSidesFromApi();
+    }
 
-  if (period === "Sides") {
-    const sides = await fetchSidesFromApi();
-    return sides.filter((m) => m.isAvailable);
-  }
-
-
-  return meals.filter((m) => {
-    if (!m.isAvailable) return false;
-
-    // exclude drinks and sides from meal tabs
-    if (m.mealType === "Beverage" || m.mealType === "Side") return false;
-
-    if (m.mealPeriod === "All Day") return true;
-    return m.mealPeriod === period;
+    return meals.filter((m) => {
+      // exclude drinks and sides from meal tabs
+      if (m.mealType === "Beverage" || m.mealType === "Side") return false;
+      if (m.mealPeriod === "All Day") return true;
+      return m.mealPeriod === period;
     });
   },
 

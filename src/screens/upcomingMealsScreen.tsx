@@ -125,6 +125,9 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       residentId: residentId ?? '',
       residentName,
       residentRoom: residentRoom ?? '',
+      // Carry the explicit order ID so kitchen UI can show it as a pill
+      // without having to parse the [Order #N] text tag.
+      orderId: backendId,
       fromRole: 'resident',
       fromName: residentName,
       text: `${tag}${residentReplyText.trim()}`,

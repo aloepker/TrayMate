@@ -380,6 +380,58 @@ ${names.join('\n')}`;
   return {};
 }
 
+/**
+ * Batch-translate meal descriptions (full sentences) into ES/FR/ZH.
+ * Same shape as translateMealNamesWithGemini, but keyed by the original
+ * English description string.
+ */
+export async function translateMealDescriptionsWithGemini(
+  descriptions: string[],
+): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (descriptions.length === 0) return {};
+
+  // Use numeric keys in the prompt to avoid JSON escaping issues with quotes
+  // and punctuation inside descriptions.
+  const numbered = descriptions.map((d, i) => `${i + 1}. ${d}`).join('\n');
+  const prompt = `Translate these English meal description sentences into Spanish (Español), French (Français), and Chinese (中文).
+Return ONLY valid JSON — no markdown, no explanation — keyed by the same number.
+Example: {"1":{"Español":"...","Français":"...","中文":"..."}, "2":{...}}
+
+Descriptions:
+${numbered}`;
+
+  for (const model of GEMINI_CONFIG.models) {
+    try {
+      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.1 },
+      };
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+      const numbered = JSON.parse(clean) as Record<string, { Español: string; Français: string; 中文: string }>;
+      // Re-key by original English description
+      const result: Record<string, { Español: string; Français: string; 中文: string }> = {};
+      for (const [idx, tr] of Object.entries(numbered)) {
+        const i = Number(idx) - 1;
+        const orig = descriptions[i];
+        if (orig) result[orig] = tr;
+      }
+      return result;
+    } catch {
+      continue;
+    }
+  }
+  return {};
+}
+
 // Factory for creating independent sessions (e.g. the standalone screen)
 export function createGeminiChat(): GeminiChatService {
   return new GeminiChatService();

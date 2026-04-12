@@ -46,9 +46,14 @@ import {
   translateMealTag,
   translateMealTimeRange,
   hasMealNameTranslation,
+  hasMealDescriptionTranslation,
   setCachedMealTranslations,
+  setCachedDescriptionTranslations,
 } from "../services/mealLocalization";
-import { translateMealNamesWithGemini } from "../services/geminiService";
+import {
+  translateMealNamesWithGemini,
+  translateMealDescriptionsWithGemini,
+} from "../services/geminiService";
 
 import { geminiChat } from "../services/geminiService";
 import { useClock } from '../context/useClock';
@@ -835,15 +840,38 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setMeals(mapped);
       setMenuLoading(false);
 
-      // Translate any API/kitchen meals not in the static lookup table
-      const unknownNames = mapped.map(m => m.name).filter(n => !hasMealNameTranslation(n));
+      // Translate any API/kitchen meals not in the static lookup table.
+      // We translate names and descriptions in parallel so residents who
+      // switch languages see the whole card in their language, not just
+      // the title.
+      const unknownNames = Array.from(new Set(
+        mapped.map(m => m.name).filter(n => !hasMealNameTranslation(n))
+      ));
+      const unknownDescriptions = Array.from(new Set(
+        mapped
+          .map(m => m.description)
+          .filter((d): d is string => !!d && !hasMealDescriptionTranslation(d))
+      ));
+
+      const jobs: Promise<void>[] = [];
       if (unknownNames.length > 0) {
-        translateMealNamesWithGemini(unknownNames).then(results => {
-          if (Object.keys(results).length > 0) {
-            setCachedMealTranslations(results);
-            // Trigger re-render with fresh copy so translated names show
-            setMeals(prev => [...prev]);
-          }
+        jobs.push(
+          translateMealNamesWithGemini(unknownNames).then(results => {
+            if (Object.keys(results).length > 0) setCachedMealTranslations(results);
+          }),
+        );
+      }
+      if (unknownDescriptions.length > 0) {
+        jobs.push(
+          translateMealDescriptionsWithGemini(unknownDescriptions).then(results => {
+            if (Object.keys(results).length > 0) setCachedDescriptionTranslations(results);
+          }),
+        );
+      }
+      if (jobs.length > 0) {
+        Promise.all(jobs).then(() => {
+          // Trigger a re-render with a fresh reference so translated text shows
+          setMeals(prev => [...prev]);
         });
       }
     } catch {
@@ -1050,7 +1078,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
     const mealImg = !!item.imageUrl;
-    const available = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
+    // A meal is "available" if the kitchen hasn't disabled it AND we're
+    // within the time window for its meal period.
+    const kitchenEnabled = item.isAvailable !== false;
+    const inTimeWindow = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
+    const available = kitchenEnabled && inTimeWindow;
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
     const conflicts = getRestrictionConflicts(item);
     const hasConflict = conflicts.length > 0;
@@ -1068,8 +1100,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       >
         {!available && (
           <View style={styles.unavailableOverlay}>
-            <Feather name="clock" size={13} color="#717644" />
-            <Text style={styles.unavailableText}>Not available · {item.time_range}</Text>
+            <Feather name={kitchenEnabled ? "clock" : "slash"} size={13} color="#717644" />
+            <Text style={styles.unavailableText}>
+              {kitchenEnabled ? `Not available · ${item.time_range}` : 'Not available today'}
+            </Text>
           </View>
         )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>

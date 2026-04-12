@@ -20,6 +20,16 @@ import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident } from "../../services/api";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
+import {
+  hasMealNameTranslation,
+  hasMealDescriptionTranslation,
+  setCachedMealTranslations,
+  setCachedDescriptionTranslations,
+} from "../../services/mealLocalization";
+import {
+  translateMealNamesWithGemini,
+  translateMealDescriptionsWithGemini,
+} from "../../services/geminiService";
 
 // ─── Palette (matches app-wide theme) ─────────────────────────────────────────
 const C = {
@@ -404,15 +414,23 @@ const MessagePanel: React.FC<MessagePanelProps> = ({
                 activeOpacity={0.8}
               >
                 <View style={msgPanel.msgTop}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
                     <View style={msgPanel.avatar}>
                       <Feather name="user" size={14} color={C.primary} />
                     </View>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={msgPanel.residentName}>{msg.residentName}</Text>
-                      {msg.residentRoom ? (
-                        <Text style={msgPanel.room}>Room {msg.residentRoom}</Text>
-                      ) : null}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        {msg.residentRoom ? (
+                          <Text style={msgPanel.room}>Room {msg.residentRoom}</Text>
+                        ) : null}
+                        {/* Extract order id from tag prefix if orderId field missing */}
+                        {(() => {
+                          const taggedId = msg.orderId ?? (msg.text.match(/^\[Order #(\d+)\]/)?.[1]);
+                          if (!taggedId) return null;
+                          return <Text style={msgPanel.orderIdPill}>Order #{taggedId}</Text>;
+                        })()}
+                      </View>
                     </View>
                   </View>
                   <View style={{ alignItems: "flex-end", gap: 4 }}>
@@ -831,6 +849,32 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       ...prev,
       { ...meal, id: `seasonal_${Date.now()}` },
     ]);
+
+    // Fire-and-forget: translate the new meal's name + description into
+    // Spanish/French/Chinese and store in the shared localization cache so
+    // residents viewing the app in another language see it localised.
+    (async () => {
+      try {
+        const toTranslateNames: string[] = [];
+        const toTranslateDescs: string[] = [];
+        if (meal.name && !hasMealNameTranslation(meal.name)) {
+          toTranslateNames.push(meal.name);
+        }
+        if (meal.description && !hasMealDescriptionTranslation(meal.description)) {
+          toTranslateDescs.push(meal.description);
+        }
+        const [nameResults, descResults] = await Promise.all([
+          toTranslateNames.length > 0
+            ? translateMealNamesWithGemini(toTranslateNames)
+            : Promise.resolve({}),
+          toTranslateDescs.length > 0
+            ? translateMealDescriptionsWithGemini(toTranslateDescs)
+            : Promise.resolve({}),
+        ]);
+        if (Object.keys(nameResults).length > 0) setCachedMealTranslations(nameResults);
+        if (Object.keys(descResults).length > 0) setCachedDescriptionTranslations(descResults);
+      } catch { /* silent — translation is best-effort */ }
+    })();
   };
 
   const removeSeasonalMeal = (id: string) => {
@@ -847,16 +891,39 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     if (!item) return;
     const resident = findResident(item.order.userId);
     const roomStr = resident?.room ? ` (Room ${resident.room})` : "";
-    // Push into KitchenMessage context so caregiver can see it
+    // Prefer the resident record ID so caregiver filtering matches reliably.
+    const ridForMsg = String(resident?.id ?? item.order.userId);
+    const trimmed = replyText.trim();
+    const isSubstitution = /^substitution/i.test(trimmed);
+    const kitchenName = loggedInEmail ?? "Kitchen Staff";
+
+    // Primary message to resident (also visible to caregiver via shared context)
     sendMessage({
-      residentId: item.order.userId,
+      residentId: ridForMsg,
       residentName: resident?.name ?? item.order.userId,
       residentRoom: resident?.room ?? "",
+      orderId,
       fromRole: "kitchen",
-      fromName: loggedInEmail ?? "Kitchen Staff",
-      text: `[Order #${orderId}] ${replyText.trim()}`,
+      fromName: kitchenName,
+      text: `[Order #${orderId}] ${isSubstitution ? '🔄 SUBSTITUTION · ' : ''}${trimmed}`,
       channel: 'order',
     });
+
+    // Extra caregiver-facing alert for substitutions so the bell icon
+    // pulses on the caregiver dashboard
+    if (isSubstitution) {
+      sendMessage({
+        residentId: ridForMsg,
+        residentName: resident?.name ?? item.order.userId,
+        residentRoom: resident?.room ?? "",
+        orderId,
+        fromRole: "kitchen",
+        fromName: `Kitchen · ${kitchenName}`,
+        text: `[Caregiver Alert] Substitution requested for Order #${orderId} (${resident?.name ?? 'resident'}, Room ${resident?.room ?? '—'}) at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${trimmed.replace(/^substitution[:\s]*/i, '').trim()}`,
+        channel: 'order',
+      });
+    }
+
     Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}${roomStr}'s order #${orderId}.`);
     setReplyText("");
     setReplyingTo(null);
@@ -1205,13 +1272,35 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                             style: 'destructive',
                             onPress: () => {
                               handleStatusChange(item.order.id, 'cancelled');
+                              // Prefer the resident record ID so caregiver's
+                              // `messages.filter(m => m.residentId === r.id)`
+                              // reliably surfaces this alert.
+                              const ridForMsg = String(resident?.id ?? item.order.userId);
+                              const kitchenName = loggedInEmail ?? 'Kitchen Staff';
+                              // 1) Notify resident (shown on their upcoming-meals screen)
                               sendMessage({
-                                residentId: item.order.userId,
+                                residentId: ridForMsg,
                                 residentName: resident?.name ?? item.order.userId,
                                 residentRoom: resident?.room ?? '',
+                                orderId: item.order.id,
                                 fromRole: 'kitchen',
-                                fromName: loggedInEmail ?? 'Kitchen Staff',
-                                text: `[Order #${item.order.id}] Your order has been cancelled by the kitchen. Please contact staff for assistance.`,
+                                fromName: kitchenName,
+                                text: `[Order #${item.order.id}] ⛔ CANCELLED — Your ${orderPeriod.toLowerCase()} order has been cancelled by the kitchen. Please contact staff if you need assistance.`,
+                                channel: 'order',
+                              });
+                              // 2) Caregiver-facing notification in the same
+                              // channel. The caregiver dashboard groups
+                              // kitchen messages by residentId, so a second
+                              // explicit "FYI caregiver" entry surfaces
+                              // prominently on their bell icon.
+                              sendMessage({
+                                residentId: ridForMsg,
+                                residentName: resident?.name ?? item.order.userId,
+                                residentRoom: resident?.room ?? '',
+                                orderId: item.order.id,
+                                fromRole: 'kitchen',
+                                fromName: `Kitchen · ${kitchenName}`,
+                                text: `[Caregiver Alert] Order #${item.order.id} for ${resident?.name ?? 'resident'} (Room ${resident?.room ?? '—'}) was CANCELLED by the kitchen at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
                                 channel: 'order',
                               });
                             },
@@ -2241,6 +2330,18 @@ const msgPanel = StyleSheet.create({
   room: {
     fontSize: 12,
     color: C.textMuted,
+    fontWeight: "600",
+  },
+  orderIdPill: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: C.primary,
+    backgroundColor: C.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: C.warmBorder,
   },
   timestamp: {
     fontSize: 11,

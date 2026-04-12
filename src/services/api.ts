@@ -102,12 +102,25 @@ function unwrapList<T>(data: any): T[] {
 
 /**
  * Backend might return allergies as:
- * - ["nuts", "dairy"]  OR "nuts, dairy"
+ * - ["nuts", "dairy"]                              (plain array)
+ * - "nuts, dairy"                                  (comma-separated string)
+ * - [{ name: "nuts" }, { label: "dairy" }]         (array of objects)
  * This converts anything into a clean string[].
  */
 function normalizeStringArray(value: any): string[] {
   if (!value) return [];
-  if (Array.isArray(value)) return value.map((v) => String(v));
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => {
+        if (v == null) return "";
+        if (typeof v === "string") return v.trim();
+        if (typeof v === "object") {
+          return String(v.name ?? v.label ?? v.value ?? v.title ?? "").trim();
+        }
+        return String(v).trim();
+      })
+      .filter(Boolean);
+  }
   if (typeof value === "string") {
     return value
       .split(",")
