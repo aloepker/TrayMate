@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
-import StaffChatModal from "../components/StaffChatModal";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident } from "../../services/api";
@@ -667,7 +666,7 @@ const support = StyleSheet.create({
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
-  const { messages, unreadCount, staffUnreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
+  const { messages, unreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
 
   const [orders, setOrders] = useState<ApiOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -677,7 +676,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
-  const [showStaffChat, setShowStaffChat] = useState(false);   // replaces showMessages bell
   const [showMessages, setShowMessages] = useState(false);    // kept for per-order inbox modal
   const [showSupport, setShowSupport] = useState(false);
 
@@ -954,18 +952,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           {/* Seasonal meal button */}
           <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowSeasonalModal(true)}>
             <Feather name="plus-circle" size={20} color={C.primary} />
-          </TouchableOpacity>
-
-          {/* Staff chat icon (replaces bell) */}
-          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowStaffChat(true)}>
-            <Feather name="message-square" size={20} color={C.primary} />
-            {staffUnreadCount > 0 && (
-              <View style={s.bellBadge}>
-                <Text style={s.bellBadgeText}>
-                  {staffUnreadCount > 9 ? "9+" : staffUnreadCount}
-                </Text>
-              </View>
-            )}
           </TouchableOpacity>
 
           {/* Support */}
@@ -1417,14 +1403,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           })
         )}
       </ScrollView>
-
-      {/* ── Staff Chat Modal ── */}
-      <StaffChatModal
-        visible={showStaffChat}
-        onClose={() => setShowStaffChat(false)}
-        senderName={loggedInEmail ?? 'Kitchen Staff'}
-        senderRole="kitchen"
-      />
 
       {/* ── Seasonal Meal Modal ── */}
       <SeasonalMealModal
