@@ -35,7 +35,8 @@ type SidebarEntry = {
 };
 
 export default function MessagesModal({ visible, onClose }: MessagesModalProps) {
-  const [users, setUsers]                   = useState<MessageUser[]>([]);
+  const [users, setUsers]                   = useState<MessageUser[]>([]); // sidebar: only with history
+  const [allStaffUsers, setAllStaffUsers]   = useState<MessageUser[]>([]); // new chat picker: all staff
   const [chats, setChats]                   = useState<ChatPreview[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages]             = useState<Message[]>([]);
@@ -93,16 +94,17 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         }
       });
 
-      // ── Build user list from multiple sources ──────────────────────────────
-      // Source 1: /messages/users (may be empty or 403 for non-admin)
-      const apiUsers: MessageUser[] =
+      // ── Build user list ───────────────────────────────────────────────────
+      // Source 1: /messages/users — used ONLY for the "New Chat" picker
+      const allStaff: MessageUser[] =
         usersResult.status === "fulfilled" && Array.isArray(usersResult.value)
-          ? usersResult.value
+          ? usersResult.value.filter(u => u.id !== myId)
           : [];
 
-      // Source 2: extract unique users from chats data (always works)
-      const usersFromChats: MessageUser[] = [];
-      const seenIds = new Set(apiUsers.map(u => u.id));
+      // Source 2: extract users who have ACTUAL chat history from the chats response
+      // (sidebar shows ONLY these — no history = not in sidebar)
+      const historyUsers: MessageUser[] = [];
+      const seenIds = new Set<string>();
       chatList.forEach(chat => {
         const candidates = [
           { id: String(chat.senderId),   fullName: chat.senderName   || `User ${chat.senderId}`,   role: "" },
@@ -111,18 +113,22 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         candidates.forEach(c => {
           if (c.id && c.id !== myId && !seenIds.has(c.id)) {
             seenIds.add(c.id);
-            usersFromChats.push(c);
+            // Enrich with role from allStaff if available
+            const staffMatch = allStaff.find(u => u.id === c.id);
+            historyUsers.push(staffMatch ?? c);
           }
         });
       });
 
-      const mergedUsers = [...apiUsers, ...usersFromChats].filter(u => u.id !== myId);
-      setUsers(mergedUsers);
+      // Sidebar: only users with chat history
+      // New Chat picker: all staff (set separately)
+      setUsers(historyUsers);
+      setAllStaffUsers(allStaff);
       setConversationPreviews(previewMap);
 
-      // Eagerly fetch conversation previews for users NOT yet in previewMap
-      // (catches incoming messages not returned by /chats)
-      const uncovered = mergedUsers.filter(u => !previewMap[u.id]);
+      // Eagerly fetch previews for history users not yet covered
+      // (catches incoming messages the /chats endpoint may have missed)
+      const uncovered = historyUsers.filter(u => !previewMap[u.id]);
       if (uncovered.length > 0 && myId) {
         fetchMissingPreviews(uncovered.slice(0, 12), myId, previewMap);
       }
@@ -211,7 +217,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
   const handleSelectNewChatUser = async (user: MessageUser) => {
     setShowNewChat(false);
-    // Add user to list if not already there
+    // Add to sidebar history list so they appear after conversation starts
     setUsers(prev => prev.find(u => u.id === user.id) ? prev : [user, ...prev]);
     await loadConversation(user.id);
   };
@@ -262,11 +268,11 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
       : date.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
-  const selectedUser    = users.find(u => u.id === selectedUserId);
+  const selectedUser    = [...users, ...allStaffUsers].find(u => u.id === selectedUserId);
   const totalUnread     = Object.values(conversationPreviews).filter(p => p.isUnread).length;
 
-  // All users NOT already in sidebar (for "New Chat" picker)
-  const newChatUsers    = users; // same list, user may want to re-open old convo too
+  // New Chat picker: all staff, falling back to history users if staff list is empty
+  const newChatUsers    = allStaffUsers.length > 0 ? allStaffUsers : users;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 

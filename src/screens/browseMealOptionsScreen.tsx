@@ -880,8 +880,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId]);
 
-  // Fetch recommendation — always targets the NEXT upcoming meal period so
-  // GrannyGBT's suggestion matches the auto-suggest card below it.
+  // Fetch recommendation — targets the CURRENT meal period if we're in one,
+  // otherwise the next upcoming period so the suggestion is always actionable.
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
@@ -890,9 +890,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const resId = residentId || ResidentService.getDefaultResident().id;
       const localResident = ResidentService.getResidentById(resId);
 
-      // Use the next upcoming meal period (same logic as auto-suggest card)
-      const nextPeriod = getNextMealPeriod(new Date());
-      const targetPeriod = nextPeriod?.period.label ?? selectedPeriod.value;
+      // Prefer current period (meal is available right now); fall back to next
+      const currentPeriod = getCurrentMealPeriod(new Date());
+      const nextPeriod    = getNextMealPeriod(new Date());
+      const targetPeriod  = currentPeriod ?? nextPeriod?.period.label ?? selectedPeriod.value;
 
       let rec;
       if (localResident) {
@@ -1324,11 +1325,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                         {translateMealName(recommendation.meal_name, language)}
                       </Text>
                     </Text>
-                    {!isServing && targetSched && (
-                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11) }]}>
-                        Not serving now · Available {recMeal?.time_range || `${targetSched.start / 60}am–${targetSched.end / 60 > 12 ? (targetSched.end / 60 - 12) + 'pm' : targetSched.end / 60 + 'am'}`}
+                    {isServing ? (
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11), color: '#4A7A60' }]}>
+                        ✓ Available now
                       </Text>
-                    )}
+                    ) : targetSched ? (
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11) }]}>
+                        Not serving now · Available {recMeal?.time_range || (() => {
+                          const sh = targetSched.start / 60;
+                          const eh = targetSched.end / 60;
+                          return `${sh}am – ${eh > 12 ? (eh - 12) + 'pm' : eh + 'am'}`;
+                        })()}
+                      </Text>
+                    ) : null}
                   </View>
                   <View style={styles.bottomCardOrderBtn}>
                     <Feather name="plus" size={14} color="#FFF" />
