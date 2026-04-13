@@ -534,58 +534,38 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
               return (
                 <View key={r.id || `res-${idx}`} style={[styles.assignRow, isUnassigned && styles.assignRowWarning]}>
-                  {/* Header row: room pill + name + actions + Select button */}
+
+                  {/* ── Top row: room pill · name · edit/delete ── */}
                   <View style={styles.assignHeader}>
-                    {/* Room pill */}
                     <View style={styles.roomPill}>
                       <Text style={styles.roomPillLabel}>ROOM <Text style={styles.roomPillNum}>{r.room || "—"}</Text></Text>
                     </View>
-
-                    {/* Name + tags */}
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.personName}>{r.name}</Text>
-                      <View style={styles.chipRow}>
-                        {allTags.length > 0 ? (
-                          allTags.map((tag, i) => (
-                            <View key={`${r.id}-tag-${i}`} style={styles.chip}>
-                              <Text style={styles.chipText}>{tag}</Text>
-                            </View>
-                          ))
-                        ) : (
-                          <Text style={styles.restrictionsMuted}>No restrictions</Text>
-                        )}
-                      </View>
-                    </View>
-
-                    {/* Right side: edit/delete + select button */}
-                    <View style={styles.assignHeaderRight}>
-                      <View style={styles.actionIcons}>
-                        <Pressable style={styles.iconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
-                          <Feather name="edit-2" size={16} color="#6D6B3B" />
-                        </Pressable>
-                        <Pressable style={styles.iconBtn} onPress={() => askDeleteResident(r.id)} hitSlop={10}>
-                          <Feather name="trash-2" size={16} color="#B91C1C" />
-                        </Pressable>
-                      </View>
-                      <Pressable
-                        style={styles.selectResidentBtn}
-                        onPress={() => navigation.navigate("BrowseMealOptions", {
-                          residentId: r.id,
-                          residentName: r.name,
-                          dietaryRestrictions: r.dietaryRestrictions ?? [],
-                          foodAllergies: r.foodAllergies ?? [],
-                        })}
-                      >
-                        <Feather name="log-in" size={14} color="#FFFFFF" />
-                        <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>
-                      </Pressable>
-                    </View>
+                    <Text style={[styles.personName, { flex: 1 }]} numberOfLines={1}>{r.name}</Text>
+                    <Pressable style={styles.iconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
+                      <Feather name="edit-2" size={15} color="#6D6B3B" />
+                    </Pressable>
+                    <Pressable style={styles.iconBtn} onPress={() => askDeleteResident(r.id)} hitSlop={10}>
+                      <Feather name="trash-2" size={15} color="#B91C1C" />
+                    </Pressable>
                   </View>
 
-                  {/* Divider */}
+                  {/* ── Restriction chips ── */}
+                  <View style={styles.chipRow}>
+                    {allTags.length > 0 ? (
+                      allTags.map((tag, i) => (
+                        <View key={`${r.id}-tag-${i}`} style={styles.chip}>
+                          <Text style={styles.chipText}>{tag}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.restrictionsMuted}>No dietary restrictions</Text>
+                    )}
+                  </View>
+
+                  {/* ── Divider ── */}
                   <View style={styles.assignDivider} />
 
-                  {/* Caregiver assignment row */}
+                  {/* ── Caregivers ── */}
                   <View style={styles.caregiverAssignArea}>
                     <View style={styles.caregiverAssignLabelRow}>
                       <Feather name="users" size={12} color="#6A6A6A" />
@@ -614,7 +594,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                           </Pressable>
                         </View>
                       ))}
-
                       {unassignedCaregivers.length > 0 && (
                         <Pressable
                           style={styles.addCaregiverChip}
@@ -626,6 +605,20 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       )}
                     </View>
                   </View>
+
+                  {/* ── Resident Dashboard button ── */}
+                  <Pressable
+                    style={styles.selectResidentBtn}
+                    onPress={() => navigation.navigate("BrowseMealOptions", {
+                      residentId: r.id,
+                      residentName: r.name,
+                      dietaryRestrictions: r.dietaryRestrictions ?? [],
+                      foodAllergies: r.foodAllergies ?? [],
+                    })}
+                  >
+                    <Feather name="log-in" size={14} color="#FFFFFF" />
+                    <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>
+                  </Pressable>
                 </View>
               );
             })}
@@ -1206,12 +1199,17 @@ const styles = StyleSheet.create({
     marginTop: 6
   },
   assignRow: {
-    backgroundColor: "#F8F8F8",
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: "#F9F8F4",
+    borderRadius: 16,
+    padding: 16,
     flexDirection: "column",
-    gap: 12,
-    marginBottom: 12
+    gap: 10,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   assignRowWarning: {
     borderWidth: 1.5,
@@ -1219,8 +1217,8 @@ const styles = StyleSheet.create({
   },
   assignHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
+    alignItems: "center",
+    gap: 8,
   },
   assignHeaderRight: {
     alignItems: "flex-end",
@@ -1296,8 +1294,7 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8
+    gap: 6,
   },
   chip: {
     backgroundColor: "#F7E7B5",
@@ -1420,15 +1417,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#6D6B3B",
+    backgroundColor: "#4A4A2A",
     borderRadius: 10,
-    paddingHorizontal: 18,
-    height: 52,
+    paddingVertical: 11,
+    marginTop: 4,
   },
   selectResidentBtnText: {
     fontSize: 13,
     fontWeight: "800",
     color: "#FFFFFF",
+    letterSpacing: 0.3,
   },
   msgKitchenBtn: {
     flexDirection: 'row',
