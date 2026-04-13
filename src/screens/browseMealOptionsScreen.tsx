@@ -57,8 +57,9 @@ import {
 
 import { geminiChat } from "../services/geminiService";
 import { useClock } from '../context/useClock';
+import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
-import { getResidentById, getCaregivers, sendMessage as sendApiMessage } from '../services/api';
+import { sendMessage as sendApiMessage } from '../services/api';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -788,32 +789,30 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
-  // Caregiver chat — fetched from backend so it works regardless of navigation path
-  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
-  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
+  // Caregiver chat
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   as string | null ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
 
-  // Fetch assigned caregiver from backend whenever residentId is known
+  // Persist caregiver info to storage when provided via params; load from storage as fallback
   useEffect(() => {
     if (!residentId) return;
-    // If already supplied via params, skip fetch
-    if (route?.params?.caregiverId) {
-      setCaregiverId(route.params.caregiverId);
-      setCaregiverName(route.params.caregiverName ?? null);
-      return;
+    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
+    const paramCgName = route?.params?.caregiverName as string | null ?? null;
+    if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+    } else {
+      // No params — try storage
+      getResidentCaregiver(residentId).then((stored) => {
+        if (stored) {
+          setCaregiverId(stored.caregiverId);
+          setCaregiverName(stored.caregiverName);
+        }
+      });
     }
-    (async () => {
-      try {
-        const resident = await getResidentById(residentId);
-        if (!resident?.caregiverId) return;
-        setCaregiverId(resident.caregiverId);
-        // Fetch caregiver name from caregivers list
-        const cgs = await getCaregivers();
-        const match = cgs.find(c => String(c.id) === String(resident.caregiverId));
-        if (match) setCaregiverName(match.name);
-      } catch { /* non-blocking */ }
-    })();
-  }, [residentId]);
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;

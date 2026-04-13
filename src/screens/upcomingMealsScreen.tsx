@@ -192,6 +192,20 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       featherIcon: 'check-circle',
       progress: 1.0,
     },
+    cancelled: {
+      label: 'Cancelled',
+      color: '#dc2626',
+      bg:    '#fee2e2',
+      featherIcon: 'x-circle',
+      progress: 0,
+    },
+    substitution_requested: {
+      label: 'Sub Requested',
+      color: '#7c3aed',
+      bg:    '#ede9fe',
+      featherIcon: 'refresh-cw',
+      progress: 0.25,
+    },
   };
 
   const statusSteps = [t.confirmed, t.preparing, t.ready, t.completed];

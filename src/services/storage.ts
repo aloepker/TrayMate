@@ -47,6 +47,32 @@ export async function clearAuth() {
   }
 }
 
+const CAREGIVER_KEY_PREFIX = 'resident_caregiver_';
+
+export async function setResidentCaregiver(
+  residentId: string,
+  caregiverId: string,
+  caregiverName: string
+): Promise<void> {
+  try {
+    await EncryptedStorage.setItem(
+      `${CAREGIVER_KEY_PREFIX}${residentId}`,
+      JSON.stringify({ caregiverId, caregiverName })
+    );
+  } catch {}
+}
+
+export async function getResidentCaregiver(
+  residentId: string
+): Promise<{ caregiverId: string; caregiverName: string } | null> {
+  try {
+    const raw = await EncryptedStorage.getItem(`${CAREGIVER_KEY_PREFIX}${residentId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 /*import { Platform } from "react-native";
 import EncryptedStorage from "react-native-encrypted-storage";
 
