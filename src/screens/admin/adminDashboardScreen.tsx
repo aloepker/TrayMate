@@ -37,6 +37,8 @@ import {
   createCaregiver,
   createKitchenStaff,
   deleteEntity,
+  getChats,
+  getMe,
 } from "../../services/api";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
@@ -53,6 +55,24 @@ type DeleteKind = "resident" | "caregiver" | "kitchen";
 export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   // ---- Core Data State ----
   const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [msgUnread, setMsgUnread] = useState(0);
+
+  useEffect(() => {
+    const checkUnread = async () => {
+      try {
+        const chats = await getChats();
+        if (!Array.isArray(chats)) return;
+        const me = await getMe();
+        const myId = String(me.id);
+        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+        setMsgUnread(count);
+      } catch { /* ignore */ }
+    };
+    checkUnread();
+    const iv = setInterval(checkUnread, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
@@ -346,12 +366,17 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         </View>
         <View style={styles.topBarRight}>
           <Pressable
-            style={styles.logoutBtn}
-            onPress={() => {
-              setShowMessagesModal(true);
-            }}
+            style={styles.chatIconBtn}
+            onPress={() => setShowMessagesModal(true)}
           >
-            <Text style={styles.logoutText}>Messages</Text>
+            <Feather name="message-square" size={20} color="#6D6B3B" />
+            {msgUnread > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {msgUnread > 9 ? "9+" : msgUnread}
+                </Text>
+              </View>
+            )}
           </Pressable>
           <Pressable
             style={styles.logoutBtn}
@@ -706,7 +731,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       {/* MESSAGES MODAL */}
       <MessagesModal
         visible={showMessagesModal}
-        onClose={() => setShowMessagesModal(false)}
+        onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
 
     </SafeAreaView>
@@ -1246,20 +1271,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "800",
     color: "#6B7280"
-  },
-  msgKitchenBtn: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    marginLeft: 8,
-  },
-  msgKitchenText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#D87000',
   },
   composeSheet: {
     backgroundColor: '#FFFFFF',

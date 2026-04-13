@@ -17,7 +17,8 @@ import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
-import { getResidents, Resident as ApiResident } from "../../services/api";
+import { getResidents, Resident as ApiResident, getChats } from "../../services/api";
+import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
   hasMealNameTranslation,
@@ -678,6 +679,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);    // kept for per-order inbox modal
   const [showSupport, setShowSupport] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [msgUnread, setMsgUnread] = useState(0);
 
   // Per-order messaging
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
@@ -723,6 +726,23 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         }
       } catch { /* silently ignore */ }
     })();
+  }, []);
+
+  // ── check for unread backend messages ──
+  useEffect(() => {
+    const checkUnread = async () => {
+      try {
+        const chats = await getChats();
+        if (!Array.isArray(chats)) return;
+        const me = await import("../../services/api").then(m => m.getMe());
+        const myId = String(me.id);
+        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+        setMsgUnread(count);
+      } catch { /* ignore */ }
+    };
+    checkUnread();
+    const iv = setInterval(checkUnread, 30000);
+    return () => clearInterval(iv);
   }, []);
 
   // ── match a userId to a resident ──
@@ -952,6 +972,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           {/* Seasonal meal button */}
           <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowSeasonalModal(true)}>
             <Feather name="plus-circle" size={20} color={C.primary} />
+          </TouchableOpacity>
+
+          {/* Messages */}
+          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowMessagesModal(true)}>
+            <Feather name="message-square" size={20} color={C.primary} />
+            {msgUnread > 0 && (
+              <View style={s.bellBadge}>
+                <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           {/* Support */}
@@ -1425,6 +1455,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       <SupportModal
         visible={showSupport}
         onClose={() => setShowSupport(false)}
+      />
+
+      {/* ── Backend Messages Modal ── */}
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
 
     </SafeAreaView>

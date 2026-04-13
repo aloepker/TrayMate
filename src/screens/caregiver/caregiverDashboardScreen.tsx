@@ -23,8 +23,8 @@ import {
   getCaregiverNotifications,
 } from "../../services/api";
 import { useKitchenMessages } from "../context/KitchenMessageContext";
-import StaffChatModal from "../components/StaffChatModal";
-import { getUserEmail } from "../../services/storage";
+import MessagesModal from "../components/messaging/MessagesModal";
+import { getChats, getMe } from "../../services/api";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -36,13 +36,26 @@ export default function CaregiverDashboardScreen({
   navigation,
 }: CaregiverDashboardProps) {
   // Kitchen messages from context (sent by kitchen staff per order)
-  const { messages: kitchenMessages, unreadCount: kitchenUnread, staffUnreadCount } = useKitchenMessages();
+  const { messages: kitchenMessages, unreadCount: kitchenUnread } = useKitchenMessages();
 
-  // Staff chat modal
-  const [showStaffChat, setShowStaffChat] = useState(false);
-  const [caregiverEmail, setCaregiverEmail] = useState<string>('Caregiver');
+  // Backend messages modal
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [msgUnread, setMsgUnread] = useState(0);
+
   useEffect(() => {
-    getUserEmail().then(e => { if (e) setCaregiverEmail(e); });
+    const checkUnread = async () => {
+      try {
+        const chats = await getChats();
+        if (!Array.isArray(chats)) return;
+        const me = await getMe();
+        const myId = String(me.id);
+        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+        setMsgUnread(count);
+      } catch { /* ignore */ }
+    };
+    checkUnread();
+    const iv = setInterval(checkUnread, 30000);
+    return () => clearInterval(iv);
   }, []);
 
   // -----------------------------
@@ -224,13 +237,13 @@ export default function CaregiverDashboardScreen({
         </View>
 
         <View style={styles.topBarRight}>
-          {/* Staff messages */}
-          <Pressable style={styles.chatIconBtn} onPress={() => setShowStaffChat(true)}>
+          {/* Backend messages */}
+          <Pressable style={styles.chatIconBtn} onPress={() => setShowMessagesModal(true)}>
             <Feather name="message-square" size={20} color="#6D6B3B" />
-            {staffUnreadCount > 0 && (
+            {msgUnread > 0 && (
               <View style={styles.chatBadge}>
                 <Text style={styles.chatBadgeText}>
-                  {staffUnreadCount > 9 ? "9+" : staffUnreadCount}
+                  {msgUnread > 9 ? "9+" : msgUnread}
                 </Text>
               </View>
             )}
@@ -495,12 +508,10 @@ export default function CaregiverDashboardScreen({
         </View>
       </Modal>
 
-      {/* Staff Chat Modal */}
-      <StaffChatModal
-        visible={showStaffChat}
-        onClose={() => setShowStaffChat(false)}
-        senderName={caregiverEmail}
-        senderRole="caregiver"
+      {/* Backend Messages Modal */}
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
 
     </SafeAreaView>
