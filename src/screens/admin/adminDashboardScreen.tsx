@@ -512,18 +512,19 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     </Picker>
                   </View>
                   <Pressable
-                    style={styles.cartBtn}
+                    style={styles.selectResidentBtn}
                     onPress={() =>
                       navigation.navigate("Home", {
                         residentId: r.id,
                         residentName: r.name,
                         dietaryRestrictions: r.dietaryRestrictions ?? [],
+                        foodAllergies: r.foodAllergies ?? [],
                       })
                     }
                     hitSlop={10}
                   >
-                    <Feather name="shopping-cart" size={16} color="#717644" />
-                    <Text style={styles.cartBtnText}>Select Resident</Text>
+                    <Feather name="log-in" size={16} color="#FFFFFF" />
+                    <Text style={styles.selectResidentBtnText}>Select Resident</Text>
                   </Pressable>
 
                 </View>
@@ -1146,6 +1147,21 @@ const styles = StyleSheet.create({
   },
   cartBtnText: {
     fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  selectResidentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#6D6B3B",
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    height: 52,
+  },
+  selectResidentBtnText: {
+    fontSize: 13,
     fontWeight: "800",
     color: "#FFFFFF",
   },
