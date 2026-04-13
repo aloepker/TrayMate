@@ -79,39 +79,45 @@ function SettingsScreen({ navigation, route }: any) {
   const [sendingMsg, setSendingMsg] = useState(false);
 
   const contactCaregiver = useCallback(() => {
+    if (!caregiverId) return;
+    const name = residentName || 'a resident';
+    const cg   = caregiverName ?? 'Caregiver';
     Alert.alert(
-      `Message ${caregiverName ?? 'Caregiver'}`,
-      'What would you like to say?',
+      `Message ${cg}`,
+      `Send a message about ${name}'s care.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'I need assistance',
           onPress: async () => {
-            if (!caregiverId) return;
             setSendingMsg(true);
             try {
-              await sendMessage(caregiverId, `Hi, ${residentName || 'a resident'} needs assistance. Please check in when possible.`);
-              Alert.alert('Message sent', `${caregiverName ?? 'Your caregiver'} has been notified.`);
-            } catch {
-              Alert.alert('Failed to send', 'Please ask staff for help directly.');
-            } finally {
-              setSendingMsg(false);
-            }
+              await sendMessage(caregiverId, `Hi, ${name} needs assistance. Please check in when possible.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
+            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
+            finally { setSendingMsg(false); }
           },
         },
         {
-          text: 'I have a question about my meal',
+          text: 'Question about my meal',
           onPress: async () => {
-            if (!caregiverId) return;
             setSendingMsg(true);
             try {
-              await sendMessage(caregiverId, `Hi, ${residentName || 'a resident'} has a question about their meal. Please follow up when available.`);
-              Alert.alert('Message sent', `${caregiverName ?? 'Your caregiver'} has been notified.`);
-            } catch {
-              Alert.alert('Failed to send', 'Please ask staff for help directly.');
-            } finally {
-              setSendingMsg(false);
-            }
+              await sendMessage(caregiverId, `Hi, ${name} has a question about their meal. Please follow up when available.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
+            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
+            finally { setSendingMsg(false); }
+          },
+        },
+        {
+          text: 'Dietary concern',
+          onPress: async () => {
+            setSendingMsg(true);
+            try {
+              await sendMessage(caregiverId, `Hi, ${name} has a dietary concern about their current meal selection. Please review when available.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
+            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
+            finally { setSendingMsg(false); }
           },
         },
       ]
@@ -299,7 +305,12 @@ function SettingsScreen({ navigation, route }: any) {
             title={t.browseMenus} desc={t.browseMenusDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
-            onPress={() => navigation.navigate('BrowseMealOptions')}
+            onPress={() => navigation.navigate('BrowseMealOptions', {
+              residentId, residentName,
+              dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
+              foodAllergies: route?.params?.foodAllergies ?? [],
+              caregiverId, caregiverName,
+            })}
           />
           <ActionRow
             featherIcon="rotate-ccw" bg="#D8E4D0"

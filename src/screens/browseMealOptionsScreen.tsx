@@ -787,6 +787,58 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
+  // Caregiver chat
+  const caregiverId   = route?.params?.caregiverId   as string | null ?? null;
+  const caregiverName = route?.params?.caregiverName as string | null ?? null;
+  const [sendingCgMsg, setSendingCgMsg] = useState(false);
+
+  const contactCaregiver = useCallback(() => {
+    if (!caregiverId) return;
+    Alert.alert(
+      `Message ${caregiverName ?? 'Caregiver'}`,
+      `Send a message about ${residentName}'s meal.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'I need assistance',
+          onPress: async () => {
+            setSendingCgMsg(true);
+            try {
+              const { sendMessage } = require('../services/api');
+              await sendMessage(caregiverId, `Hi, ${residentName} needs assistance with their meal. Please check in when possible.`);
+              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
+            finally { setSendingCgMsg(false); }
+          },
+        },
+        {
+          text: 'Question about my meal',
+          onPress: async () => {
+            setSendingCgMsg(true);
+            try {
+              const { sendMessage } = require('../services/api');
+              await sendMessage(caregiverId, `Hi, ${residentName} has a question about their meal. Please follow up when available.`);
+              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
+            finally { setSendingCgMsg(false); }
+          },
+        },
+        {
+          text: 'Dietary concern',
+          onPress: async () => {
+            setSendingCgMsg(true);
+            try {
+              const { sendMessage } = require('../services/api');
+              await sendMessage(caregiverId, `Hi, ${residentName} has a dietary concern about their current meal selection. Please review when available.`);
+              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
+            finally { setSendingCgMsg(false); }
+          },
+        },
+      ]
+    );
+  }, [caregiverId, caregiverName, residentName]);
+
   // Navigate to settings with resident context
   const goToSettings = () => {
     navigation.navigate('Settings', {
@@ -1247,6 +1299,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
+          {/* Caregiver chat button — only shown when a caregiver is assigned */}
+          {caregiverId ? (
+            <TouchableOpacity
+              style={[
+                styles.headerActionBtn,
+                { backgroundColor: pt.tabActiveBg, borderColor: pt.tabActiveBg, borderWidth: 1.5 },
+                sendingCgMsg && { opacity: 0.5 },
+              ]}
+              onPress={contactCaregiver}
+              disabled={sendingCgMsg}
+              activeOpacity={0.85}
+            >
+              <Feather name="message-circle" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
