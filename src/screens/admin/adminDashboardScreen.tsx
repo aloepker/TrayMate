@@ -514,7 +514,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   <Pressable
                     style={styles.selectResidentBtn}
                     onPress={() =>
-                      navigation.navigate("Home", {
+                      navigation.navigate("BrowseMealOptions", {
                         residentId: r.id,
                         residentName: r.name,
                         dietaryRestrictions: r.dietaryRestrictions ?? [],
