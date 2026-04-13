@@ -13,37 +13,27 @@ import { useCart, Order } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 
 // ─── Meal period config ────────────────────────────────────────────────────
-const PERIOD_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  Breakfast: { label: 'Breakfast', color: '#92400E', bg: '#FEF3C7', icon: 'sunrise' },
-  Lunch:     { label: 'Lunch',     color: '#065F46', bg: '#D1FAE5', icon: 'sun' },
-  Dinner:    { label: 'Dinner',    color: '#3730A3', bg: '#E0E7FF', icon: 'moon' },
-  Drinks:    { label: 'Drinks',    color: '#1E40AF', bg: '#DBEAFE', icon: 'coffee' },
-  Sides:     { label: 'Sides',     color: '#9D174D', bg: '#FCE7F3', icon: 'package' },
+const PERIOD_CONFIG: Record<string, { label: string; color: string }> = {
+  Breakfast: { label: 'Breakfast', color: '#92400E' },
+  Lunch:     { label: 'Lunch',     color: '#065F46' },
+  Dinner:    { label: 'Dinner',    color: '#3730A3' },
+  Drinks:    { label: 'Drinks',    color: '#1E40AF' },
+  Sides:     { label: 'Sides',     color: '#9D174D' },
 };
 
 // ─── Status config ─────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  confirmed:              { label: 'Confirmed',     color: '#15803D', bg: '#DCFCE7', icon: 'check-circle' },
-  preparing:              { label: 'Preparing',     color: '#B45309', bg: '#FEF3C7', icon: 'clock' },
-  ready:                  { label: 'Ready',         color: '#0369A1', bg: '#E0F2FE', icon: 'check-circle' },
-  completed:              { label: 'Completed',     color: '#166534', bg: '#BBF7D0', icon: 'check' },
-  cancelled:              { label: 'Cancelled',     color: '#DC2626', bg: '#FEE2E2', icon: 'x-circle' },
-  substitution_requested: { label: 'Substituted',   color: '#C2410C', bg: '#FFEDD5', icon: 'refresh-cw' },
+  confirmed:              { label: 'Confirmed',   color: '#15803D', bg: '#DCFCE7', icon: 'check-circle' },
+  preparing:              { label: 'Preparing',   color: '#B45309', bg: '#FEF3C7', icon: 'clock'        },
+  ready:                  { label: 'Ready',       color: '#0369A1', bg: '#E0F2FE', icon: 'check-circle' },
+  completed:              { label: 'Completed',   color: '#166534', bg: '#BBF7D0', icon: 'check'        },
+  cancelled:              { label: 'Cancelled',   color: '#DC2626', bg: '#FEE2E2', icon: 'x-circle'     },
+  substitution_requested: { label: 'Substituted', color: '#C2410C', bg: '#FFEDD5', icon: 'refresh-cw'  },
 };
 
 type FilterTab = 'all' | 'active' | 'cancelled';
-
 const PERIOD_ORDER = ['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Sides'];
 
-/** Derive the dominant meal period from order items */
-function getDominantPeriod(items: Order['items']): string {
-  if (!items || items.length === 0) return 'Lunch';
-  const counts: Record<string, number> = {};
-  items.forEach((m) => { counts[m.meal_period] = (counts[m.meal_period] || 0) + 1; });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-}
-
-/** Group items by their meal_period for display */
 function groupItemsByPeriod(items: Order['items']): Record<string, Order['items']> {
   return items.reduce((acc, item) => {
     const p = item.meal_period;
@@ -59,7 +49,7 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
   const touchTarget = getTouchTargetSize();
   const [tab, setTab] = useState<FilterTab>('all');
 
-  const residentId = route?.params?.residentId as string | undefined;
+  const residentId   = route?.params?.residentId   as string | undefined;
   const residentName = route?.params?.residentName as string | undefined;
 
   useEffect(() => {
@@ -74,28 +64,22 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
     .filter((o) => new Date(o.placedAt) >= thirtyDaysAgo)
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
-  // Filter by tab
   const filtered = recentOrders.filter((o) => {
-    const s = o.status ?? 'confirmed';
-    if (tab === 'active') return s !== 'cancelled';
+    const s = (o.status ?? 'confirmed') as string;
+    if (tab === 'active')    return s !== 'cancelled';
     if (tab === 'cancelled') return s === 'cancelled';
     return true;
   });
 
-  // Counts for tab badges
-  const countAll = recentOrders.length;
-  const countActive = recentOrders.filter((o) => (o.status ?? 'confirmed') !== 'cancelled').length;
-  const countCancelled = recentOrders.filter((o) => o.status === 'cancelled').length;
+  const countAll       = recentOrders.length;
+  const countActive    = recentOrders.filter((o) => (o.status as string) !== 'cancelled').length;
+  const countCancelled = recentOrders.filter((o) => (o.status as string) === 'cancelled').length;
 
   const handleDelete = (order: Order) => {
-    Alert.alert(
-      'Delete Order',
-      'Remove this order from your history?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => removeOrder(order.id) },
-      ],
-    );
+    Alert.alert('Delete Order', 'Remove this order from your history?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => removeOrder(order.id) },
+    ]);
   };
 
   const TABS: { key: FilterTab; label: string; count: number; color: string }[] = [
@@ -106,25 +90,27 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backBtn, { minHeight: touchTarget }]}
         >
           <Feather name="chevron-left" size={22} color="#717644" />
-          <Text style={[styles.backText, { fontSize: scaled(16) }]}>Back</Text>
+          <Text style={[styles.backText, { fontSize: scaled(15) }]}>Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>Order History</Text>
+          <Text style={[styles.headerTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>
+            Order History
+          </Text>
           <Text style={[styles.headerSub, { fontSize: scaled(12), color: theme.textSecondary }]}>
-            Last 30 days · {residentName ?? 'Resident'}
+            {residentName ?? 'Resident'} · Last 30 days
           </Text>
         </View>
         <View style={{ width: 70 }} />
       </View>
 
-      {/* Filter Tabs */}
+      {/* ── Filter Tabs ── */}
       <View style={[styles.tabRow, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         {TABS.map((t) => {
           const active = tab === t.key;
@@ -134,25 +120,24 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
               style={[styles.tabBtn, active && { borderBottomColor: t.color, borderBottomWidth: 2 }]}
               onPress={() => setTab(t.key)}
             >
-              <Text style={[styles.tabLabel, { color: active ? t.color : theme.textSecondary, fontSize: scaled(14) }]}>
+              <Text style={[styles.tabLabel, { color: active ? t.color : theme.textSecondary, fontSize: scaled(13) }]}>
                 {t.label}
               </Text>
               <View style={[styles.tabBadge, { backgroundColor: active ? t.color : '#E5E7EB' }]}>
-                <Text style={[styles.tabBadgeText, { color: active ? '#FFF' : '#6B7280' }]}>
-                  {t.count}
-                </Text>
+                <Text style={[styles.tabBadgeText, { color: active ? '#FFF' : '#6B7280' }]}>{t.count}</Text>
               </View>
             </TouchableOpacity>
           );
         })}
       </View>
 
+      {/* ── Empty state ── */}
       {filtered.length === 0 ? (
         <View style={styles.emptyWrap}>
           <View style={styles.emptyIconCircle}>
-            <Feather name={tab === 'cancelled' ? 'x-circle' : 'rotate-ccw'} size={36} color="#717644" />
+            <Feather name={tab === 'cancelled' ? 'x-circle' : 'rotate-ccw'} size={32} color="#717644" />
           </View>
-          <Text style={[styles.emptyTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>
+          <Text style={[styles.emptyTitle, { fontSize: scaled(17), color: theme.textPrimary }]}>
             {tab === 'cancelled' ? 'No cancelled orders' : 'No orders yet'}
           </Text>
           <Text style={[styles.emptyDesc, { fontSize: scaled(13), color: theme.textSecondary }]}>
@@ -164,14 +149,14 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {filtered.map((order) => {
-            const status = (order.status ?? 'confirmed') as string;
-            const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed;
+            const status      = (order.status ?? 'confirmed') as string;
+            const statusCfg   = STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed;
             const isCancelled = status === 'cancelled';
             const isSubstituted = status === 'substitution_requested';
-            const grouped = groupItemsByPeriod(order.items);
-            const placed = new Date(order.placedAt);
-            const dateStr = placed.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-            const timeStr = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const grouped     = groupItemsByPeriod(order.items);
+            const placed      = new Date(order.placedAt);
+            const dateStr     = placed.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+            const timeStr     = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             return (
               <View
@@ -179,128 +164,109 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
                 style={[
                   styles.card,
                   { backgroundColor: theme.surface, borderColor: theme.border },
-                  isCancelled && styles.cardCancelled,
+                  isCancelled   && styles.cardCancelled,
                   isSubstituted && styles.cardSubstituted,
                 ]}
               >
-                {/* Left accent strip */}
-                <View style={[styles.cardStrip, { backgroundColor: statusCfg.color }]} />
-
-                <View style={styles.cardBody}>
-                  {/* Top row: status + date + delete */}
-                  <View style={styles.cardTop}>
-                    <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-                      <Feather name={statusCfg.icon as any} size={12} color={statusCfg.color} />
-                      <Text style={[styles.statusText, { color: statusCfg.color, fontSize: scaled(12) }]}>
-                        {statusCfg.label}
-                      </Text>
-                    </View>
-
-                    {order.backendId != null && (
-                      <View style={styles.orderIdPill}>
-                        <Text style={[styles.orderIdText, { fontSize: scaled(11) }]}>#{order.backendId}</Text>
-                      </View>
-                    )}
-
-                    <View style={{ flex: 1 }} />
-
-                    <Text style={[styles.dateText, { fontSize: scaled(11), color: theme.textSecondary }]}>
-                      {dateStr} · {timeStr}
+                {/* ── Card header row ── */}
+                <View style={styles.cardHeader}>
+                  {/* Status badge */}
+                  <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
+                    <Feather name={statusCfg.icon as any} size={11} color={statusCfg.color} />
+                    <Text style={[styles.statusText, { color: statusCfg.color, fontSize: scaled(11) }]}>
+                      {statusCfg.label.toUpperCase()}
                     </Text>
-
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={() => handleDelete(order)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Feather name="trash-2" size={14} color="#EF4444" />
-                    </TouchableOpacity>
                   </View>
 
-                  {/* Substitution / cancellation note */}
-                  {isSubstituted && (
-                    <View style={styles.alertRow}>
-                      <Feather name="refresh-cw" size={12} color="#C2410C" />
-                      <Text style={[styles.alertText, { color: '#C2410C', fontSize: scaled(12) }]}>
-                        Kitchen requested a substitution
-                      </Text>
-                    </View>
-                  )}
-                  {isCancelled && (
-                    <View style={styles.alertRow}>
-                      <Feather name="x-circle" size={12} color="#DC2626" />
-                      <Text style={[styles.alertText, { color: '#DC2626', fontSize: scaled(12) }]}>
-                        Order was cancelled
-                      </Text>
-                    </View>
+                  {order.backendId != null && (
+                    <Text style={[styles.orderIdText, { fontSize: scaled(12), color: theme.textSecondary }]}>
+                      #{order.backendId}
+                    </Text>
                   )}
 
-                  {/* Items grouped by meal period */}
-                  <View style={styles.itemsWrap}>
-                    {PERIOD_ORDER.filter((p) => grouped[p]).map((period) => {
-                      const pCfg = PERIOD_CONFIG[period] ?? PERIOD_CONFIG.Lunch;
-                      return (
-                        <View key={period} style={styles.periodGroup}>
-                          <View style={[styles.periodBadge, { backgroundColor: pCfg.bg }]}>
-                            <Feather name={pCfg.icon as any} size={10} color={pCfg.color} />
-                            <Text style={[styles.periodLabel, { color: pCfg.color, fontSize: scaled(11) }]}>
-                              {pCfg.label}
-                            </Text>
-                          </View>
-                          {grouped[period].map((item, i) => (
-                            <View key={i} style={styles.itemRow}>
-                              <View style={[styles.itemDot, { backgroundColor: isCancelled ? '#D1D5DB' : pCfg.color }]} />
-                              <Text
-                                style={[
-                                  styles.itemName,
-                                  { fontSize: scaled(14), color: isCancelled ? '#9CA3AF' : theme.textPrimary },
-                                  isCancelled && styles.itemStrikethrough,
-                                ]}
-                              >
-                                {item.name}
-                              </Text>
-                              <Text style={[styles.itemKcal, { fontSize: scaled(11), color: theme.textSecondary }]}>
-                                {item.kcal} kcal
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      );
-                    })}
-                  </View>
+                  <View style={{ flex: 1 }} />
 
-                  {/* Nutrition summary (hidden for cancelled) */}
-                  {!isCancelled && (
-                    <View style={[styles.nutritionRow, { borderTopColor: theme.border }]}>
-                      <View style={styles.nutritionItem}>
-                        <Text style={[styles.nutritionValue, { color: theme.textPrimary, fontSize: scaled(13) }]}>
-                          {order.totalNutrition.calories}
-                        </Text>
-                        <Text style={[styles.nutritionLabel, { color: theme.textSecondary, fontSize: scaled(10) }]}>
-                          kcal
-                        </Text>
-                      </View>
-                      <View style={styles.nutritionDivider} />
-                      <View style={styles.nutritionItem}>
-                        <Text style={[styles.nutritionValue, { color: theme.textPrimary, fontSize: scaled(13) }]}>
-                          {order.totalNutrition.sodium}mg
-                        </Text>
-                        <Text style={[styles.nutritionLabel, { color: theme.textSecondary, fontSize: scaled(10) }]}>
-                          sodium
-                        </Text>
-                      </View>
-                      <View style={styles.nutritionDivider} />
-                      <View style={styles.nutritionItem}>
-                        <Text style={[styles.nutritionValue, { color: theme.textPrimary, fontSize: scaled(13) }]}>
-                          {order.totalNutrition.protein}g
-                        </Text>
-                        <Text style={[styles.nutritionLabel, { color: theme.textSecondary, fontSize: scaled(10) }]}>
-                          protein
-                        </Text>
-                      </View>
-                    </View>
-                  )}
+                  <Text style={[styles.dateText, { fontSize: scaled(11), color: theme.textSecondary }]}>
+                    {dateStr} · {timeStr}
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={() => handleDelete(order)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.deleteBtn}
+                  >
+                    <Feather name="trash-2" size={13} color="#EF4444" />
+                  </TouchableOpacity>
                 </View>
+
+                {/* ── Alert note ── */}
+                {(isSubstituted || isCancelled) && (
+                  <View style={[styles.alertRow, { backgroundColor: isCancelled ? '#FEF2F2' : '#FFF7ED' }]}>
+                    <Feather name={isCancelled ? 'x-circle' : 'refresh-cw'} size={11} color={statusCfg.color} />
+                    <Text style={[styles.alertText, { color: statusCfg.color, fontSize: scaled(12) }]}>
+                      {isCancelled ? 'Order was cancelled' : 'Kitchen requested a substitution'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* ── Divider ── */}
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+                {/* ── Items: period label LEFT, name RIGHT ── */}
+                <View style={styles.itemsBlock}>
+                  {PERIOD_ORDER.filter((p) => grouped[p]).map((period) => {
+                    const pColor = PERIOD_CONFIG[period]?.color ?? '#6B7280';
+                    return grouped[period].map((item, i) => (
+                      <View key={`${period}-${i}`} style={styles.itemRow}>
+                        {/* Period label on the left */}
+                        <Text style={[styles.periodLabel, { color: pColor, fontSize: scaled(10) }]}>
+                          {period.toUpperCase()}
+                        </Text>
+                        {/* Item name */}
+                        <Text
+                          style={[
+                            styles.itemName,
+                            { fontSize: scaled(14), color: isCancelled ? '#9CA3AF' : theme.textPrimary },
+                            isCancelled && styles.strikethrough,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.name}
+                        </Text>
+                        {/* Calories */}
+                        <Text style={[styles.itemKcal, { fontSize: scaled(11), color: theme.textSecondary }]}>
+                          {item.kcal} kcal
+                        </Text>
+                      </View>
+                    ));
+                  })}
+                </View>
+
+                {/* ── Nutrition footer ── */}
+                {!isCancelled && (
+                  <View style={[styles.nutritionRow, { borderTopColor: theme.border }]}>
+                    <View style={styles.nutritionPill}>
+                      <Text style={[styles.nutritionVal, { color: theme.textPrimary, fontSize: scaled(12) }]}>
+                        {order.totalNutrition.calories}
+                      </Text>
+                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>kcal</Text>
+                    </View>
+                    <View style={styles.nutritionDot} />
+                    <View style={styles.nutritionPill}>
+                      <Text style={[styles.nutritionVal, { color: theme.textPrimary, fontSize: scaled(12) }]}>
+                        {order.totalNutrition.sodium}mg
+                      </Text>
+                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>sodium</Text>
+                    </View>
+                    <View style={styles.nutritionDot} />
+                    <View style={styles.nutritionPill}>
+                      <Text style={[styles.nutritionVal, { color: theme.textPrimary, fontSize: scaled(12) }]}>
+                        {order.totalNutrition.protein}g
+                      </Text>
+                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>protein</Text>
+                    </View>
+                  </View>
+                )}
               </View>
             );
           })}
@@ -313,30 +279,26 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  // Header
+  // ── Header ──
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 6,
-    paddingRight: 8,
     width: 70,
   },
   backText: { color: '#717644', fontWeight: '600' },
-  headerCenter: { alignItems: 'center', flex: 1 },
-  headerTitle: { fontWeight: '800', letterSpacing: -0.3 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { fontWeight: '800', letterSpacing: -0.2 },
   headerSub: { marginTop: 2 },
 
-  // Tabs
+  // ── Tabs ──
   tabRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -348,126 +310,124 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabLabel: { fontWeight: '700' },
   tabBadge: {
-    minWidth: 22,
-    height: 20,
-    borderRadius: 10,
+    minWidth: 20,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
   },
-  tabBadgeText: { fontSize: 11, fontWeight: '800' },
+  tabBadgeText: { fontSize: 10, fontWeight: '800' },
 
-  // List
-  list: { padding: 14, paddingBottom: 32, gap: 12 },
+  // ── List ──
+  list: { padding: 12, paddingBottom: 32, gap: 10 },
 
-  // Card
+  // ── Card ──
   card: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    flexDirection: 'row',
     overflow: 'hidden',
   },
-  cardCancelled: { borderColor: '#FCA5A5', opacity: 0.85 },
+  cardCancelled: { borderColor: '#FCA5A5', opacity: 0.82 },
   cardSubstituted: { borderColor: '#FDBA74' },
-  cardStrip: {
-    width: 4,
-  },
-  cardBody: {
-    flex: 1,
-    padding: 14,
-    gap: 8,
-  },
-  cardTop: {
+
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
+
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: 12,
+    borderRadius: 10,
   },
-  statusText: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
-  orderIdPill: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  orderIdText: { fontWeight: '700', color: '#4B5563' },
+  statusText: { fontWeight: '800', letterSpacing: 0.3 },
+  orderIdText: { fontWeight: '600' },
   dateText: { fontWeight: '500' },
   deleteBtn: {
-    padding: 6,
-    borderRadius: 8,
+    padding: 5,
+    borderRadius: 7,
     backgroundColor: '#FEF2F2',
-    marginLeft: 4,
+    marginLeft: 2,
   },
 
-  // Alert rows
+  // ── Alert ──
   alertRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 8,
-    alignSelf: 'flex-start',
+    marginHorizontal: 12,
+    marginBottom: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 7,
   },
   alertText: { fontWeight: '600' },
 
-  // Items
-  itemsWrap: { gap: 8 },
-  periodGroup: { gap: 4 },
-  periodBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    marginBottom: 2,
+  // ── Divider ──
+  divider: { height: 1, marginHorizontal: 12 },
+
+  // ── Items ──
+  itemsBlock: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
   },
-  periodLabel: { fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingLeft: 4,
+    gap: 10,
   },
-  itemDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+  periodLabel: {
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    width: 68,          // fixed width keeps all item names aligned
+    textAlign: 'left',
   },
-  itemName: { fontWeight: '500', flex: 1 },
-  itemStrikethrough: { textDecorationLine: 'line-through' },
-  itemKcal: { fontWeight: '500' },
+  itemName: {
+    flex: 1,
+    fontWeight: '500',
+  },
+  strikethrough: { textDecorationLine: 'line-through' },
+  itemKcal: { fontWeight: '500', textAlign: 'right' },
 
-  // Nutrition
+  // ── Nutrition footer ──
   nutritionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 10,
+    justifyContent: 'flex-end',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderTopWidth: 1,
   },
-  nutritionItem: { alignItems: 'center' },
-  nutritionValue: { fontWeight: '700' },
-  nutritionLabel: { fontWeight: '500', marginTop: 1 },
-  nutritionDivider: { width: 1, height: 24, backgroundColor: '#E5E7EB' },
+  nutritionPill: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  nutritionVal: { fontWeight: '700' },
+  nutritionKey: { fontWeight: '500' },
+  nutritionDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+  },
 
-  // Empty state
+  // ── Empty ──
   emptyWrap: {
     flex: 1,
     alignItems: 'center',
@@ -475,14 +435,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#F4F3EE',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 2,
+    marginBottom: 14,
+    borderWidth: 1.5,
     borderColor: '#E8E6E1',
   },
   emptyTitle: { fontWeight: '700', marginBottom: 6 },
