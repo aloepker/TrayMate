@@ -77,11 +77,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ---- Multi-caregiver map: residentId -> caregiverIds[] ----
-  const [residentCaregiversMap, setResidentCaregiversMap] = useState<Record<string, string[]>>({});
+  // ---- Single-caregiver map: residentId -> caregiverId | null (mirrors backend) ----
+  const [residentCaregiverMap, setResidentCaregiverMap] = useState<Record<string, string | null>>({});
 
-  // ---- Add-caregiver dropdown modal ----
-  const [addingCaregiverToResidentId, setAddingCaregiverToResidentId] = useState<string | null>(null);
+  // ---- Assign-caregiver picker modal ----
+  const [assigningCaregiverToResidentId, setAssigningCaregiverToResidentId] = useState<string | null>(null);
 
   const [adminEmail, setAdminEmail] = useState<string>('Admin');
   useEffect(() => {
@@ -141,17 +141,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           setResidents(rs);
           setKitchenStaff(ks);
 
-          // Initialize multi-caregiver map from existing caregiverId
-          const map: Record<string, string[]> = {};
+          // Build single-caregiver map from backend data (one caregiver per resident)
+          const map: Record<string, string | null> = {};
           for (const r of rs) {
             const rid = String(r.id);
-            if (r.caregiverId != null && String(r.caregiverId).trim() !== "") {
-              map[rid] = [String(r.caregiverId)];
-            } else {
-              map[rid] = [];
-            }
+            const cid = r.caregiverId != null && String(r.caregiverId).trim() !== ""
+              ? String(r.caregiverId)
+              : null;
+            map[rid] = cid;
           }
-          setResidentCaregiversMap(map);
+          setResidentCaregiverMap(map);
         }
       } catch (e: any) {
         Alert.alert("Failed to load admin data", e.message);
@@ -174,17 +173,15 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     try {
       const rs = await getResidents();
       setResidents(rs);
-      // Re-sync map for new residents (don't overwrite existing multi-caregiver state)
-      setResidentCaregiversMap(prev => {
-        const next = { ...prev };
-        for (const r of rs) {
-          const rid = String(r.id);
-          if (!(rid in next)) {
-            next[rid] = r.caregiverId != null ? [String(r.caregiverId)] : [];
-          }
-        }
-        return next;
-      });
+      // Re-sync map from backend (single caregiver per resident)
+      const map: Record<string, string | null> = {};
+      for (const r of rs) {
+        const rid = String(r.id);
+        map[rid] = r.caregiverId != null && String(r.caregiverId).trim() !== ""
+          ? String(r.caregiverId)
+          : null;
+      }
+      setResidentCaregiverMap(map);
     } catch (e: any) {
       Alert.alert("Failed to refresh residents", e.message);
     }
@@ -214,45 +211,36 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const stats = useMemo(() => {
     const total = residents.length;
     const assigned = residents.filter(
-      (r) => (residentCaregiversMap[String(r.id)]?.length ?? 0) > 0
+      (r) => residentCaregiverMap[String(r.id)] != null
     ).length;
     return {
       total,
       assigned,
       unassigned: total - assigned
     };
-  }, [residents, residentCaregiversMap]);
+  }, [residents, residentCaregiverMap]);
 
   const caregiverPatientCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    // Seed every caregiver with 0
     for (const c of caregivers) {
       map[String(c.id)] = 0;
     }
-    // Count each resident for every caregiver in their map entry
     for (const r of residents) {
-      const cgIds = residentCaregiversMap[String(r.id)] ?? [];
-      for (const cid of cgIds) {
-        const key = String(cid).trim();
-        if (key && key !== "null" && key !== "undefined") {
-          map[key] = (map[key] ?? 0) + 1;
-        }
+      const cid = residentCaregiverMap[String(r.id)];
+      if (cid && cid !== "null" && cid !== "undefined") {
+        map[String(cid)] = (map[String(cid)] ?? 0) + 1;
       }
     }
     return map;
-  }, [caregivers, residents, residentCaregiversMap]);
+  }, [caregivers, residents, residentCaregiverMap]);
 
   /**
-   * Multi-caregiver handlers
+   * Caregiver assignment handlers — single caregiver per resident (mirrors backend)
    */
-  const onAddCaregiver = async (residentId: string, caregiverId: string) => {
+  const onAssignCaregiver = async (residentId: string, caregiverId: string) => {
     try {
       await assignResident(residentId, caregiverId);
-      setResidentCaregiversMap(prev => {
-        const existing = prev[residentId] ?? [];
-        if (existing.includes(caregiverId)) return prev;
-        return { ...prev, [residentId]: [...existing, caregiverId] };
-      });
+      setResidentCaregiverMap(prev => ({ ...prev, [residentId]: caregiverId }));
       setResidents(prev =>
         prev.map(r => r.id === residentId ? { ...r, caregiverId } : r)
       );
@@ -261,24 +249,15 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
   };
 
-  const onRemoveCaregiver = async (residentId: string, caregiverId: string) => {
-    const current = residentCaregiversMap[residentId] ?? [];
-    const next = current.filter(id => id !== caregiverId);
+  const onUnassignCaregiver = async (residentId: string) => {
     try {
-      if (next.length > 0) {
-        await assignResident(residentId, next[0]);
-        setResidents(prev =>
-          prev.map(r => r.id === residentId ? { ...r, caregiverId: next[0] } : r)
-        );
-      } else {
-        await assignResident(residentId, null);
-        setResidents(prev =>
-          prev.map(r => r.id === residentId ? { ...r, caregiverId: null } : r)
-        );
-      }
-      setResidentCaregiversMap(prev => ({ ...prev, [residentId]: next }));
+      await assignResident(residentId, null);
+      setResidentCaregiverMap(prev => ({ ...prev, [residentId]: null }));
+      setResidents(prev =>
+        prev.map(r => r.id === residentId ? { ...r, caregiverId: null } : r)
+      );
     } catch (e: any) {
-      Alert.alert("Assignment failed", e.message);
+      Alert.alert("Unassign failed", e.message);
     }
   };
 
@@ -309,7 +288,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       if (pendingDelete.kind === "resident") {
         await deleteEntity("resident", pendingDelete.id);
         setResidents((prev) => prev.filter((r) => r.id !== pendingDelete.id));
-        setResidentCaregiversMap(prev => {
+        setResidentCaregiverMap(prev => {
           const next = { ...prev };
           delete next[pendingDelete.id];
           return next;
@@ -522,15 +501,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             )}
             {residents.map((r, idx) => {
               const rid = String(r.id);
-              const assignedCgIds = residentCaregiversMap[rid] ?? [];
-              const assignedCaregivers = caregivers.filter(c => assignedCgIds.includes(String(c.id)));
-              const unassignedCaregivers = caregivers.filter(c => !assignedCgIds.includes(String(c.id)));
+              const assignedCgId = residentCaregiverMap[rid] ?? null;
+              const assignedCaregiver = assignedCgId
+                ? caregivers.find(c => String(c.id) === assignedCgId) ?? null
+                : null;
               const allTags = [
                 ...(r.dietaryRestrictions ?? []),
                 ...(r.foodAllergies ?? []),
                 ...(r.medicalConditions ?? []),
               ];
-              const isUnassigned = assignedCgIds.length === 0;
+              const isUnassigned = !assignedCgId;
 
               return (
                 <View key={r.id || `res-${idx}`} style={[styles.assignRow, isUnassigned && styles.assignRowWarning]}>
@@ -565,44 +545,47 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   {/* ── Divider ── */}
                   <View style={styles.assignDivider} />
 
-                  {/* ── Caregivers ── */}
+                  {/* ── Caregiver assignment ── */}
                   <View style={styles.caregiverAssignArea}>
                     <View style={styles.caregiverAssignLabelRow}>
-                      <Feather name="users" size={12} color="#6A6A6A" />
-                      <Text style={styles.caregiverAssignLabel}>Caregivers</Text>
-                      {isUnassigned && (
+                      <Feather name="user" size={12} color="#6A6A6A" />
+                      <Text style={styles.caregiverAssignLabel}>Assigned Caregiver</Text>
+                    </View>
+
+                    <View style={styles.caregiverChipRow}>
+                      {assignedCaregiver ? (
+                        /* ── Assigned chip with unassign X ── */
+                        <View style={styles.caregiverChip}>
+                          <View style={styles.cgAvatar}>
+                            <Text style={styles.cgAvatarText}>{assignedCaregiver.name.charAt(0).toUpperCase()}</Text>
+                          </View>
+                          <Text style={styles.caregiverChipText}>{assignedCaregiver.name}</Text>
+                          <Pressable
+                            onPress={() => onUnassignCaregiver(rid)}
+                            hitSlop={10}
+                            style={styles.caregiverChipX}
+                          >
+                            <Feather name="x" size={10} color="#6D6B3B" />
+                          </Pressable>
+                        </View>
+                      ) : (
+                        /* ── Unassigned warning badge ── */
                         <View style={styles.noCaregiversBadge}>
                           <Feather name="alert-triangle" size={11} color="#9A6700" />
                           <Text style={styles.noCaregiversText}>Unassigned</Text>
                         </View>
                       )}
-                    </View>
 
-                    <View style={styles.caregiverChipRow}>
-                      {assignedCaregivers.map((cg) => (
-                        <View key={`assigned-${rid}-${cg.id}`} style={styles.caregiverChip}>
-                          <View style={styles.cgAvatar}>
-                            <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
-                          </View>
-                          <Text style={styles.caregiverChipText}>{cg.name}</Text>
-                          <Pressable
-                            onPress={() => onRemoveCaregiver(rid, String(cg.id))}
-                            hitSlop={10}
-                            style={styles.caregiverChipX}
-                          >
-                            <Feather name="x" size={10} color="#1A5C1A" />
-                          </Pressable>
-                        </View>
-                      ))}
-                      {unassignedCaregivers.length > 0 && (
-                        <Pressable
-                          style={styles.addCaregiverChip}
-                          onPress={() => setAddingCaregiverToResidentId(rid)}
-                        >
-                          <Feather name="user-plus" size={12} color="#6D6B3B" />
-                          <Text style={styles.addCaregiverChipText}>Add</Text>
-                        </Pressable>
-                      )}
+                      {/* ── Assign / Reassign button ── */}
+                      <Pressable
+                        style={styles.addCaregiverChip}
+                        onPress={() => setAssigningCaregiverToResidentId(rid)}
+                      >
+                        <Feather name="user-plus" size={12} color="#6D6B3B" />
+                        <Text style={styles.addCaregiverChipText}>
+                          {assignedCaregiver ? "Reassign" : "Assign"}
+                        </Text>
+                      </Pressable>
                     </View>
                   </View>
 
@@ -821,45 +804,57 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         </View>
       </Modal>
 
-      {/* ADD CAREGIVER TO RESIDENT DROPDOWN MODAL */}
+      {/* ASSIGN CAREGIVER PICKER MODAL */}
       <Modal
-        visible={addingCaregiverToResidentId !== null}
+        visible={assigningCaregiverToResidentId !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setAddingCaregiverToResidentId(null)}
+        onRequestClose={() => setAssigningCaregiverToResidentId(null)}
       >
         <Pressable
           style={styles.modalBackdrop}
-          onPress={() => setAddingCaregiverToResidentId(null)}
+          onPress={() => setAssigningCaregiverToResidentId(null)}
         >
           <View style={styles.dropdownCard}>
-            <Text style={styles.dropdownTitle}>Select a Caregiver</Text>
-            {addingCaregiverToResidentId !== null && (() => {
-              const rid = addingCaregiverToResidentId;
-              const assignedIds = residentCaregiversMap[rid] ?? [];
-              const available = caregivers.filter(c => !assignedIds.includes(String(c.id)));
-              if (available.length === 0) {
-                return (
-                  <Text style={styles.dropdownEmpty}>All caregivers are already assigned.</Text>
-                );
+            <Text style={styles.dropdownTitle}>Assign Caregiver</Text>
+            {assigningCaregiverToResidentId !== null && (() => {
+              const rid = assigningCaregiverToResidentId;
+              const currentId = residentCaregiverMap[rid];
+              if (caregivers.length === 0) {
+                return <Text style={styles.dropdownEmpty}>No caregivers available.</Text>;
               }
-              return available.map((cg) => (
-                <Pressable
-                  key={`dropdown-${cg.id}`}
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    onAddCaregiver(rid, String(cg.id));
-                    setAddingCaregiverToResidentId(null);
-                  }}
-                >
-                  <Text style={styles.dropdownItemName}>{cg.name}</Text>
-                  <Text style={styles.dropdownItemEmail}>{cg.email}</Text>
-                </Pressable>
-              ));
+              return caregivers.map((cg) => {
+                const isCurrentlyAssigned = String(cg.id) === currentId;
+                return (
+                  <Pressable
+                    key={`dropdown-${cg.id}`}
+                    style={[styles.dropdownItem, isCurrentlyAssigned && styles.dropdownItemActive]}
+                    onPress={() => {
+                      if (!isCurrentlyAssigned) {
+                        onAssignCaregiver(rid, String(cg.id));
+                      }
+                      setAssigningCaregiverToResidentId(null);
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View style={[styles.cgAvatar, isCurrentlyAssigned && { backgroundColor: "#3A3820" }]}>
+                        <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.dropdownItemName}>{cg.name}</Text>
+                        <Text style={styles.dropdownItemEmail}>{cg.email}</Text>
+                      </View>
+                    </View>
+                    {isCurrentlyAssigned && (
+                      <Text style={styles.dropdownItemCurrentLabel}>Current</Text>
+                    )}
+                  </Pressable>
+                );
+              });
             })()}
             <Pressable
               style={styles.dropdownCancel}
-              onPress={() => setAddingCaregiverToResidentId(null)}
+              onPress={() => setAssigningCaregiverToResidentId(null)}
             >
               <Text style={styles.dropdownCancelText}>Cancel</Text>
             </Pressable>
@@ -1624,6 +1619,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: "#E8E8E8",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dropdownItemActive: {
+    backgroundColor: "#F0EEE4",
+    borderColor: "#C8C5A8",
   },
   dropdownItemName: {
     fontSize: 14,
@@ -1634,6 +1636,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6A6A6A",
     marginTop: 2,
+  },
+  dropdownItemCurrentLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6D6B3B",
+    backgroundColor: "#E8E6D0",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   dropdownCancel: {
     marginTop: 8,
