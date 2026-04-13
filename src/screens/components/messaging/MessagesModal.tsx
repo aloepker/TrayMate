@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -25,412 +25,442 @@ import {
   MessagesModalProps,
 } from "./messagingTypes";
 
-export default function MessagesModal({
-  visible,
-  onClose,
-}: MessagesModalProps) {
-  const [chats, setChats] = useState<ChatPreview[]>([]);
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type SidebarEntry = {
+  userId: string;
+  name: string;
+  role: string;
+  preview: string;
+  createdAt: string;
+  isUnread: boolean;
+};
+
+export default function MessagesModal({ visible, onClose }: MessagesModalProps) {
   const [users, setUsers] = useState<MessageUser[]>([]);
+  const [chats, setChats] = useState<ChatPreview[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const [loadingChats, setLoadingChats] = useState(false);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingInit, setLoadingInit] = useState(false);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  // Track per-user last message so we can show previews for received messages too
+  const [conversationPreviews, setConversationPreviews] = useState<
+    Record<string, { preview: string; createdAt: string; isUnread: boolean }>
+  >({});
 
-  const usersById = useMemo(() => {
-    const map: Record<string, MessageUser> = {};
-    users.forEach((user) => {
-      map[String(user.id)] = user;
-    });
-    return map;
-  }, [users]);
+  const scrollRef = useRef<ScrollView>(null);
+
+  // ─── Load on open ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!visible) return;
-    loadCurrentUser();
-    loadChats();
-    loadUsers();
+    init();
   }, [visible]);
 
-  const loadCurrentUser = async () => {
+  const init = async () => {
+    setLoadingInit(true);
     try {
-      const me = await getMe();
-      setCurrentUserId(String(me.id));
-    } catch (error) {
-      console.log("Failed to get current user:", error);
-      setCurrentUserId(null);
-    }
-  };
+      const [me, rawUsers, rawChats] = await Promise.all([
+        getMe(),
+        getMessageUsers(),
+        getChats(),
+      ]);
 
-  const loadChats = async () => {
-    try {
-      setLoadingChats(true);
-      const data = await getChats();
-      setChats(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.log("Failed to load chats:", error);
-      setChats([]);
+      const myId = String(me.id);
+      setCurrentUserId(myId);
+
+      const userList = Array.isArray(rawUsers) ? rawUsers : [];
+      const chatList = Array.isArray(rawChats) ? rawChats : [];
+
+      setUsers(userList);
+      setChats(chatList);
+
+      // Build preview map from chats endpoint (covers sent messages)
+      const previewMap: Record<string, { preview: string; createdAt: string; isUnread: boolean }> = {};
+
+      chatList.forEach(chat => {
+        const isSender = String(chat.senderId) === myId;
+        const otherId = isSender ? String(chat.receiverId) : String(chat.senderId);
+        const existing = previewMap[otherId];
+        const isNewer = !existing || new Date(chat.createdAt) > new Date(existing.createdAt);
+        if (isNewer) {
+          previewMap[otherId] = {
+            preview: chat.content || "",
+            createdAt: chat.createdAt,
+            isUnread: !isSender && !chat.isRead, // red dot only when WE are receiver
+          };
+        }
+      });
+
+      setConversationPreviews(previewMap);
+
+      // Eagerly fetch conversations for users NOT yet covered by chats
+      // (catches messages received but not returned by /chats endpoint)
+      const uncovered = userList.filter(u => !previewMap[u.id]);
+      if (uncovered.length > 0) {
+        fetchMissingPreviews(uncovered, myId, previewMap);
+      }
+    } catch (e) {
+      console.log("MessagesModal init error:", e);
     } finally {
-      setLoadingChats(false);
+      setLoadingInit(false);
     }
   };
 
-  const loadUsers = async () => {
-    try {
-      setLoadingUsers(true);
-      const data = await getMessageUsers();
-      setUsers(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.log("Failed to load message users:", error);
-      setUsers([]);
-    } finally {
-      setLoadingUsers(false);
-    }
+  const fetchMissingPreviews = async (
+    uncoveredUsers: MessageUser[],
+    myId: string,
+    existing: Record<string, { preview: string; createdAt: string; isUnread: boolean }>
+  ) => {
+    const updated = { ...existing };
+    // Fetch in parallel, cap at 10 users to avoid hammering the server
+    const batch = uncoveredUsers.slice(0, 10);
+    await Promise.all(
+      batch.map(async user => {
+        try {
+          const msgs = await getConversation(user.id);
+          if (!Array.isArray(msgs) || msgs.length === 0) return;
+          const last = msgs[msgs.length - 1];
+          updated[user.id] = {
+            preview: last.content || "",
+            createdAt: last.createdAt,
+            isUnread: String(last.senderId) !== myId && !last.isRead,
+          };
+        } catch { /* skip */ }
+      })
+    );
+    setConversationPreviews(prev => ({ ...prev, ...updated }));
   };
 
-  const loadConversation = async (otherUserId: string) => {
+  // ─── Sidebar list (iMessage-style: all users, sorted by recency) ───────────
+
+  const sidebarList = useMemo((): SidebarEntry[] => {
+    return users
+      .map(user => {
+        const p = conversationPreviews[user.id];
+        return {
+          userId: user.id,
+          name: user.fullName,
+          role: user.role,
+          preview: p?.preview ?? "",
+          createdAt: p?.createdAt ?? "",
+          isUnread: p?.isUnread ?? false,
+        };
+      })
+      .sort((a, b) => {
+        if (a.createdAt && b.createdAt)
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        if (a.createdAt) return -1;
+        if (b.createdAt) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [users, conversationPreviews]);
+
+  // ─── Load conversation ─────────────────────────────────────────────────────
+
+  const loadConversation = async (userId: string) => {
+    setSelectedUserId(userId);
+    setLoadingConversation(true);
     try {
-      setSelectedUserId(otherUserId);
-      setLoadingConversation(true);
-      const data = await getConversation(otherUserId);
-      setMessages(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.log("Failed to load conversation:", error);
+      const data = await getConversation(userId);
+      const msgs = Array.isArray(data) ? data : [];
+      setMessages(msgs);
+      // Mark as read in local preview state
+      if (msgs.length > 0) {
+        setConversationPreviews(prev => ({
+          ...prev,
+          [userId]: {
+            ...prev[userId],
+            isUnread: false,
+            preview: msgs[msgs.length - 1].content || prev[userId]?.preview || "",
+            createdAt: msgs[msgs.length - 1].createdAt || prev[userId]?.createdAt || "",
+          },
+        }));
+      }
+    } catch (e) {
+      console.log("Load conversation error:", e);
       setMessages([]);
     } finally {
       setLoadingConversation(false);
     }
   };
 
-  const handleSelectNewChatUser = async (user: MessageUser) => {
-    setShowNewChatModal(false);
-    await loadConversation(user.id);
-    await loadChats();
-  };
+  // ─── Send message ──────────────────────────────────────────────────────────
 
-  const handleSendMessage = async () => {
+  const handleSend = async () => {
     if (!selectedUserId || !messageText.trim()) return;
-
+    const text = messageText.trim();
+    setMessageText("");
+    setSendingMessage(true);
     try {
-      setSendingMessage(true);
-
-      await sendMessage(selectedUserId, messageText.trim());
-      setMessageText("");
-
-      const updatedConversation = await getConversation(selectedUserId);
-      setMessages(Array.isArray(updatedConversation) ? updatedConversation : []);
-
-      const updatedChats = await getChats();
-      setChats(Array.isArray(updatedChats) ? updatedChats : []);
-    } catch (error) {
-      console.log("Failed to send message:", error);
+      await sendMessage(selectedUserId, text);
+      const updated = await getConversation(selectedUserId);
+      const msgs = Array.isArray(updated) ? updated : [];
+      setMessages(msgs);
+      // Update sidebar preview
+      if (msgs.length > 0) {
+        const last = msgs[msgs.length - 1];
+        setConversationPreviews(prev => ({
+          ...prev,
+          [selectedUserId]: {
+            preview: last.content || text,
+            createdAt: last.createdAt,
+            isUnread: false,
+          },
+        }));
+      }
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (e) {
+      console.log("Send error:", e);
     } finally {
       setSendingMessage(false);
     }
   };
 
-  const getUserById = (userId: string) => {
-    return usersById[String(userId)];
-  };
-
-  const getUserDisplayName = (userId: string) => {
-    const user = getUserById(userId);
-    return user ? user.fullName : `User ${userId}`;
-  };
+  // ─── Helpers ───────────────────────────────────────────────────────────────
 
   const formatRole = (role: string) => {
     if (!role) return "";
-    return role.replace("ROLE_", "").replaceAll("_", " ");
+    return role.replace("ROLE_", "").replace(/_/g, " ");
   };
-
-  const chatList = useMemo(() => {
-    return chats.map((chat, index) => {
-      const isCurrentUserSender =
-        currentUserId !== null &&
-        String(chat.senderId) === String(currentUserId);
-
-      const otherUserId = isCurrentUserSender
-        ? String(chat.receiverId)
-        : String(chat.senderId);
-
-      const otherUserName = isCurrentUserSender
-        ? chat.receiverName
-        : chat.senderName;
-
-      const otherUser = usersById[otherUserId];
-
-      return {
-        key: `${chat.id}-${index}`,
-        otherUserId,
-        otherUserName,
-        otherUserRole: otherUser?.role ?? "",
-        preview: chat.content || "No message",
-        createdAt: chat.createdAt,
-        isRead: chat.isRead,
-      };
-    });
-  }, [chats, currentUserId, usersById]);
 
   const formatTime = (value: string) => {
     if (!value) return "";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
-
-    return date.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    const now = new Date();
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
+  const selectedUser = users.find(u => u.id === selectedUserId);
+  const totalUnread = Object.values(conversationPreviews).filter(p => p.isUnread).length;
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <>
-      <Modal visible={visible} transparent animationType="fade">
-        <View style={styles.backdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.header}>
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.backdrop}>
+        <View style={styles.modalCard}>
+
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
               <Text style={styles.headerTitle}>Messages</Text>
-              <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-                <Feather name="x" size={22} color="#111827" />
-              </Pressable>
-            </View>
-
-            <View style={styles.content}>
-              <View style={styles.sidebar}>
-                <View style={styles.sidebarTop}>
-                  <Text style={styles.sidebarTitle}>Chats</Text>
-
-                  <Pressable
-                    style={styles.newChatBtn}
-                    onPress={() => setShowNewChatModal(true)}
-                  >
-                    <Feather name="edit-3" size={14} color="#FFFFFF" />
-                    <Text style={styles.newChatBtnText}>New Chat</Text>
-                  </Pressable>
+              {totalUnread > 0 && (
+                <View style={styles.headerBadge}>
+                  <Text style={styles.headerBadgeText}>{totalUnread}</Text>
                 </View>
+              )}
+            </View>
+            <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+              <Feather name="x" size={22} color="#111827" />
+            </Pressable>
+          </View>
 
-                {loadingChats ? (
-                  <View style={styles.loadingWrap}>
-                    <ActivityIndicator size="small" color="#6D6B3B" />
-                  </View>
-                ) : (
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.chatList}
-                  >
-                    {!chatList.length ? (
-                      <Text style={styles.emptySidebarText}>No chats yet</Text>
-                    ) : (
-                      chatList.map((chat) => (
-                        <Pressable
-                          key={chat.key}
-                          style={[
-                            styles.chatItem,
-                            selectedUserId === chat.otherUserId &&
-                              styles.chatItemActive,
-                          ]}
-                          onPress={() => loadConversation(chat.otherUserId)}
-                        >
-                          <View style={styles.chatItemTop}>
-                            <Text
-                              style={[
-                                styles.chatName,
-                                selectedUserId === chat.otherUserId &&
-                                  styles.chatNameActive,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {chat.otherUserName ?? "Unknown"}
-                            </Text>
+          <View style={styles.content}>
 
-                            {!!chat.createdAt && (
-                              <Text
-                                style={[
-                                  styles.chatTime,
-                                  selectedUserId === chat.otherUserId &&
-                                    styles.chatTimeActive,
-                                ]}
-                              >
-                                {formatTime(chat.createdAt)}
-                              </Text>
-                            )}
-                          </View>
+            {/* Sidebar */}
+            <View style={styles.sidebar}>
+              <Text style={styles.sidebarTitle}>Chats</Text>
 
+              {loadingInit ? (
+                <View style={styles.centerWrap}>
+                  <ActivityIndicator size="small" color="#6D6B3B" />
+                </View>
+              ) : sidebarList.length === 0 ? (
+                <View style={styles.centerWrap}>
+                  <Text style={styles.emptyText}>No users found</Text>
+                </View>
+              ) : (
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.chatList}>
+                  {sidebarList.map(entry => (
+                    <Pressable
+                      key={entry.userId}
+                      style={[
+                        styles.chatItem,
+                        selectedUserId === entry.userId && styles.chatItemActive,
+                      ]}
+                      onPress={() => loadConversation(entry.userId)}
+                    >
+                      {/* Avatar circle */}
+                      <View style={[
+                        styles.avatar,
+                        selectedUserId === entry.userId && styles.avatarActive,
+                      ]}>
+                        <Text style={[
+                          styles.avatarText,
+                          selectedUserId === entry.userId && styles.avatarTextActive,
+                        ]}>
+                          {entry.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+
+                      {/* Name + preview */}
+                      <View style={styles.chatItemBody}>
+                        <View style={styles.chatItemTop}>
                           <Text
                             style={[
-                              styles.chatRole,
-                              selectedUserId === chat.otherUserId &&
-                                styles.chatRoleActive,
+                              styles.chatName,
+                              entry.isUnread && styles.chatNameUnread,
+                              selectedUserId === entry.userId && styles.chatNameActive,
                             ]}
+                            numberOfLines={1}
                           >
-                            {formatRole(chat.otherUserRole)}
+                            {entry.name}
                           </Text>
-
+                          {!!entry.createdAt && (
+                            <Text style={[
+                              styles.chatTime,
+                              selectedUserId === entry.userId && styles.chatTimeActive,
+                            ]}>
+                              {formatTime(entry.createdAt)}
+                            </Text>
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.chatRole,
+                            selectedUserId === entry.userId && styles.chatRoleActive,
+                          ]}
+                        >
+                          {formatRole(entry.role)}
+                        </Text>
+                        {!!entry.preview && (
                           <Text
                             numberOfLines={1}
                             style={[
                               styles.chatPreview,
-                              selectedUserId === chat.otherUserId &&
-                                styles.chatPreviewActive,
+                              entry.isUnread && styles.chatPreviewUnread,
+                              selectedUserId === entry.userId && styles.chatPreviewActive,
                             ]}
                           >
-                            {chat.preview}
+                            {entry.preview}
                           </Text>
+                        )}
+                      </View>
 
-                          {!chat.isRead && <View style={styles.unreadDot} />}
-                        </Pressable>
-                      ))
-                    )}
-                  </ScrollView>
-                )}
-              </View>
+                      {/* Unread red dot */}
+                      {entry.isUnread && <View style={styles.unreadDot} />}
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
 
-              <View style={styles.chatPanel}>
-                {!selectedUserId ? (
-                  <View style={styles.emptyState}>
-                    <Feather name="message-square" size={40} color="#B0B7C3" />
-                    <Text style={styles.emptyStateTitle}>
-                      Select a conversation
-                    </Text>
-                    <Text style={styles.emptyStateText}>
-                      Choose a chat or start a new one.
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.chatHeader}>
-                      <Text style={styles.chatHeaderTitle}>
-                        {getUserDisplayName(selectedUserId)}
-                      </Text>
-                      <Text style={styles.chatHeaderSub}>
-                        {formatRole(getUserById(selectedUserId)?.role ?? "")}
+            {/* Chat panel */}
+            <View style={styles.chatPanel}>
+              {!selectedUserId ? (
+                <View style={styles.emptyState}>
+                  <Feather name="message-circle" size={44} color="#C9CDD4" />
+                  <Text style={styles.emptyStateTitle}>Select a conversation</Text>
+                  <Text style={styles.emptyStateText}>
+                    Choose someone from the left to start chatting.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {/* Chat header */}
+                  <View style={styles.chatHeader}>
+                    <View style={[styles.avatarSm, { backgroundColor: "#6D6B3B22" }]}>
+                      <Text style={[styles.avatarTextSm, { color: "#6D6B3B" }]}>
+                        {selectedUser?.fullName.charAt(0).toUpperCase() ?? "?"}
                       </Text>
                     </View>
+                    <View>
+                      <Text style={styles.chatHeaderTitle}>
+                        {selectedUser?.fullName ?? `User ${selectedUserId}`}
+                      </Text>
+                      <Text style={styles.chatHeaderSub}>
+                        {formatRole(selectedUser?.role ?? "")}
+                      </Text>
+                    </View>
+                  </View>
 
-                    <ScrollView
-                      style={styles.messagesArea}
-                      contentContainerStyle={styles.messagesContent}
-                      showsVerticalScrollIndicator={false}
-                    >
-                      {loadingConversation ? (
-                        <View style={styles.loadingWrap}>
-                          <ActivityIndicator size="small" color="#6D6B3B" />
-                        </View>
-                      ) : !messages.length ? (
-                        <View style={styles.emptyMessagesWrap}>
-                          <Text style={styles.emptyMessagesText}>
-                            No messages yet. Send the first one to start this conversation.
-                          </Text>
-                        </View>
-                      ) : (
-                        messages.map((msg) => {
-                          const isOutgoing =
-                            currentUserId !== null &&
-                            String(msg.senderId) === String(currentUserId);
-
-                          return (
-                            <View
-                              key={msg.id}
-                              style={[
-                                styles.messageBubble,
-                                isOutgoing
-                                  ? styles.messageBubbleOutgoing
-                                  : styles.messageBubbleIncoming,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.messageText,
-                                  isOutgoing
-                                    ? styles.messageTextOutgoing
-                                    : styles.messageTextIncoming,
-                                ]}
-                              >
+                  {/* Messages */}
+                  <ScrollView
+                    ref={scrollRef}
+                    style={styles.messagesArea}
+                    contentContainerStyle={styles.messagesContent}
+                    showsVerticalScrollIndicator={false}
+                    onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+                  >
+                    {loadingConversation ? (
+                      <View style={styles.centerWrap}>
+                        <ActivityIndicator size="small" color="#6D6B3B" />
+                      </View>
+                    ) : messages.length === 0 ? (
+                      <View style={styles.emptyMessagesWrap}>
+                        <Text style={styles.emptyMessagesText}>
+                          No messages yet — say hello!
+                        </Text>
+                      </View>
+                    ) : (
+                      messages.map(msg => {
+                        const isOut = currentUserId !== null && String(msg.senderId) === String(currentUserId);
+                        return (
+                          <View
+                            key={msg.id}
+                            style={[
+                              styles.bubbleRow,
+                              isOut ? styles.bubbleRowOut : styles.bubbleRowIn,
+                            ]}
+                          >
+                            <View style={[styles.bubble, isOut ? styles.bubbleOut : styles.bubbleIn]}>
+                              <Text style={[styles.bubbleText, isOut ? styles.bubbleTextOut : styles.bubbleTextIn]}>
                                 {msg.content}
                               </Text>
-
-                              <Text style={styles.messageTime}>
+                              <Text style={[styles.bubbleTime, isOut && styles.bubbleTimeOut]}>
                                 {formatTime(msg.createdAt)}
                               </Text>
                             </View>
-                          );
-                        })
+                          </View>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+
+                  {/* Input row */}
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      value={messageText}
+                      onChangeText={setMessageText}
+                      placeholder="Type a message..."
+                      placeholderTextColor="#9CA3AF"
+                      style={styles.input}
+                      multiline
+                      onSubmitEditing={handleSend}
+                    />
+                    <Pressable
+                      style={[styles.sendBtn, (!messageText.trim() || sendingMessage) && styles.sendBtnDisabled]}
+                      onPress={handleSend}
+                      disabled={!messageText.trim() || sendingMessage}
+                    >
+                      {sendingMessage ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Feather name="send" size={16} color="#FFFFFF" />
                       )}
-                    </ScrollView>
-
-                    <View style={styles.inputRow}>
-                      <TextInput
-                        value={messageText}
-                        onChangeText={setMessageText}
-                        placeholder="Type a message..."
-                        placeholderTextColor="#9CA3AF"
-                        style={styles.input}
-                        multiline
-                      />
-
-                      <Pressable
-                        style={[
-                          styles.sendBtn,
-                          (!messageText.trim() || sendingMessage) &&
-                            styles.sendBtnDisabled,
-                        ]}
-                        onPress={handleSendMessage}
-                        disabled={!messageText.trim() || sendingMessage}
-                      >
-                        {sendingMessage ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                          <Feather name="send" size={16} color="#FFFFFF" />
-                        )}
-                      </Pressable>
-                    </View>
-                  </>
-                )}
-              </View>
+                    </Pressable>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         </View>
-      </Modal>
-
-      <Modal visible={showNewChatModal} transparent animationType="fade">
-        <View style={styles.smallModalBackdrop}>
-          <View style={styles.smallModalCard}>
-            <View style={styles.smallModalHeader}>
-              <Text style={styles.smallModalTitle}>Start New Chat</Text>
-              <Pressable onPress={() => setShowNewChatModal(false)}>
-                <Feather name="x" size={20} color="#111827" />
-              </Pressable>
-            </View>
-
-            {loadingUsers ? (
-              <View style={styles.loadingWrap}>
-                <ActivityIndicator size="small" color="#6D6B3B" />
-              </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {users.map((user) => (
-                  <Pressable
-                    key={user.id}
-                    style={styles.userOption}
-                    onPress={() => handleSelectNewChatUser(user)}
-                  >
-                    <Text style={styles.userOptionName}>{user.fullName}</Text>
-                    <Text style={styles.userOptionRole}>
-                      {formatRole(user.role)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
-    </>
+      </View>
+    </Modal>
   );
 }
 
@@ -442,7 +472,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-
   modalCard: {
     width: "92%",
     maxWidth: 1050,
@@ -451,18 +480,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
     ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
-      },
-      android: {
-        elevation: 6,
-      },
+      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 14 },
+      android: { elevation: 6 },
     }),
   },
 
+  // Header
   header: {
     height: 68,
     borderBottomWidth: 1,
@@ -472,213 +495,125 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
-  headerTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  closeBtn: {
-    width: 36,
-    height: 36,
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerTitle: { fontSize: 19, fontWeight: "900", color: "#111827" },
+  headerBadge: {
+    backgroundColor: "#DC2626",
     borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 5,
   },
+  headerBadgeText: { color: "#FFF", fontSize: 11, fontWeight: "800" },
+  closeBtn: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
 
-  content: {
-    flex: 1,
-    flexDirection: "row",
-  },
+  // Layout
+  content: { flex: 1, flexDirection: "row" },
 
+  // Sidebar
   sidebar: {
-    width: 310,
+    width: 300,
     borderRightWidth: 1,
     borderRightColor: "#ECECEC",
     backgroundColor: "#FAFAFA",
-    paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingHorizontal: 10,
+    paddingTop: 14,
     paddingBottom: 10,
   },
-
-  sidebarTop: {
-    marginBottom: 10,
-  },
-
-  sidebarTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#1F2937",
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-
-  newChatBtn: {
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "#6D6B3B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  newChatBtnText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  chatList: {
-    paddingBottom: 10,
-  },
+  sidebarTitle: { fontSize: 15, fontWeight: "900", color: "#1F2937", marginBottom: 10, paddingHorizontal: 4 },
+  chatList: { paddingBottom: 10 },
 
   chatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    padding: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: "#E8E8E8",
     position: "relative",
   },
+  chatItemActive: { backgroundColor: "#6D6B3B", borderColor: "#6D6B3B" },
+  chatItemBody: { flex: 1, minWidth: 0 },
+  chatItemTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 
-  chatItemActive: {
-    backgroundColor: "#6D6B3B",
-    borderColor: "#6D6B3B",
-  },
-
-  chatItemTop: {
-    flexDirection: "row",
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E8E5DC",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "center",
+    flexShrink: 0,
   },
+  avatarActive: { backgroundColor: "rgba(255,255,255,0.2)" },
+  avatarText: { fontSize: 16, fontWeight: "800", color: "#6D6B3B" },
+  avatarTextActive: { color: "#FFFFFF" },
 
-  chatName: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-  },
+  chatName: { flex: 1, fontSize: 14, fontWeight: "700", color: "#111827" },
+  chatNameUnread: { fontWeight: "900" },
+  chatNameActive: { color: "#FFFFFF", fontWeight: "900" },
 
-  chatNameActive: {
-    color: "#FFFFFF",
-  },
+  chatTime: { fontSize: 11, color: "#9CA3AF", fontWeight: "600", flexShrink: 0 },
+  chatTimeActive: { color: "#EAEAEA" },
 
-  chatRole: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#6B7280",
-  },
+  chatRole: { fontSize: 11, fontWeight: "600", color: "#9CA3AF", marginTop: 1 },
+  chatRoleActive: { color: "#EAEAEA" },
 
-  chatRoleActive: {
-    color: "#EAEAEA",
-  },
-
-  chatTime: {
-    fontSize: 11,
-    color: "#6B7280",
-    fontWeight: "700",
-  },
-
-  chatTimeActive: {
-    color: "#EAEAEA",
-  },
-
-  chatPreview: {
-    marginTop: 5,
-    fontSize: 12,
-    color: "#6B7280",
-  },
-
-  chatPreviewActive: {
-    color: "#F5F5F5",
-  },
+  chatPreview: { marginTop: 3, fontSize: 12, color: "#6B7280" },
+  chatPreviewUnread: { fontWeight: "700", color: "#374151" },
+  chatPreviewActive: { color: "#F0EDE5" },
 
   unreadDot: {
     position: "absolute",
     top: 10,
     right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 999,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: "#DC2626",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
 
-  chatPanel: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+  centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 24 },
+  emptyText: { fontSize: 13, color: "#9CA3AF", fontWeight: "700" },
+
+  // Chat panel
+  chatPanel: { flex: 1, backgroundColor: "#FFFFFF" },
 
   chatHeader: {
     height: 68,
     borderBottomWidth: 1,
     borderBottomColor: "#ECECEC",
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     paddingHorizontal: 18,
   },
+  avatarSm: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  avatarTextSm: { fontSize: 16, fontWeight: "800" },
+  chatHeaderTitle: { fontSize: 16, fontWeight: "900", color: "#111827" },
+  chatHeaderSub: { marginTop: 1, fontSize: 12, color: "#6B7280", fontWeight: "700", textTransform: "capitalize" },
 
-  chatHeaderTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: "#111827",
-  },
+  messagesArea: { flex: 1 },
+  messagesContent: { padding: 16, paddingBottom: 8 },
 
-  chatHeaderSub: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#6B7280",
-    fontWeight: "700",
-  },
-
-  messagesArea: {
-    flex: 1,
-  },
-
-  messagesContent: {
-    padding: 16,
-  },
-
-  messageBubble: {
-    maxWidth: "72%",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-
-  messageBubbleOutgoing: {
-    alignSelf: "flex-end",
-    backgroundColor: "#6D6B3B",
-  },
-
-  messageBubbleIncoming: {
-    alignSelf: "flex-start",
-    backgroundColor: "#F3F4F6",
-  },
-
-  messageText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-
-  messageTextOutgoing: {
-    color: "#FFFFFF",
-  },
-
-  messageTextIncoming: {
-    color: "#111827",
-  },
-
-  messageTime: {
-    marginTop: 6,
-    fontSize: 11,
-    color: "#9CA3AF",
-    alignSelf: "flex-end",
-  },
+  bubbleRow: { marginBottom: 10 },
+  bubbleRowOut: { alignItems: "flex-end" },
+  bubbleRowIn: { alignItems: "flex-start" },
+  bubble: { maxWidth: "72%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  bubbleOut: { backgroundColor: "#6D6B3B", borderBottomRightRadius: 4 },
+  bubbleIn: { backgroundColor: "#F0F0F0", borderBottomLeftRadius: 4 },
+  bubbleText: { fontSize: 14, lineHeight: 20 },
+  bubbleTextOut: { color: "#FFFFFF" },
+  bubbleTextIn: { color: "#111827" },
+  bubbleTime: { marginTop: 4, fontSize: 10, color: "#9CA3AF", alignSelf: "flex-end" },
+  bubbleTimeOut: { color: "rgba(255,255,255,0.65)" },
 
   inputRow: {
     flexDirection: "row",
@@ -688,130 +623,34 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#ECECEC",
   },
-
   input: {
     flex: 1,
     minHeight: 46,
     maxHeight: 110,
-    borderRadius: 12,
+    borderRadius: 24,
     backgroundColor: "#F3F4F6",
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
     fontSize: 14,
     color: "#111827",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-
   sendBtn: {
     width: 46,
     height: 46,
-    borderRadius: 12,
+    borderRadius: 23,
     backgroundColor: "#6D6B3B",
     alignItems: "center",
     justifyContent: "center",
   },
+  sendBtnDisabled: { opacity: 0.5 },
 
-  sendBtnDisabled: {
-    opacity: 0.6,
-  },
+  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
+  emptyStateTitle: { marginTop: 14, fontSize: 20, fontWeight: "900", color: "#4B5563" },
+  emptyStateText: { marginTop: 6, fontSize: 14, color: "#9CA3AF", textAlign: "center" },
 
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-
-  emptyStateTitle: {
-    marginTop: 12,
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#4B5563",
-  },
-
-  emptyStateText: {
-    marginTop: 6,
-    fontSize: 14,
-    color: "#6B7280",
-    textAlign: "center",
-  },
-
-  emptyMessagesWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 30,
-  },
-
-  emptyMessagesText: {
-    fontSize: 14,
-    color: "#6B7280",
-    fontWeight: "700",
-  },
-
-  emptySidebarText: {
-    fontSize: 13,
-    color: "#6B7280",
-    fontWeight: "700",
-    textAlign: "center",
-    marginTop: 18,
-  },
-
-  loadingWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-  },
-
-  smallModalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.32)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-
-  smallModalCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-  },
-
-  smallModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-
-  smallModalTitle: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  userOption: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-
-  userOptionName: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  userOptionRole: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#6B7280",
-  },
+  emptyMessagesWrap: { alignItems: "center", paddingVertical: 40 },
+  emptyMessagesText: { fontSize: 14, color: "#9CA3AF", fontWeight: "700" },
 });
