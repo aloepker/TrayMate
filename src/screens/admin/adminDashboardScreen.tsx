@@ -592,12 +592,18 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   {/* ── Resident Dashboard button ── */}
                   <Pressable
                     style={styles.selectResidentBtn}
-                    onPress={() => navigation.navigate("BrowseMealOptions", {
-                      residentId: r.id,
-                      residentName: r.name,
-                      dietaryRestrictions: r.dietaryRestrictions ?? [],
-                      foodAllergies: r.foodAllergies ?? [],
-                    })}
+                    onPress={() => {
+                      const cgId   = residentCaregiverMap[rid] ?? null;
+                      const cgName = cgId ? (caregivers.find(c => String(c.id) === cgId)?.name ?? null) : null;
+                      navigation.navigate("BrowseMealOptions", {
+                        residentId: r.id,
+                        residentName: r.name,
+                        dietaryRestrictions: r.dietaryRestrictions ?? [],
+                        foodAllergies: r.foodAllergies ?? [],
+                        caregiverId: cgId,
+                        caregiverName: cgName,
+                      });
+                    }}
                   >
                     <Feather name="log-in" size={14} color="#FFFFFF" />
                     <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>

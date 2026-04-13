@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
+import { sendMessage } from '../services/api';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -70,6 +71,52 @@ function SettingsScreen({ navigation, route }: any) {
         ...(Array.isArray(route?.params?.dietaryRestrictions) ? route.params.dietaryRestrictions as string[] : []),
         ...(Array.isArray(route?.params?.foodAllergies)       ? route.params.foodAllergies       as string[] : []),
       ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
+
+  // Assigned caregiver — passed from admin dashboard via BrowseMealOptions
+  const caregiverId:   string | null = route?.params?.caregiverId   ?? null;
+  const caregiverName: string | null = route?.params?.caregiverName ?? null;
+
+  const [sendingMsg, setSendingMsg] = useState(false);
+
+  const contactCaregiver = useCallback(() => {
+    Alert.alert(
+      `Message ${caregiverName ?? 'Caregiver'}`,
+      'What would you like to say?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'I need assistance',
+          onPress: async () => {
+            if (!caregiverId) return;
+            setSendingMsg(true);
+            try {
+              await sendMessage(caregiverId, `Hi, ${residentName || 'a resident'} needs assistance. Please check in when possible.`);
+              Alert.alert('Message sent', `${caregiverName ?? 'Your caregiver'} has been notified.`);
+            } catch {
+              Alert.alert('Failed to send', 'Please ask staff for help directly.');
+            } finally {
+              setSendingMsg(false);
+            }
+          },
+        },
+        {
+          text: 'I have a question about my meal',
+          onPress: async () => {
+            if (!caregiverId) return;
+            setSendingMsg(true);
+            try {
+              await sendMessage(caregiverId, `Hi, ${residentName || 'a resident'} has a question about their meal. Please follow up when available.`);
+              Alert.alert('Message sent', `${caregiverName ?? 'Your caregiver'} has been notified.`);
+            } catch {
+              Alert.alert('Failed to send', 'Please ask staff for help directly.');
+            } finally {
+              setSendingMsg(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [caregiverId, caregiverName, residentName]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -282,25 +329,34 @@ function SettingsScreen({ navigation, route }: any) {
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <TouchableOpacity
-              style={[styles.accountRow, { minHeight: touchTarget }]}
-              onPress={() => Alert.alert(t.deliveryPrefs, 'Coming soon.')}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.deliveryPrefs}</Text>
-              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-            <View style={styles.divider} />
 
-            <TouchableOpacity
-              style={[styles.accountRow, { minHeight: touchTarget }]}
-              onPress={() => Alert.alert(t.supportHelp, 'Contact your facility staff.')}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.supportHelp}</Text>
-              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-            <View style={styles.divider} />
+            {/* Contact caregiver — only shown when one is assigned */}
+            {caregiverId && caregiverName ? (
+              <>
+                <TouchableOpacity
+                  style={[styles.accountRow, { minHeight: touchTarget }]}
+                  onPress={contactCaregiver}
+                  disabled={sendingMsg}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.caregiverContactLeft}>
+                    <View style={styles.caregiverAvatar}>
+                      <Text style={styles.caregiverAvatarText}>{caregiverName.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View>
+                      <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
+                        Contact Caregiver
+                      </Text>
+                      <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
+                        {caregiverName}
+                      </Text>
+                    </View>
+                  </View>
+                  <Feather name={sendingMsg ? 'loader' : 'message-circle'} size={20} color="#717644" />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+              </>
+            ) : null}
 
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
@@ -663,6 +719,28 @@ const styles = StyleSheet.create({
   accountLabel: {
     fontWeight: '500',
     color: '#4A4A4A',
+  },
+  caregiverContactLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  caregiverAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E8DCC8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  caregiverAvatarText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#717644',
+  },
+  caregiverSubtitle: {
+    marginTop: 1,
   },
 
   // Order history

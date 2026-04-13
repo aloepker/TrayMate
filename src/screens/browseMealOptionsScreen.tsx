@@ -794,6 +794,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       residentName,
       dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
       foodAllergies: route?.params?.foodAllergies ?? [],
+      caregiverId:   route?.params?.caregiverId   ?? null,
+      caregiverName: route?.params?.caregiverName ?? null,
     });
   };
 
