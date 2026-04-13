@@ -525,21 +525,25 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               const assignedCgIds = residentCaregiversMap[rid] ?? [];
               const assignedCaregivers = caregivers.filter(c => assignedCgIds.includes(String(c.id)));
               const unassignedCaregivers = caregivers.filter(c => !assignedCgIds.includes(String(c.id)));
-
-              // Merge all restriction/condition arrays for display
               const allTags = [
                 ...(r.dietaryRestrictions ?? []),
                 ...(r.foodAllergies ?? []),
                 ...(r.medicalConditions ?? []),
               ];
+              const isUnassigned = assignedCgIds.length === 0;
 
               return (
-                <View key={r.id || `res-${idx}`} style={styles.assignRow}>
-                  {/* Top: Resident info + action icons */}
-                  <View style={styles.assignTopRow}>
-                    <View style={{ flex: 1 }}>
+                <View key={r.id || `res-${idx}`} style={[styles.assignRow, isUnassigned && styles.assignRowWarning]}>
+                  {/* Header row: room pill + name + actions + Select button */}
+                  <View style={styles.assignHeader}>
+                    {/* Room pill */}
+                    <View style={styles.roomPill}>
+                      <Text style={styles.roomPillLabel}>ROOM <Text style={styles.roomPillNum}>{r.room || "—"}</Text></Text>
+                    </View>
+
+                    {/* Name + tags */}
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.personName}>{r.name}</Text>
-                      <Text style={styles.personMeta}>Room {r.room}</Text>
                       <View style={styles.chipRow}>
                         {allTags.length > 0 ? (
                           allTags.map((tag, i) => (
@@ -552,44 +556,61 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                         )}
                       </View>
                     </View>
-                    <View style={styles.actionIcons}>
+
+                    {/* Right side: edit/delete + select button */}
+                    <View style={styles.assignHeaderRight}>
+                      <View style={styles.actionIcons}>
+                        <Pressable style={styles.iconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
+                          <Feather name="edit-2" size={16} color="#6D6B3B" />
+                        </Pressable>
+                        <Pressable style={styles.iconBtn} onPress={() => askDeleteResident(r.id)} hitSlop={10}>
+                          <Feather name="trash-2" size={16} color="#B91C1C" />
+                        </Pressable>
+                      </View>
                       <Pressable
-                        style={styles.iconBtn}
-                        onPress={() => openEditResident(r)}
-                        hitSlop={10}
+                        style={styles.selectResidentBtn}
+                        onPress={() => navigation.navigate("BrowseMealOptions", {
+                          residentId: r.id,
+                          residentName: r.name,
+                          dietaryRestrictions: r.dietaryRestrictions ?? [],
+                          foodAllergies: r.foodAllergies ?? [],
+                        })}
                       >
-                        <Feather name="edit-2" size={18} color="#6D6B3B" />
-                      </Pressable>
-                      <Pressable
-                        style={styles.iconBtn}
-                        onPress={() => askDeleteResident(r.id)}
-                        hitSlop={10}
-                      >
-                        <Feather name="trash-2" size={18} color="#6D6B3B" />
+                        <Feather name="log-in" size={14} color="#FFFFFF" />
+                        <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>
                       </Pressable>
                     </View>
                   </View>
 
-                  {/* Caregiver assignment area */}
-                  <View style={styles.caregiverAssignArea}>
-                    <Text style={styles.caregiverAssignLabel}>Assigned Caregivers</Text>
+                  {/* Divider */}
+                  <View style={styles.assignDivider} />
 
-                    {assignedCgIds.length === 0 && (
-                      <View style={styles.noCaregiversBadge}>
-                        <Text style={styles.noCaregiversText}>⚠ No caregiver assigned</Text>
-                      </View>
-                    )}
+                  {/* Caregiver assignment row */}
+                  <View style={styles.caregiverAssignArea}>
+                    <View style={styles.caregiverAssignLabelRow}>
+                      <Feather name="users" size={12} color="#6A6A6A" />
+                      <Text style={styles.caregiverAssignLabel}>Caregivers</Text>
+                      {isUnassigned && (
+                        <View style={styles.noCaregiversBadge}>
+                          <Feather name="alert-triangle" size={11} color="#9A6700" />
+                          <Text style={styles.noCaregiversText}>Unassigned</Text>
+                        </View>
+                      )}
+                    </View>
 
                     <View style={styles.caregiverChipRow}>
                       {assignedCaregivers.map((cg) => (
                         <View key={`assigned-${rid}-${cg.id}`} style={styles.caregiverChip}>
+                          <View style={styles.cgAvatar}>
+                            <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
+                          </View>
                           <Text style={styles.caregiverChipText}>{cg.name}</Text>
                           <Pressable
                             onPress={() => onRemoveCaregiver(rid, String(cg.id))}
-                            hitSlop={8}
+                            hitSlop={10}
                             style={styles.caregiverChipX}
                           >
-                            <Text style={styles.caregiverChipXText}>✕</Text>
+                            <Feather name="x" size={10} color="#1A5C1A" />
                           </Pressable>
                         </View>
                       ))}
@@ -599,29 +620,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                           style={styles.addCaregiverChip}
                           onPress={() => setAddingCaregiverToResidentId(rid)}
                         >
-                          <Text style={styles.addCaregiverChipText}>＋ Add caregiver</Text>
+                          <Feather name="user-plus" size={12} color="#6D6B3B" />
+                          <Text style={styles.addCaregiverChipText}>Add</Text>
                         </Pressable>
                       )}
                     </View>
-                  </View>
-
-                  {/* Bottom: Select Resident button */}
-                  <View style={styles.assignBottomRow}>
-                    <Pressable
-                      style={styles.selectResidentBtn}
-                      onPress={() =>
-                        navigation.navigate("BrowseMealOptions", {
-                          residentId: r.id,
-                          residentName: r.name,
-                          dietaryRestrictions: r.dietaryRestrictions ?? [],
-                          foodAllergies: r.foodAllergies ?? [],
-                        })
-                      }
-                      hitSlop={10}
-                    >
-                      <Feather name="log-in" size={16} color="#FFFFFF" />
-                      <Text style={styles.selectResidentBtnText}>Select Resident</Text>
-                    </Pressable>
                   </View>
                 </View>
               );
@@ -1209,6 +1212,61 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     gap: 12,
     marginBottom: 12
+  },
+  assignRowWarning: {
+    borderWidth: 1.5,
+    borderColor: "#F5A623",
+  },
+  assignHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  assignHeaderRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  roomPill: {
+    backgroundColor: "#4A4A2A",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
+  },
+  roomPillLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
+  roomPillNum: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#F7E7B5",
+  },
+  assignDivider: {
+    height: 1,
+    backgroundColor: "#E0DECC",
+    marginVertical: 2,
+  },
+  caregiverAssignLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 8,
+  },
+  cgAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#4A7A4A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cgAvatarText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   assignTopRow: {
     flexDirection: "row",
