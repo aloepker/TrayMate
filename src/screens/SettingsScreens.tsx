@@ -13,7 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
-import { sendMessage } from '../services/api';
+import { sendMessage, getResidentById, getCaregivers } from '../services/api';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -72,11 +72,29 @@ function SettingsScreen({ navigation, route }: any) {
         ...(Array.isArray(route?.params?.foodAllergies)       ? route.params.foodAllergies       as string[] : []),
       ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
 
-  // Assigned caregiver — passed from admin dashboard via BrowseMealOptions
-  const caregiverId:   string | null = route?.params?.caregiverId   ?? null;
-  const caregiverName: string | null = route?.params?.caregiverName ?? null;
-
+  // Assigned caregiver — seeded from params, then verified/fetched from backend
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
   const [sendingMsg, setSendingMsg] = useState(false);
+
+  useEffect(() => {
+    if (!residentId) return;
+    if (route?.params?.caregiverId) {
+      setCaregiverId(route.params.caregiverId);
+      setCaregiverName(route.params.caregiverName ?? null);
+      return;
+    }
+    (async () => {
+      try {
+        const resident = await getResidentById(residentId);
+        if (!resident?.caregiverId) return;
+        setCaregiverId(resident.caregiverId);
+        const cgs = await getCaregivers();
+        const match = cgs.find((c: any) => String(c.id) === String(resident.caregiverId));
+        if (match) setCaregiverName(match.name);
+      } catch { /* non-blocking */ }
+    })();
+  }, [residentId]);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;

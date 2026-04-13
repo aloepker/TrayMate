@@ -348,6 +348,19 @@ export async function getResidents(): Promise<Resident[]> {
 }
 
 /**
+ * GET single resident by ID — used to look up their assigned caregiver
+ * Endpoint: /admin/residents/:id
+ */
+export async function getResidentById(id: string): Promise<Resident | null> {
+  try {
+    const raw = await request<any>(`/admin/residents/${id}`);
+    return mapResident(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * GET caregiver's assigned residents
  * Endpoint: /caregiver/residents
  * This should return ONLY residents assigned to the logged-in caregiver.

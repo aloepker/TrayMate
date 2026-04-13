@@ -58,6 +58,7 @@ import {
 import { geminiChat } from "../services/geminiService";
 import { useClock } from '../context/useClock';
 import { Picker } from "@react-native-picker/picker";
+import { getResidentById, getCaregivers, sendMessage as sendApiMessage } from '../services/api';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -787,15 +788,38 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
-  // Caregiver chat
-  const caregiverId   = route?.params?.caregiverId   as string | null ?? null;
-  const caregiverName = route?.params?.caregiverName as string | null ?? null;
+  // Caregiver chat — fetched from backend so it works regardless of navigation path
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
+
+  // Fetch assigned caregiver from backend whenever residentId is known
+  useEffect(() => {
+    if (!residentId) return;
+    // If already supplied via params, skip fetch
+    if (route?.params?.caregiverId) {
+      setCaregiverId(route.params.caregiverId);
+      setCaregiverName(route.params.caregiverName ?? null);
+      return;
+    }
+    (async () => {
+      try {
+        const resident = await getResidentById(residentId);
+        if (!resident?.caregiverId) return;
+        setCaregiverId(resident.caregiverId);
+        // Fetch caregiver name from caregivers list
+        const cgs = await getCaregivers();
+        const match = cgs.find(c => String(c.id) === String(resident.caregiverId));
+        if (match) setCaregiverName(match.name);
+      } catch { /* non-blocking */ }
+    })();
+  }, [residentId]);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;
+    const cg = caregiverName ?? 'Caregiver';
     Alert.alert(
-      `Message ${caregiverName ?? 'Caregiver'}`,
+      `Message ${cg}`,
       `Send a message about ${residentName}'s meal.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -804,9 +828,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           onPress: async () => {
             setSendingCgMsg(true);
             try {
-              const { sendMessage } = require('../services/api');
-              await sendMessage(caregiverId, `Hi, ${residentName} needs assistance with their meal. Please check in when possible.`);
-              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+              await sendApiMessage(caregiverId, `Hi, ${residentName} needs assistance with their meal. Please check in when possible.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
             } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
             finally { setSendingCgMsg(false); }
           },
@@ -816,9 +839,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           onPress: async () => {
             setSendingCgMsg(true);
             try {
-              const { sendMessage } = require('../services/api');
-              await sendMessage(caregiverId, `Hi, ${residentName} has a question about their meal. Please follow up when available.`);
-              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+              await sendApiMessage(caregiverId, `Hi, ${residentName} has a question about their meal. Please follow up when available.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
             } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
             finally { setSendingCgMsg(false); }
           },
@@ -828,9 +850,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           onPress: async () => {
             setSendingCgMsg(true);
             try {
-              const { sendMessage } = require('../services/api');
-              await sendMessage(caregiverId, `Hi, ${residentName} has a dietary concern about their current meal selection. Please review when available.`);
-              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+              await sendApiMessage(caregiverId, `Hi, ${residentName} has a dietary concern about their current meal selection. Please review when available.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
             } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
             finally { setSendingCgMsg(false); }
           },
