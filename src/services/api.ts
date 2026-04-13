@@ -205,24 +205,42 @@ type ResidentApi = {
   roomNumber?: string | number;
   room?: string | number;
 
-
   dietaryRestrictions?: any;
   foodAllergies?: any;
   medicalConditions?: any;
   medications?: any;
 
-  caregiverId?: string | null;
+  // Backend may return caregiver ID under various field names
+  caregiverId?: string | number | null;
+  caregiver_id?: string | number | null;
+  assignedCaregiverId?: string | number | null;
+  assignedCaregiver?: { id?: string | number } | null;
+  caregiver?: { id?: string | number } | null;
 };
 
 /**
  * Maps backend Resident -> frontend Resident
  * so the dashboard can display correctly.
  */
-function mapResident(api: ResidentApi): Resident {
+function mapResident(api: any): Resident {
   const builtName = [api.firstName, api.middleName, api.lastName]
     .filter((part) => String(part ?? "").trim().length > 0)
     .join(" ")
     .trim();
+
+  // Try every field name the backend might use for caregiver assignment
+  const rawCaregiverId =
+    api.caregiverId ??
+    api.caregiver_id ??
+    api.assignedCaregiverId ??
+    api.assignedCaregiver?.id ??
+    api.caregiver?.id ??
+    null;
+
+  const caregiverId =
+    rawCaregiverId !== null && rawCaregiverId !== undefined && String(rawCaregiverId).trim() !== ""
+      ? String(rawCaregiverId).trim()
+      : null;
 
   return {
     id: String(api.id),
@@ -232,7 +250,7 @@ function mapResident(api: ResidentApi): Resident {
     medicalConditions: normalizeStringArray(api.medicalConditions),
     foodAllergies: normalizeStringArray(api.foodAllergies),
     medications: normalizeStringArray(api.medications),
-    caregiverId: api.caregiverId ?? null,
+    caregiverId,
   };
 }
 

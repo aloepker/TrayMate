@@ -195,12 +195,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
   const caregiverPatientCounts = useMemo(() => {
     const map: Record<string, number> = {};
+    // Seed every caregiver with 0 using their string ID
     for (const c of caregivers) {
-      map[c.id] = 0;
+      map[String(c.id)] = 0;
     }
+    // Count residents per caregiver — normalize both sides to string so
+    // numeric IDs from backend ("5") match string caregiver IDs ("5")
     for (const r of residents) {
-      if (r.caregiverId) {
-        map[r.caregiverId] = (map[r.caregiverId] ?? 0) + 1;
+      const cid = String(r.caregiverId ?? "").trim();
+      if (cid && cid !== "null" && cid !== "undefined") {
+        map[cid] = (map[cid] ?? 0) + 1;
       }
     }
     return map;
