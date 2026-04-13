@@ -16,7 +16,6 @@ import {
   SafeAreaView,
   StatusBar,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import Feather from "react-native-vector-icons/Feather";
 import { getUserEmail } from "../../services/storage";
 /**
@@ -78,6 +77,12 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ---- Multi-caregiver map: residentId -> caregiverIds[] ----
+  const [residentCaregiversMap, setResidentCaregiversMap] = useState<Record<string, string[]>>({});
+
+  // ---- Add-caregiver dropdown modal ----
+  const [addingCaregiverToResidentId, setAddingCaregiverToResidentId] = useState<string | null>(null);
+
   const [adminEmail, setAdminEmail] = useState<string>('Admin');
   useEffect(() => {
     getUserEmail().then(e => { if (e) setAdminEmail(e); });
@@ -105,8 +110,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [editingResident, setEditingResident] = useState<Resident | null>(null);
   const [editName, setEditName] = useState("");
   const [editRoom, setEditRoom] = useState("");
-  const [editDietary, setEditDietary] = useState(""); 
-  const [editMedicalNeeds, setEditMedicalNeeds] = useState(""); 
+  const [editDietary, setEditDietary] = useState("");
+  const [editMedicalNeeds, setEditMedicalNeeds] = useState("");
 
   // ---- Confirm Delete Modal State ----
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -135,6 +140,18 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           setCaregivers(cg);
           setResidents(rs);
           setKitchenStaff(ks);
+
+          // Initialize multi-caregiver map from existing caregiverId
+          const map: Record<string, string[]> = {};
+          for (const r of rs) {
+            const rid = String(r.id);
+            if (r.caregiverId != null && String(r.caregiverId).trim() !== "") {
+              map[rid] = [String(r.caregiverId)];
+            } else {
+              map[rid] = [];
+            }
+          }
+          setResidentCaregiversMap(map);
         }
       } catch (e: any) {
         Alert.alert("Failed to load admin data", e.message);
@@ -157,6 +174,17 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     try {
       const rs = await getResidents();
       setResidents(rs);
+      // Re-sync map for new residents (don't overwrite existing multi-caregiver state)
+      setResidentCaregiversMap(prev => {
+        const next = { ...prev };
+        for (const r of rs) {
+          const rid = String(r.id);
+          if (!(rid in next)) {
+            next[rid] = r.caregiverId != null ? [String(r.caregiverId)] : [];
+          }
+        }
+        return next;
+      });
     } catch (e: any) {
       Alert.alert("Failed to refresh residents", e.message);
     }
@@ -185,43 +213,70 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
    */
   const stats = useMemo(() => {
     const total = residents.length;
-    const assigned = residents.filter((r) => r.caregiverId).length;
-    return { 
-      total, 
-      assigned, 
-      unassigned: total - assigned 
+    const assigned = residents.filter(
+      (r) => (residentCaregiversMap[String(r.id)]?.length ?? 0) > 0
+    ).length;
+    return {
+      total,
+      assigned,
+      unassigned: total - assigned
     };
-  }, [residents]);
+  }, [residents, residentCaregiversMap]);
 
   const caregiverPatientCounts = useMemo(() => {
     const map: Record<string, number> = {};
-    // Seed every caregiver with 0 using their string ID
+    // Seed every caregiver with 0
     for (const c of caregivers) {
       map[String(c.id)] = 0;
     }
-    // Count residents per caregiver — normalize both sides to string so
-    // numeric IDs from backend ("5") match string caregiver IDs ("5")
+    // Count each resident for every caregiver in their map entry
     for (const r of residents) {
-      const cid = String(r.caregiverId ?? "").trim();
-      if (cid && cid !== "null" && cid !== "undefined") {
-        map[cid] = (map[cid] ?? 0) + 1;
+      const cgIds = residentCaregiversMap[String(r.id)] ?? [];
+      for (const cid of cgIds) {
+        const key = String(cid).trim();
+        if (key && key !== "null" && key !== "undefined") {
+          map[key] = (map[key] ?? 0) + 1;
+        }
       }
     }
     return map;
-  }, [caregivers, residents]);
+  }, [caregivers, residents, residentCaregiversMap]);
 
   /**
-   * Handlers
+   * Multi-caregiver handlers
    */
-  const onAssign = async (residentId: string, caregiverId: string) => {
-    const nextCaregiverId = caregiverId === "none" ? null : caregiverId;
+  const onAddCaregiver = async (residentId: string, caregiverId: string) => {
     try {
-      await assignResident(residentId, nextCaregiverId);
-      setResidents((prev) =>
-        prev.map((r) =>
-          r.id === residentId ? { ...r, caregiverId: nextCaregiverId } : r
-        )
+      await assignResident(residentId, caregiverId);
+      setResidentCaregiversMap(prev => {
+        const existing = prev[residentId] ?? [];
+        if (existing.includes(caregiverId)) return prev;
+        return { ...prev, [residentId]: [...existing, caregiverId] };
+      });
+      setResidents(prev =>
+        prev.map(r => r.id === residentId ? { ...r, caregiverId } : r)
       );
+    } catch (e: any) {
+      Alert.alert("Assignment failed", e.message);
+    }
+  };
+
+  const onRemoveCaregiver = async (residentId: string, caregiverId: string) => {
+    const current = residentCaregiversMap[residentId] ?? [];
+    const next = current.filter(id => id !== caregiverId);
+    try {
+      if (next.length > 0) {
+        await assignResident(residentId, next[0]);
+        setResidents(prev =>
+          prev.map(r => r.id === residentId ? { ...r, caregiverId: next[0] } : r)
+        );
+      } else {
+        await assignResident(residentId, null);
+        setResidents(prev =>
+          prev.map(r => r.id === residentId ? { ...r, caregiverId: null } : r)
+        );
+      }
+      setResidentCaregiversMap(prev => ({ ...prev, [residentId]: next }));
     } catch (e: any) {
       Alert.alert("Assignment failed", e.message);
     }
@@ -254,6 +309,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       if (pendingDelete.kind === "resident") {
         await deleteEntity("resident", pendingDelete.id);
         setResidents((prev) => prev.filter((r) => r.id !== pendingDelete.id));
+        setResidentCaregiversMap(prev => {
+          const next = { ...prev };
+          delete next[pendingDelete.id];
+          return next;
+        });
       } else {
         await deleteEntity("user", pendingDelete.id);
         if (pendingDelete.kind === "caregiver") {
@@ -275,7 +335,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setEditName(r.name ?? "");
     setEditRoom(r.room ?? "");
     setEditDietary((r.dietaryRestrictions ?? []).join(", "));
-    setEditMedicalNeeds(""); 
+    setEditMedicalNeeds("");
     setShowEditResident(true);
   };
 
@@ -289,16 +349,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setResidents((prev) =>
       prev.map((r) =>
         r.id === editingResident.id
-          ? { 
-              ...r, 
-              name: editName.trim(), 
-              room: editRoom.trim(), 
-              dietaryRestrictions: nextDietary 
+          ? {
+              ...r,
+              name: editName.trim(),
+              room: editRoom.trim(),
+              dietaryRestrictions: nextDietary
             }
           : r
       )
     );
-    Alert.alert("Updated (UI only)", "Backend update endpoint isn’t ready yet.");
+    Alert.alert("Updated (UI only)", "Backend update endpoint isn't ready yet.");
     setShowEditResident(false);
     setEditingResident(null);
   };
@@ -310,14 +370,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
     try {
       setSavingCaregiver(true);
-      await createCaregiver({ 
-        name: cgName.trim(), 
-        email: cgEmail.trim(), 
-        password: cgPassword 
+      await createCaregiver({
+        name: cgName.trim(),
+        email: cgEmail.trim(),
+        password: cgPassword
       });
       await refreshCaregivers();
-      setCgName(""); 
-      setCgEmail(""); 
+      setCgName("");
+      setCgEmail("");
       setCgPassword("");
       setShowAddCaregiver(false);
     } catch (e: any) {
@@ -334,14 +394,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
     try {
       setSavingKitchen(true);
-      await createKitchenStaff({ 
-        name: ksName.trim(), 
-        email: ksEmail.trim(), 
-        password: ksPassword 
+      await createKitchenStaff({
+        name: ksName.trim(),
+        email: ksEmail.trim(),
+        password: ksPassword
       });
       await refreshKitchen();
-      setKsName(""); 
-      setKsEmail(""); 
+      setKsName("");
+      setKsEmail("");
       setKsPassword("");
       setShowAddKitchen(false);
     } catch (e: any) {
@@ -354,7 +414,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   return (
     <SafeAreaView style={styles.page}>
       <StatusBar barStyle="dark-content" />
-      
+
       {/* HEADER SECTION */}
       <View style={styles.topBar}>
         <View style={styles.brand}>
@@ -405,26 +465,26 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
           {/* STATS ROW */}
           <View style={styles.statsRow}>
-            <StatCard 
-              icon="👥" 
-              label="Total Residents" 
-              value={stats.total} 
-              border="#D7D0A8" 
-              iconBg="#6D6B3B" 
+            <StatCard
+              icon="👥"
+              label="Total Residents"
+              value={stats.total}
+              border="#D7D0A8"
+              iconBg="#6D6B3B"
             />
-            <StatCard 
-              icon="✅" 
-              label="Assigned" 
-              value={stats.assigned} 
-              border="#B9E6C2" 
-              iconBg="#0A8F3E" 
+            <StatCard
+              icon="✅"
+              label="Assigned"
+              value={stats.assigned}
+              border="#B9E6C2"
+              iconBg="#0A8F3E"
             />
-            <StatCard 
-              icon="🧑‍🤝‍🧑" 
-              label="Unassigned" 
-              value={stats.unassigned} 
-              border="#F2D57E" 
-              iconBg="#D87000" 
+            <StatCard
+              icon="🧑‍🤝‍🧑"
+              label="Unassigned"
+              value={stats.unassigned}
+              border="#F2D57E"
+              iconBg="#D87000"
             />
           </View>
 
@@ -444,8 +504,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                 <Text style={styles.emptyText}>No caregivers found.</Text>
               )}
             </View>
-            <Pressable 
-              style={styles.outlineBtn} 
+            <Pressable
+              style={styles.outlineBtn}
               onPress={() => setShowAddCaregiver(true)}
             >
               <View style={styles.btnRow}>
@@ -460,82 +520,114 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             {!residents.length && (
               <Text style={styles.emptyText}>No residents found.</Text>
             )}
-            {residents.map((r, idx) => (
-              <View key={r.id || `res-${idx}`} style={styles.assignRow}>
-                {/* Top: Resident info + action icons */}
-                <View style={styles.assignTopRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.personName}>{r.name}</Text>
-                    <Text style={styles.personMeta}>Room {r.room}</Text>
-                    <View style={styles.chipRow}>
-                      {(r.dietaryRestrictions ?? []).length ? (
-                        r.dietaryRestrictions.map((tag, i) => (
-                          <View key={`${r.id}-tag-${i}`} style={styles.chip}>
-                            <Text style={styles.chipText}>{tag}</Text>
-                          </View>
-                        ))
-                      ) : (
-                        <Text style={styles.restrictionsMuted}>No restrictions</Text>
+            {residents.map((r, idx) => {
+              const rid = String(r.id);
+              const assignedCgIds = residentCaregiversMap[rid] ?? [];
+              const assignedCaregivers = caregivers.filter(c => assignedCgIds.includes(String(c.id)));
+              const unassignedCaregivers = caregivers.filter(c => !assignedCgIds.includes(String(c.id)));
+
+              // Merge all restriction/condition arrays for display
+              const allTags = [
+                ...(r.dietaryRestrictions ?? []),
+                ...(r.foodAllergies ?? []),
+                ...(r.medicalConditions ?? []),
+              ];
+
+              return (
+                <View key={r.id || `res-${idx}`} style={styles.assignRow}>
+                  {/* Top: Resident info + action icons */}
+                  <View style={styles.assignTopRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.personName}>{r.name}</Text>
+                      <Text style={styles.personMeta}>Room {r.room}</Text>
+                      <View style={styles.chipRow}>
+                        {allTags.length > 0 ? (
+                          allTags.map((tag, i) => (
+                            <View key={`${r.id}-tag-${i}`} style={styles.chip}>
+                              <Text style={styles.chipText}>{tag}</Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.restrictionsMuted}>No restrictions</Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.actionIcons}>
+                      <Pressable
+                        style={styles.iconBtn}
+                        onPress={() => openEditResident(r)}
+                        hitSlop={10}
+                      >
+                        <Feather name="edit-2" size={18} color="#6D6B3B" />
+                      </Pressable>
+                      <Pressable
+                        style={styles.iconBtn}
+                        onPress={() => askDeleteResident(r.id)}
+                        hitSlop={10}
+                      >
+                        <Feather name="trash-2" size={18} color="#6D6B3B" />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {/* Caregiver assignment area */}
+                  <View style={styles.caregiverAssignArea}>
+                    <Text style={styles.caregiverAssignLabel}>Assigned Caregivers</Text>
+
+                    {assignedCgIds.length === 0 && (
+                      <View style={styles.noCaregiversBadge}>
+                        <Text style={styles.noCaregiversText}>⚠ No caregiver assigned</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.caregiverChipRow}>
+                      {assignedCaregivers.map((cg) => (
+                        <View key={`assigned-${rid}-${cg.id}`} style={styles.caregiverChip}>
+                          <Text style={styles.caregiverChipText}>{cg.name}</Text>
+                          <Pressable
+                            onPress={() => onRemoveCaregiver(rid, String(cg.id))}
+                            hitSlop={8}
+                            style={styles.caregiverChipX}
+                          >
+                            <Text style={styles.caregiverChipXText}>✕</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+
+                      {unassignedCaregivers.length > 0 && (
+                        <Pressable
+                          style={styles.addCaregiverChip}
+                          onPress={() => setAddingCaregiverToResidentId(rid)}
+                        >
+                          <Text style={styles.addCaregiverChipText}>＋ Add caregiver</Text>
+                        </Pressable>
                       )}
                     </View>
                   </View>
-                  <View style={styles.actionIcons}>
+
+                  {/* Bottom: Select Resident button */}
+                  <View style={styles.assignBottomRow}>
                     <Pressable
-                      style={styles.iconBtn}
-                      onPress={() => openEditResident(r)}
+                      style={styles.selectResidentBtn}
+                      onPress={() =>
+                        navigation.navigate("BrowseMealOptions", {
+                          residentId: r.id,
+                          residentName: r.name,
+                          dietaryRestrictions: r.dietaryRestrictions ?? [],
+                          foodAllergies: r.foodAllergies ?? [],
+                        })
+                      }
                       hitSlop={10}
                     >
-                      <Feather name="edit-2" size={18} color="#6D6B3B" />
-                    </Pressable>
-                    <Pressable
-                      style={styles.iconBtn}
-                      onPress={() => askDeleteResident(r.id)}
-                      hitSlop={10}
-                    >
-                      <Feather name="trash-2" size={18} color="#6D6B3B" />
+                      <Feather name="log-in" size={16} color="#FFFFFF" />
+                      <Text style={styles.selectResidentBtnText}>Select Resident</Text>
                     </Pressable>
                   </View>
                 </View>
-
-                {/* Bottom: Caregiver picker + Meals button */}
-                <View style={styles.assignBottomRow}>
-                  <View style={styles.pickerWrap}>
-                    <Picker
-                      selectedValue={r.caregiverId ?? "none"}
-                      onValueChange={(val) => onAssign(r.id, String(val))}
-                      style={styles.picker}
-                    >
-                      <Picker.Item label="Select caregiver" value="none" />
-                      {caregivers.map((c, cIdx) => (
-                        <Picker.Item
-                          key={c.id || c.email || `cg-opt-${cIdx}`}
-                          label={c.name}
-                          value={c.id}
-                        />
-                      ))}
-                    </Picker>
-                  </View>
-                  <Pressable
-                    style={styles.selectResidentBtn}
-                    onPress={() =>
-                      navigation.navigate("BrowseMealOptions", {
-                        residentId: r.id,
-                        residentName: r.name,
-                        dietaryRestrictions: r.dietaryRestrictions ?? [],
-                        foodAllergies: r.foodAllergies ?? [],
-                      })
-                    }
-                    hitSlop={10}
-                  >
-                    <Feather name="log-in" size={16} color="#FFFFFF" />
-                    <Text style={styles.selectResidentBtnText}>Select Resident</Text>
-                  </Pressable>
-
-                </View>
-              </View>
-            ))}
-            <Pressable 
-              style={styles.outlineBtn} 
+              );
+            })}
+            <Pressable
+              style={styles.outlineBtn}
               onPress={() => setShowAddResident(true)}
             >
               <View style={styles.btnRow}>
@@ -561,8 +653,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                 <Text style={styles.emptyText}>No kitchen staff found.</Text>
               )}
             </View>
-            <Pressable 
-              style={styles.outlineBtn} 
+            <Pressable
+              style={styles.outlineBtn}
               onPress={() => setShowAddKitchen(true)}
             >
               <View style={styles.btnRow}>
@@ -575,17 +667,17 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       )}
 
       {/* EXTERNAL MODALS */}
-      <AddResidentModal 
-        visible={showAddResident} 
-        onClose={() => setShowAddResident(false)} 
-        onSuccess={refreshResidents} 
+      <AddResidentModal
+        visible={showAddResident}
+        onClose={() => setShowAddResident(false)}
+        onSuccess={refreshResidents}
       />
-      <ConfirmDeleteModal 
-        visible={confirmDeleteOpen} 
-        kind={pendingDelete?.kind ?? null} 
-        loading={deleteLoading} 
-        onCancel={closeConfirmDelete} 
-        onConfirm={confirmDelete} 
+      <ConfirmDeleteModal
+        visible={confirmDeleteOpen}
+        kind={pendingDelete?.kind ?? null}
+        loading={deleteLoading}
+        onCancel={closeConfirmDelete}
+        onConfirm={confirmDelete}
       />
 
       {/* EDIT RESIDENT MODAL */}
@@ -598,38 +690,38 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                 <Feather name="x" size={22} color="#111827" />
               </Pressable>
             </View>
-            
+
             <Text style={styles.modalLabel}>Name</Text>
-            <TextInput 
-              value={editName} 
-              onChangeText={setEditName} 
-              style={styles.modalInput} 
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Room</Text>
-            <TextInput 
-              value={editRoom} 
-              onChangeText={setEditRoom} 
-              style={styles.modalInput} 
-              autoCapitalize="characters" 
+            <TextInput
+              value={editRoom}
+              onChangeText={setEditRoom}
+              style={styles.modalInput}
+              autoCapitalize="characters"
             />
-            
+
             <Text style={styles.modalLabel}>Dietary Restrictions</Text>
-            <TextInput 
-              value={editDietary} 
-              onChangeText={setEditDietary} 
-              style={styles.modalInput} 
+            <TextInput
+              value={editDietary}
+              onChangeText={setEditDietary}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Medical Needs</Text>
-            <TextInput 
-              value={editMedicalNeeds} 
-              onChangeText={setEditMedicalNeeds} 
-              style={styles.modalInput} 
+            <TextInput
+              value={editMedicalNeeds}
+              onChangeText={setEditMedicalNeeds}
+              style={styles.modalInput}
             />
-            
-            <Pressable 
-              style={styles.modalPrimaryBtn} 
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
               onPress={submitEditResidentUIOnly}
             >
               <Text style={styles.modalPrimaryText}>Update Resident</Text>
@@ -646,34 +738,34 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Add Caregiver</Text>
-            
+
             <Text style={styles.modalLabel}>Full name</Text>
-            <TextInput 
-              value={cgName} 
-              onChangeText={setCgName} 
-              style={styles.modalInput} 
+            <TextInput
+              value={cgName}
+              onChangeText={setCgName}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Email</Text>
-            <TextInput 
-              value={cgEmail} 
-              onChangeText={setCgEmail} 
-              keyboardType="email-address" 
-              autoCapitalize="none" 
-              style={styles.modalInput} 
+            <TextInput
+              value={cgEmail}
+              onChangeText={setCgEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Password</Text>
-            <TextInput 
-              value={cgPassword} 
-              onChangeText={setCgPassword} 
-              secureTextEntry 
-              style={styles.modalInput} 
+            <TextInput
+              value={cgPassword}
+              onChangeText={setCgPassword}
+              secureTextEntry
+              style={styles.modalInput}
             />
-            
-            <Pressable 
-              style={styles.modalPrimaryBtn} 
-              onPress={submitCaregiver} 
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitCaregiver}
               disabled={savingCaregiver}
             >
               <Text style={styles.modalPrimaryText}>
@@ -692,34 +784,34 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Add Kitchen Staff</Text>
-            
+
             <Text style={styles.modalLabel}>Full name</Text>
-            <TextInput 
-              value={ksName} 
-              onChangeText={setKsName} 
-              style={styles.modalInput} 
+            <TextInput
+              value={ksName}
+              onChangeText={setKsName}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Email</Text>
-            <TextInput 
-              value={ksEmail} 
-              onChangeText={setKsEmail} 
-              keyboardType="email-address" 
-              autoCapitalize="none" 
-              style={styles.modalInput} 
+            <TextInput
+              value={ksEmail}
+              onChangeText={setKsEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Password</Text>
-            <TextInput 
-              value={ksPassword} 
-              onChangeText={setKsPassword} 
-              secureTextEntry 
-              style={styles.modalInput} 
+            <TextInput
+              value={ksPassword}
+              onChangeText={setKsPassword}
+              secureTextEntry
+              style={styles.modalInput}
             />
-            
-            <Pressable 
-              style={styles.modalPrimaryBtn} 
-              onPress={submitKitchenStaff} 
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitKitchenStaff}
               disabled={savingKitchen}
             >
               <Text style={styles.modalPrimaryText}>
@@ -731,6 +823,52 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             </Pressable>
           </View>
         </View>
+      </Modal>
+
+      {/* ADD CAREGIVER TO RESIDENT DROPDOWN MODAL */}
+      <Modal
+        visible={addingCaregiverToResidentId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddingCaregiverToResidentId(null)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setAddingCaregiverToResidentId(null)}
+        >
+          <View style={styles.dropdownCard}>
+            <Text style={styles.dropdownTitle}>Select a Caregiver</Text>
+            {addingCaregiverToResidentId !== null && (() => {
+              const rid = addingCaregiverToResidentId;
+              const assignedIds = residentCaregiversMap[rid] ?? [];
+              const available = caregivers.filter(c => !assignedIds.includes(String(c.id)));
+              if (available.length === 0) {
+                return (
+                  <Text style={styles.dropdownEmpty}>All caregivers are already assigned.</Text>
+                );
+              }
+              return available.map((cg) => (
+                <Pressable
+                  key={`dropdown-${cg.id}`}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    onAddCaregiver(rid, String(cg.id));
+                    setAddingCaregiverToResidentId(null);
+                  }}
+                >
+                  <Text style={styles.dropdownItemName}>{cg.name}</Text>
+                  <Text style={styles.dropdownItemEmail}>{cg.email}</Text>
+                </Pressable>
+              ));
+            })()}
+            <Pressable
+              style={styles.dropdownCancel}
+              onPress={() => setAddingCaregiverToResidentId(null)}
+            >
+              <Text style={styles.dropdownCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
       </Modal>
 
       {/* MESSAGES MODAL */}
@@ -792,9 +930,9 @@ function MiniCard({ name, email, footer, onDelete }: { name: string; email: stri
  */
 
 const styles = StyleSheet.create({
-  page: { 
-    flex: 1, 
-    backgroundColor: "#DCD3B8" 
+  page: {
+    flex: 1,
+    backgroundColor: "#DCD3B8"
   },
   topBar: {
     height: 74,
@@ -806,25 +944,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 10 
+  brand: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
   },
-  logo: { 
-    width: 34, 
-    height: 34, 
-    borderRadius: 6 
+  logo: {
+    width: 34,
+    height: 34,
+    borderRadius: 6
   },
-  brandTitle: { 
-    fontSize: 18, 
-    fontWeight: "900", 
-    color: "#1C1C1C" 
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1C1C1C"
   },
-  brandSub: { 
-    fontSize: 12, 
-    color: "#6F6F6F", 
-    marginTop: 1 
+  brandSub: {
+    fontSize: 12,
+    color: "#6F6F6F",
+    marginTop: 1
   },
   topBarRight: {
     flexDirection: 'row',
@@ -891,56 +1029,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  logoutText: { 
-    fontWeight: "800", 
-    color: "#3C3C3C", 
-    fontSize: 14 
+  logoutText: {
+    fontWeight: "800",
+    color: "#3C3C3C",
+    fontSize: 14
   },
-  loadingWrap: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    padding: 24 
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24
   },
-  loadingText: { 
-    marginTop: 10, 
-    fontSize: 14, 
-    color: "#5A5A5A", 
-    fontWeight: "700" 
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#5A5A5A",
+    fontWeight: "700"
   },
-  container: { 
-    paddingHorizontal: 20, 
-    paddingTop: 18, 
-    paddingBottom: 40, 
-    width: "100%", 
-    maxWidth: 1100, 
-    alignSelf: "center" 
+  container: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 40,
+    width: "100%",
+    maxWidth: 1100,
+    alignSelf: "center"
   },
-  h1: { 
-    fontSize: 34, 
-    fontWeight: "900", 
-    color: "#141414" 
+  h1: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#141414"
   },
-  subtitle: { 
-    marginTop: 8, 
-    fontSize: 14, 
-    color: "#5A5A5A" 
+  subtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#5A5A5A"
   },
-  statsRow: { 
-    flexDirection: "row", 
-    gap: 18, 
-    marginTop: 18, 
-    flexWrap: "wrap" 
+  statsRow: {
+    flexDirection: "row",
+    gap: 18,
+    marginTop: 18,
+    flexWrap: "wrap"
   },
-  statCard: { 
-    minWidth: 280, 
-    flex: 1, 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 16, 
-    padding: 18, 
-    borderWidth: 2, 
-    flexDirection: "row", 
-    alignItems: "center", 
+  statCard: {
+    minWidth: 280,
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 2,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     ...Platform.select({
       ios: {
@@ -954,32 +1092,32 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  statIcon: { 
-    width: 46, 
-    height: 46, 
-    borderRadius: 14, 
-    alignItems: "center", 
-    justifyContent: "center" 
+  statIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center"
   },
-  statIconText: { 
-    fontSize: 18, 
-    color: "#FFFFFF" 
+  statIconText: {
+    fontSize: 18,
+    color: "#FFFFFF"
   },
-  statLabel: { 
-    fontSize: 13, 
-    color: "#6A6A6A", 
-    fontWeight: "800" 
+  statLabel: {
+    fontSize: 13,
+    color: "#6A6A6A",
+    fontWeight: "800"
   },
-  statValue: { 
-    marginTop: 3, 
-    fontSize: 26, 
-    fontWeight: "900", 
-    color: "#121212" 
+  statValue: {
+    marginTop: 3,
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#121212"
   },
-  sectionCard: { 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 18, 
-    padding: 20, 
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
     marginTop: 18,
     ...Platform.select({
       ios: {
@@ -993,75 +1131,76 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  sectionTitle: { 
-    fontSize: 18, 
-    fontWeight: "900", 
-    color: "#1A1A1A" 
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1A1A1A"
   },
-  grid: { 
-    flexDirection: "row", 
-    flexWrap: "wrap", 
-    gap: 14 
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14
   },
-  miniCard: { 
-    flexGrow: 1, 
-    flexBasis: 220, 
-    backgroundColor: "#F8F8F8", 
-    borderRadius: 14, 
-    padding: 14, 
-    position: "relative" 
+  miniCard: {
+    flexGrow: 0,
+    flexBasis: 220,
+    maxWidth: 280,
+    backgroundColor: "#F8F8F8",
+    borderRadius: 14,
+    padding: 14,
+    position: "relative"
   },
-  cardTrash: { 
-    position: "absolute", 
-    top: 10, 
-    right: 10, 
-    width: 28, 
-    height: 28, 
-    borderRadius: 10, 
-    alignItems: "center", 
-    justifyContent: "center", 
-    zIndex: 10 
+  cardTrash: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10
   },
-  miniName: { 
-    fontSize: 14, 
-    fontWeight: "900", 
-    color: "#1A1A1A" 
+  miniName: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#1A1A1A"
   },
-  miniEmail: { 
-    marginTop: 4, 
-    fontSize: 12, 
-    color: "#6A6A6A" 
+  miniEmail: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6A6A6A"
   },
-  miniFooter: { 
-    marginTop: 10, 
-    fontSize: 12, 
-    color: "#7A7A7A", 
-    fontWeight: "700" 
+  miniFooter: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "#7A7A7A",
+    fontWeight: "700"
   },
-  outlineBtn: { 
-    marginTop: 14, 
-    alignSelf: "flex-start", 
-    borderWidth: 1, 
-    borderColor: "#B5AE8C", 
-    backgroundColor: "#FFFFFF", 
-    paddingHorizontal: 14, 
-    paddingVertical: 10, 
-    borderRadius: 10 
+  outlineBtn: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#B5AE8C",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10
   },
-  btnRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 8 
+  btnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
   },
-  outlineBtnText: { 
-    fontWeight: "900", 
-    color: "#4A4A4A" 
+  outlineBtnText: {
+    fontWeight: "900",
+    color: "#4A4A4A"
   },
-  emptyText: { 
-    fontSize: 13, 
-    color: "#6A6A6A", 
-    fontWeight: "700", 
-    marginTop: 6 
+  emptyText: {
+    fontSize: 13,
+    color: "#6A6A6A",
+    fontWeight: "700",
+    marginTop: 6
   },
   assignRow: {
     backgroundColor: "#F8F8F8",
@@ -1086,48 +1225,112 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
   },
-  personName: { 
-    fontSize: 14, 
-    fontWeight: "900", 
-    color: "#1A1A1A" 
+  personName: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#1A1A1A"
   },
-  personMeta: { 
-    marginTop: 4, 
-    fontSize: 12, 
-    color: "#6A6A6A" 
+  personMeta: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6A6A6A"
   },
-  chipRow: { 
-    flexDirection: "row", 
-    flexWrap: "wrap", 
-    gap: 8, 
-    marginTop: 8 
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8
   },
-  chip: { 
-    backgroundColor: "#F7E7B5", 
-    borderRadius: 8, 
-    paddingHorizontal: 10, 
-    paddingVertical: 6 
+  chip: {
+    backgroundColor: "#F7E7B5",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6
   },
-  chipText: { 
-    fontSize: 12, 
-    fontWeight: "800", 
-    color: "#7A4B00" 
+  chipText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#7A4B00"
   },
-  restrictionsMuted: { 
-    fontSize: 12, 
-    color: "#7A7A7A", 
-    fontWeight: "700" 
+  restrictionsMuted: {
+    fontSize: 12,
+    color: "#7A7A7A",
+    fontWeight: "700"
   },
-  pickerWrap: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
+  caregiverAssignArea: {
+    marginTop: 4,
+  },
+  caregiverAssignLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#6A6A6A",
+    marginBottom: 8,
+  },
+  noCaregiversBadge: {
+    backgroundColor: "#FFF3CD",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#E3E3E3",
+    borderColor: "#F5A623",
   },
-  picker: {
-    height: 52,
-    width: "100%",
+  noCaregiversText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#9A6700",
+  },
+  caregiverChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+  caregiverChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E8F4E8",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#B2D8B2",
+  },
+  caregiverChipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#1A5C1A",
+  },
+  caregiverChipX: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#B2D8B2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  caregiverChipXText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#1A5C1A",
+  },
+  addCaregiverChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7E6",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#F5A623",
+    borderStyle: "dashed",
+  },
+  addCaregiverChipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#B86B00",
   },
   iconBtn: {
     width: 34,
@@ -1238,53 +1441,53 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   modalBackdrop: {
-    flex: 1, 
-    backgroundColor: "rgba(0,0,0,0.35)", 
-    justifyContent: "center", 
-    alignItems: "center", 
-    padding: 20 
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20
   },
-  modalCard: { 
-    width: "100%", 
-    maxWidth: 520, 
-    backgroundColor: "#fff", 
-    borderRadius: 16, 
-    padding: 18 
+  modalCard: {
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18
   },
-  modalHeaderRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between", 
-    marginBottom: 6 
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6
   },
-  modalTitle: { 
-    fontSize: 18, 
-    fontWeight: "900", 
-    marginBottom: 10 
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 10
   },
-  modalLabel: { 
-    fontSize: 13, 
-    fontWeight: "800", 
-    marginTop: 10, 
-    marginBottom: 6 
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 10,
+    marginBottom: 6
   },
-  modalInput: { 
-    backgroundColor: "#F3F3F3", 
-    borderRadius: 12, 
-    paddingHorizontal: 14, 
-    paddingVertical: 12, 
-    fontSize: 15 
+  modalInput: {
+    backgroundColor: "#F3F3F3",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15
   },
-  modalPrimaryBtn: { 
-    marginTop: 16, 
-    backgroundColor: "#111827", 
-    borderRadius: 12, 
-    paddingVertical: 14, 
-    alignItems: "center" 
+  modalPrimaryBtn: {
+    marginTop: 16,
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center"
   },
-  modalPrimaryText: { 
-    color: "#fff", 
-    fontWeight: "900" 
+  modalPrimaryText: {
+    color: "#fff",
+    fontWeight: "900"
   },
   modalCancel: {
     marginTop: 12,
@@ -1316,5 +1519,66 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
     marginBottom: 4,
+  },
+  // Dropdown modal for adding caregivers
+  dropdownCard: {
+    width: "100%",
+    maxWidth: 400,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  dropdownTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1A1A1A",
+    marginBottom: 14,
+  },
+  dropdownEmpty: {
+    fontSize: 13,
+    color: "#7A7A7A",
+    fontWeight: "700",
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#F8F8F8",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+  },
+  dropdownItemName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1A1A1A",
+  },
+  dropdownItemEmail: {
+    fontSize: 12,
+    color: "#6A6A6A",
+    marginTop: 2,
+  },
+  dropdownCancel: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  dropdownCancelText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#6B7280",
   },
 });
