@@ -601,3 +601,79 @@ export async function searchOrdersApi(
     `/mealOrders/search?mealOfDay=${encodeURIComponent(mealOfDay)}&date=${encodeURIComponent(date)}`
   );
 }
+
+
+
+// ========================= MESSAGING API =========================
+
+export type ChatPreview = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  senderName: string;
+  receiverName: string;
+  content: string;
+  createdAt: string;
+  isRead: boolean;
+};
+
+export type Message = {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  createdAt: string;
+  isRead: boolean;
+};
+
+// GET chats (left side list)
+export async function getChats(): Promise<ChatPreview[]> {
+  return request<ChatPreview[]>("/messages/chats");
+}
+
+// GET conversation between users
+export async function getConversation(otherUserId: string): Promise<Message[]> {
+  return request<Message[]>(`/messages/conversation/${otherUserId}`);
+}
+
+// POST send message
+export async function sendMessage(
+  receiverId: string,
+  content: string
+): Promise<void> {
+  await request<void>("/messages/send", {
+    method: "POST",
+    body: JSON.stringify({
+      receiverId: Number(receiverId),
+      content,
+    }),
+  });
+}
+
+// GET users available for messaging (e.g. to populate the "To" field)
+export type MessageUser = {
+  id: string;
+  fullName: string;
+  role: string;
+};
+
+export async function getMessageUsers(): Promise<MessageUser[]> {
+  const raw = await request<any[]>("/messages/users");
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((user: any) => ({
+    id: String(user.id),
+    fullName: String(user.fullName ?? ""),
+    role: String(user.role ?? ""),
+  }));
+}
+
+export async function getMe(): Promise<{ id: string; fullName: string; role: string }> {
+  const raw = await request<any>("/auth/me");
+  return {
+    id: String(raw.id),
+    fullName: String(raw.fullName ?? ""),
+    role: String(raw.role ?? ""),
+  };
+}

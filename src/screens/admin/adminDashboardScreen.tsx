@@ -1,3 +1,5 @@
+// src/screens/admin/adminDashboardScreen.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -22,6 +24,7 @@ import { getUserEmail } from "../../services/storage";
  */
 import AddResidentModal from "../components/AddResidentModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
+import MessagesModal from "../components/messaging/MessagesModal";
 
 import {
   Caregiver,
@@ -49,6 +52,7 @@ type DeleteKind = "resident" | "caregiver" | "kitchen";
 
 export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   // ---- Core Data State ----
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
@@ -341,6 +345,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
         <View style={styles.topBarRight}>
+          <Pressable
+            style={styles.logoutBtn}
+            onPress={() => {
+              setShowMessagesModal(true);
+            }}
+          >
+            <Text style={styles.logoutText}>Messages</Text>
+          </Pressable>
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -690,6 +702,12 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
       </Modal>
+
+      {/* MESSAGES MODAL */}
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
 
     </SafeAreaView>
   );
@@ -1228,6 +1246,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "800",
     color: "#6B7280"
+  },
+  msgKitchenBtn: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    marginLeft: 8,
+  },
+  msgKitchenText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#D87000',
   },
   composeSheet: {
     backgroundColor: '#FFFFFF',
