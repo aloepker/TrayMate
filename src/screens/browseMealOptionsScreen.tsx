@@ -789,7 +789,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Navigate to settings with resident context
   const goToSettings = () => {
-    navigation.navigate('Settings', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
+    navigation.navigate('Settings', {
+      residentId,
+      residentName,
+      dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
+      foodAllergies: route?.params?.foodAllergies ?? [],
+    });
   };
 
   // Fetch meals from API (async)

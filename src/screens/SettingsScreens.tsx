@@ -42,8 +42,6 @@ function SettingsScreen({ navigation, route }: any) {
     scaled,
     accessibility,
     toggleAccessibility,
-    notifications,
-    toggleNotification,
     theme,
     getTouchTargetSize,
     setCurrentResidentId,
@@ -65,11 +63,13 @@ function SettingsScreen({ navigation, route }: any) {
   const residentName: string =
     localResident?.fullName ?? route?.params?.residentName ?? '';
 
+  // Merge local CSV restrictions + backend dietaryRestrictions + foodAllergies params
   const dietaryPills: string[] = localResident
     ? localResident.dietaryRestrictions.map(r => r.name)
-    : Array.isArray(route?.params?.dietaryRestrictions) && route.params.dietaryRestrictions.length > 0
-      ? (route.params.dietaryRestrictions as string[])
-      : [];
+    : [
+        ...(Array.isArray(route?.params?.dietaryRestrictions) ? route.params.dietaryRestrictions as string[] : []),
+        ...(Array.isArray(route?.params?.foodAllergies)       ? route.params.foodAllergies       as string[] : []),
+      ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -240,48 +240,6 @@ function SettingsScreen({ navigation, route }: any) {
                 <Text style={[styles.noPillsText, { fontSize: scaled(13), color: theme.textSecondary }]}>None recorded</Text>
               )}
             </View>
-            <View style={[styles.caregiverNotice, { backgroundColor: hc ? '#1A1A00' : '#FEF9F0' }]}>
-              <Feather name="lock" size={14} color="#8A7A5A" style={{ marginTop: 2 }} />
-              <Text style={[styles.caregiverText, { fontSize: scaled(13), color: theme.textSecondary }]}>
-                {t.managedByCaregiver}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ==================== NOTIFICATIONS ==================== */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.notifications}</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <SettingSwitch
-              label={t.mealReminders}
-              description={t.mealRemindersDesc}
-              value={notifications.mealReminders}
-              onToggle={() => toggleNotification('mealReminders')}
-              fontSize={scaled(16)}
-              descFontSize={scaled(13)}
-              minHeight={touchTarget}
-            />
-            <View style={styles.divider} />
-            <SettingSwitch
-              label={t.orderUpdates}
-              description={t.orderUpdatesDesc}
-              value={notifications.orderUpdates}
-              onToggle={() => toggleNotification('orderUpdates')}
-              fontSize={scaled(16)}
-              descFontSize={scaled(13)}
-              minHeight={touchTarget}
-            />
-            <View style={styles.divider} />
-            <SettingSwitch
-              label={t.menuUpdates}
-              description={t.menuUpdatesDesc}
-              value={notifications.menuUpdates}
-              onToggle={() => toggleNotification('menuUpdates')}
-              fontSize={scaled(16)}
-              descFontSize={scaled(13)}
-              minHeight={touchTarget}
-            />
           </View>
         </View>
 
