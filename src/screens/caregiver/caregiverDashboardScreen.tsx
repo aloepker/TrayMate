@@ -23,6 +23,8 @@ import {
   getCaregiverNotifications,
 } from "../../services/api";
 import { useKitchenMessages } from "../context/KitchenMessageContext";
+import StaffChatModal from "../components/StaffChatModal";
+import { getUserEmail } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -34,7 +36,14 @@ export default function CaregiverDashboardScreen({
   navigation,
 }: CaregiverDashboardProps) {
   // Kitchen messages from context (sent by kitchen staff per order)
-  const { messages: kitchenMessages, unreadCount: kitchenUnread } = useKitchenMessages();
+  const { messages: kitchenMessages, unreadCount: kitchenUnread, staffUnreadCount } = useKitchenMessages();
+
+  // Staff chat modal
+  const [showStaffChat, setShowStaffChat] = useState(false);
+  const [caregiverEmail, setCaregiverEmail] = useState<string>('Caregiver');
+  useEffect(() => {
+    getUserEmail().then(e => { if (e) setCaregiverEmail(e); });
+  }, []);
 
   // -----------------------------
   // Main screen state
@@ -215,6 +224,18 @@ export default function CaregiverDashboardScreen({
         </View>
 
         <View style={styles.topBarRight}>
+          {/* Staff messages */}
+          <Pressable style={styles.chatIconBtn} onPress={() => setShowStaffChat(true)}>
+            <Feather name="message-square" size={20} color="#6D6B3B" />
+            {staffUnreadCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {staffUnreadCount > 9 ? "9+" : staffUnreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+
           {/* Kitchen messages bell */}
           {kitchenUnread > 0 && (
             <View style={styles.kitchenAlertBadge}>
@@ -474,6 +495,14 @@ export default function CaregiverDashboardScreen({
         </View>
       </Modal>
 
+      {/* Staff Chat Modal */}
+      <StaffChatModal
+        visible={showStaffChat}
+        onClose={() => setShowStaffChat(false)}
+        senderName={caregiverEmail}
+        senderRole="caregiver"
+      />
+
     </SafeAreaView>
   );
 }
@@ -588,6 +617,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  chatIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F5F3EF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  chatBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',

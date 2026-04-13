@@ -36,7 +36,7 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   senderName: string;
-  senderRole: 'kitchen' | 'admin';
+  senderRole: 'kitchen' | 'admin' | 'caregiver';
 }
 
 export default function StaffChatModal({ visible, onClose, senderName, senderRole }: Props) {
