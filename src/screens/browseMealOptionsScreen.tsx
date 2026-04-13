@@ -998,25 +998,25 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
     if (!mainMeal) return;
 
-    // Pick drink from past orders or fall back to first available drink
+    // Pick drink from past orders or fall back to first safe available drink
+    const safeDrinks = availableDrinks.filter(isSafeForResident);
     const pastDrink = allPastItems.find((i) => i.meal_period === 'Drinks');
     let suggestDrink: Meal | undefined;
     if (pastDrink) {
-      suggestDrink = availableDrinks.find((d) => String(d.id) === String(pastDrink.id) || d.name === pastDrink.name);
+      const candidate = safeDrinks.find((d) => String(d.id) === String(pastDrink.id) || d.name === pastDrink.name);
+      suggestDrink = candidate ?? safeDrinks[0];
     }
-    if (!suggestDrink && availableDrinks.length > 0) {
-      suggestDrink = availableDrinks[0];
-    }
+    if (!suggestDrink) suggestDrink = safeDrinks[0];
 
-    // Pick dessert/side from past orders or fall back to first available side
+    // Pick dessert/side from past orders or fall back to first safe available side
+    const safeSides = availableSides.filter(isSafeForResident);
     const pastDessert = allPastItems.find((i) => i.meal_period === 'Sides');
     let suggestDessert: Meal | undefined;
     if (pastDessert) {
-      suggestDessert = availableSides.find((s) => String(s.id) === String(pastDessert.id) || s.name === pastDessert.name);
+      const candidate = safeSides.find((s) => String(s.id) === String(pastDessert.id) || s.name === pastDessert.name);
+      suggestDessert = candidate ?? safeSides[0];
     }
-    if (!suggestDessert && availableSides.length > 0) {
-      suggestDessert = availableSides[0];
-    }
+    if (!suggestDessert) suggestDessert = safeSides[0];
 
     setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
   }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime]);
@@ -1667,7 +1667,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         onClose={() => setShowAIChat(false)}
         residentName={residentName}
         residentId={residentId || ResidentService.getDefaultResident().id}
-        dietaryRestrictions={route?.params?.dietaryRestrictions || []}
+        dietaryRestrictions={[
+          ...(route?.params?.dietaryRestrictions ?? []),
+          ...(route?.params?.foodAllergies ?? []),
+        ]}
       />
 
       {/* Browse Support Modal */}

@@ -13,12 +13,12 @@ import { useCart, Order } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 
 // ─── Meal period config ────────────────────────────────────────────────────
-const PERIOD_CONFIG: Record<string, { label: string; color: string }> = {
-  Breakfast: { label: 'Breakfast', color: '#92400E' },
-  Lunch:     { label: 'Lunch',     color: '#065F46' },
-  Dinner:    { label: 'Dinner',    color: '#3730A3' },
-  Drinks:    { label: 'Drinks',    color: '#1E40AF' },
-  Sides:     { label: 'Sides',     color: '#9D174D' },
+const PERIOD_CONFIG: Record<string, { label: string; abbr: string; color: string }> = {
+  Breakfast: { label: 'Breakfast', abbr: 'BRKFST', color: '#92400E' },
+  Lunch:     { label: 'Lunch',     abbr: 'LUNCH',  color: '#065F46' },
+  Dinner:    { label: 'Dinner',    abbr: 'DINNER', color: '#3730A3' },
+  Drinks:    { label: 'Drinks',    abbr: 'DRINKS', color: '#1E40AF' },
+  Sides:     { label: 'Sides',     abbr: 'SIDES',  color: '#9D174D' },
 };
 
 // ─── Status config ─────────────────────────────────────────────────────────
@@ -154,8 +154,8 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
             const isCancelled = status === 'cancelled';
             const isSubstituted = status === 'substitution_requested';
             const grouped     = groupItemsByPeriod(order.items);
-            const placed      = new Date(order.placedAt);
-            const dateStr     = placed.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+            const placed      = order.placedAt instanceof Date ? order.placedAt : new Date(order.placedAt);
+            const dateStr     = placed.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
             const timeStr     = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             return (
@@ -215,12 +215,15 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
                 {/* ── Items: period label LEFT, name RIGHT ── */}
                 <View style={styles.itemsBlock}>
                   {PERIOD_ORDER.filter((p) => grouped[p]).map((period) => {
-                    const pColor = PERIOD_CONFIG[period]?.color ?? '#6B7280';
+                    const pCfg  = PERIOD_CONFIG[period] ?? { abbr: period.toUpperCase(), color: '#6B7280' };
                     return grouped[period].map((item, i) => (
                       <View key={`${period}-${i}`} style={styles.itemRow}>
-                        {/* Period label on the left */}
-                        <Text style={[styles.periodLabel, { color: pColor, fontSize: scaled(10) }]}>
-                          {period.toUpperCase()}
+                        {/* Period label — fixed-width, single line, never wraps */}
+                        <Text
+                          numberOfLines={1}
+                          style={[styles.periodLabel, { color: pCfg.color, fontSize: scaled(10) }]}
+                        >
+                          {pCfg.abbr}
                         </Text>
                         {/* Item name */}
                         <Text
@@ -392,8 +395,8 @@ const styles = StyleSheet.create({
   },
   periodLabel: {
     fontWeight: '800',
-    letterSpacing: 0.4,
-    width: 68,          // fixed width keeps all item names aligned
+    letterSpacing: 0.5,
+    width: 54,          // "BRKFST" is the longest — fits at font 10
     textAlign: 'left',
   },
   itemName: {

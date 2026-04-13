@@ -26,7 +26,7 @@ export type Order = {
   backendId?: number;       // ID from backend /mealOrders
   residentId: string;
   items: Meal[];
-  status: 'confirmed' | 'preparing' | 'ready' | 'completed';
+  status: 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'substitution_requested';
   placedAt: Date;
   totalNutrition: { calories: number; sodium: number; protein: number };
 };
@@ -232,8 +232,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           protein_g: m.protein,
           tags: m.tags ? m.tags.split(',').map((t) => t.trim()) : [],
         })),
-        status: entry.order.status === 'pending' ? 'confirmed' : (entry.order.status as Order['status']),
-        placedAt: new Date(entry.order.date),
+        status: (() => {
+          const s = entry.order.status as string;
+          if (s === 'pending') return 'confirmed';
+          if (s === 'cancelled' || s === 'canceled') return 'cancelled';
+          if (s === 'substitution_requested') return 'substitution_requested';
+          if (['confirmed','preparing','ready','completed'].includes(s)) return s as Order['status'];
+          return 'confirmed';
+        })(),
+        // Use ISO string from backend directly — preserves actual timestamp
+        placedAt: new Date((entry.order as any).date ?? (entry.order as any).createdAt ?? Date.now()),
         totalNutrition: {
           calories: entry.meals.reduce((sum, m) => sum + m.calories, 0),
           sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),
