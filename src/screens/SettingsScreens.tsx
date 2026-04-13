@@ -14,6 +14,7 @@ import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
 import { sendMessage } from '../services/api';
+import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -72,9 +73,27 @@ function SettingsScreen({ navigation, route }: any) {
         ...(Array.isArray(route?.params?.foodAllergies)       ? route.params.foodAllergies       as string[] : []),
       ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
 
-  // Assigned caregiver — passed from admin dashboard via BrowseMealOptions
-  const caregiverId:   string | null = route?.params?.caregiverId   ?? null;
-  const caregiverName: string | null = route?.params?.caregiverName ?? null;
+  // Assigned caregiver — passed via route params; persisted to/from storage
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
+
+  useEffect(() => {
+    if (!residentId) return;
+    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
+    const paramCgName = route?.params?.caregiverName as string | null ?? null;
+    if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+    } else {
+      getResidentCaregiver(residentId).then((stored) => {
+        if (stored) {
+          setCaregiverId(stored.caregiverId);
+          setCaregiverName(stored.caregiverName);
+        }
+      });
+    }
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
 
   const [sendingMsg, setSendingMsg] = useState(false);
 

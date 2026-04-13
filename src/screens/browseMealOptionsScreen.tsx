@@ -57,6 +57,7 @@ import {
 
 import { geminiChat } from "../services/geminiService";
 import { useClock } from '../context/useClock';
+import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 
 
@@ -788,9 +789,29 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   // Caregiver chat
-  const caregiverId   = route?.params?.caregiverId   as string | null ?? null;
-  const caregiverName = route?.params?.caregiverName as string | null ?? null;
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   as string | null ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
+
+  // Persist caregiver info to storage when provided via params; load from storage as fallback
+  useEffect(() => {
+    if (!residentId) return;
+    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
+    const paramCgName = route?.params?.caregiverName as string | null ?? null;
+    if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+    } else {
+      // No params — try storage
+      getResidentCaregiver(residentId).then((stored) => {
+        if (stored) {
+          setCaregiverId(stored.caregiverId);
+          setCaregiverName(stored.caregiverName);
+        }
+      });
+    }
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;
