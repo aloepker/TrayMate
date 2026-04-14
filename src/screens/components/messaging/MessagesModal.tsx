@@ -62,7 +62,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
   const init = async () => {
     setLoadingInit(true);
     try {
-      // Fetch in parallel, tolerate individual failures
+      // Fetch me + full user list + chat previews in parallel
       const [meResult, usersResult, chatsResult] = await Promise.allSettled([
         getMe(),
         getMessageUsers(),
@@ -78,7 +78,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
           : [];
       setChats(chatList);
 
-      // Build preview map from chats (covers any sent/received messages returned by API)
+      // ── Build preview map from /messages/chats ────────────────────────────
       const previewMap: Record<string, { preview: string; createdAt: string; isUnread: boolean }> = {};
       chatList.forEach(chat => {
         const isSender = myId !== null && String(chat.senderId) === myId;
@@ -87,50 +87,47 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         const isNewer  = !existing || new Date(chat.createdAt) > new Date(existing.createdAt);
         if (isNewer) {
           previewMap[otherId] = {
-            preview:  chat.content || "",
+            preview:   chat.content || "",
             createdAt: chat.createdAt,
-            isUnread: !isSender && !chat.isRead,
+            isUnread:  !isSender && !chat.isRead,
           };
         }
       });
 
-      // ── Build user list ───────────────────────────────────────────────────
-      // Source 1: /messages/users — used ONLY for the "New Chat" picker
-      const allStaff: MessageUser[] =
+      // ── Build full user list ──────────────────────────────────────────────
+      // /messages/users is the primary source — it includes ALL users the
+      // logged-in account has ever exchanged messages with (per backend).
+      const allUsers: MessageUser[] =
         usersResult.status === "fulfilled" && Array.isArray(usersResult.value)
           ? usersResult.value.filter(u => u.id !== myId)
           : [];
 
-      // Source 2: extract users who have ACTUAL chat history from the chats response
-      // (sidebar shows ONLY these — no history = not in sidebar)
-      const historyUsers: MessageUser[] = [];
-      const seenIds = new Set<string>();
+      // Also pull any users only visible in the chat list (edge case: user
+      // deleted from /messages/users but old messages still exist).
+      const seenIds = new Set<string>(allUsers.map(u => u.id));
       chatList.forEach(chat => {
-        const candidates = [
+        [
           { id: String(chat.senderId),   fullName: chat.senderName   || `User ${chat.senderId}`,   role: "" },
           { id: String(chat.receiverId), fullName: chat.receiverName || `User ${chat.receiverId}`, role: "" },
-        ];
-        candidates.forEach(c => {
+        ].forEach(c => {
           if (c.id && c.id !== myId && !seenIds.has(c.id)) {
             seenIds.add(c.id);
-            // Enrich with role from allStaff if available
-            const staffMatch = allStaff.find(u => u.id === c.id);
-            historyUsers.push(staffMatch ?? c);
+            allUsers.push(c);
           }
         });
       });
 
-      // Sidebar: only users with chat history
-      // New Chat picker: all staff (set separately)
-      setUsers(historyUsers);
-      setAllStaffUsers(allStaff);
+      // Sidebar = ALL users (those with history will show preview; others show
+      // "no messages yet"). New Chat picker also uses the same list.
+      setUsers(allUsers);
+      setAllStaffUsers(allUsers);
       setConversationPreviews(previewMap);
 
-      // Eagerly fetch previews for history users not yet covered
-      // (catches incoming messages the /chats endpoint may have missed)
-      const uncovered = historyUsers.filter(u => !previewMap[u.id]);
+      // For users already in the list but whose preview wasn't in /chats,
+      // fetch their conversation to get a preview (catches older messages).
+      const uncovered = allUsers.filter(u => !previewMap[u.id]);
       if (uncovered.length > 0 && myId) {
-        fetchMissingPreviews(uncovered.slice(0, 12), myId, previewMap);
+        fetchMissingPreviews(uncovered.slice(0, 20), myId, previewMap);
       }
     } catch (e) {
       console.log("MessagesModal init error:", e);
@@ -303,13 +300,13 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
               {/* ── Sidebar ── */}
               <View style={s.sidebar}>
 
-                {/* New Chat button — always visible */}
-                <Pressable style={s.newChatBtn} onPress={() => setShowNewChat(true)}>
-                  <Feather name="edit-3" size={14} color="#FFF" />
-                  <Text style={s.newChatBtnText}>New Chat</Text>
-                </Pressable>
-
-                <Text style={s.sidebarTitle}>Chats</Text>
+                <View style={s.sidebarHeader}>
+                  <Text style={s.sidebarTitle}>Conversations</Text>
+                  {/* Compose button for any user not yet in sidebar */}
+                  <Pressable style={s.composeBtn} onPress={() => setShowNewChat(true)} hitSlop={8}>
+                    <Feather name="edit-3" size={15} color="#6D6B3B" />
+                  </Pressable>
+                </View>
 
                 {loadingInit ? (
                   <View style={s.centerWrap}>
@@ -318,8 +315,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                 ) : sidebarList.length === 0 ? (
                   <View style={s.centerWrap}>
                     <Feather name="message-circle" size={28} color="#D1D5DB" />
-                    <Text style={s.emptyText}>No chats yet</Text>
-                    <Text style={s.emptySubText}>Tap "New Chat" to start</Text>
+                    <Text style={s.emptyText}>No conversations yet</Text>
+                    <Text style={s.emptySubText}>Tap the pencil to start one</Text>
                   </View>
                 ) : (
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.chatList}>
@@ -549,11 +546,11 @@ const s = StyleSheet.create({
   body:    { flex: 1, flexDirection: "row" },
 
   // Sidebar
-  sidebar:     { width: 300, borderRightWidth: 1, borderRightColor: "#ECECEC", backgroundColor: "#FAFAFA", paddingHorizontal: 10, paddingTop: 12, paddingBottom: 10 },
-  newChatBtn:  { height: 40, borderRadius: 10, backgroundColor: "#6D6B3B", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 12 },
-  newChatBtnText: { color: "#FFF", fontSize: 13, fontWeight: "800" },
-  sidebarTitle:{ fontSize: 13, fontWeight: "900", color: "#6B7280", marginBottom: 8, paddingHorizontal: 4, textTransform: "uppercase", letterSpacing: 0.5 },
-  chatList:    { paddingBottom: 10 },
+  sidebar:      { width: 300, borderRightWidth: 1, borderRightColor: "#ECECEC", backgroundColor: "#FAFAFA", paddingHorizontal: 10, paddingTop: 10, paddingBottom: 10 },
+  sidebarHeader:{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, marginBottom: 10 },
+  sidebarTitle: { fontSize: 13, fontWeight: "900", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.5 },
+  composeBtn:   { width: 30, height: 30, borderRadius: 8, backgroundColor: "#E8E5DC", alignItems: "center", justifyContent: "center" },
+  chatList:     { paddingBottom: 10 },
 
   chatItem:        { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF", borderRadius: 14, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: "#E8E8E8", position: "relative" },
   chatItemActive:  { backgroundColor: "#6D6B3B", borderColor: "#6D6B3B" },
