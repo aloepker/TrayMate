@@ -1804,10 +1804,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </Modal>
 
-      {/* Caregiver-only chat modal */}
+      {/* Caregiver-only chat modal — scoped to the assigned caregiver */}
       <ResidentChatModal
         visible={showMessagesModal}
         onClose={() => setShowMessagesModal(false)}
+        assignedCaregiverId={caregiverId}
+        assignedCaregiverName={caregiverName}
       />
     </SafeAreaView>
   );

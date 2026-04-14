@@ -399,6 +399,8 @@ function SettingsScreen({ navigation, route }: any) {
       <ResidentChatModal
         visible={showMessagesModal}
         onClose={() => setShowMessagesModal(false)}
+        assignedCaregiverId={caregiverId}
+        assignedCaregiverName={caregiverName}
       />
     </View>
   );
