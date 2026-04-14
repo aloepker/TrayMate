@@ -1,6 +1,6 @@
 // src/screens/caregiver/caregiverDashboardScreen.tsx
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
 import { useKitchenMessages } from "../context/KitchenMessageContext";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { getChats, getMe } from "../../services/api";
+import InAppNotificationBanner from "../components/InAppNotificationBanner";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -42,19 +43,53 @@ export default function CaregiverDashboardScreen({
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
 
+  // In-app notification banner state
+  const [bannerVisible,    setBannerVisible]    = useState(false);
+  const [bannerSender,     setBannerSender]     = useState("");
+  const [bannerPreview,    setBannerPreview]    = useState("");
+
+  // Track last-seen unread count so we only fire banner on genuinely new messages
+  const lastUnreadRef = useRef<number | null>(null);
+
   useEffect(() => {
+    let myIdCache: string | null = null;
+
     const checkUnread = async () => {
       try {
         const chats = await getChats();
         if (!Array.isArray(chats)) return;
-        const me = await getMe();
-        const myId = String(me.id);
-        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+
+        if (!myIdCache) {
+          const me = await getMe();
+          myIdCache = String(me.id);
+        }
+
+        // Only count messages where I am the receiver and they are unread
+        const unreadChats = chats.filter(
+          c => !c.isRead && String(c.receiverId) === myIdCache
+        );
+        const count = unreadChats.length;
         setMsgUnread(count);
+
+        // Show banner if unread count has increased since last poll
+        if (lastUnreadRef.current !== null && count > lastUnreadRef.current) {
+          // Pick the most recent unread message as banner content
+          const newest = unreadChats.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )[0];
+          if (newest) {
+            setBannerSender(newest.senderName || "A resident");
+            setBannerPreview(newest.content   || "Sent you a message");
+            setBannerVisible(true);
+          }
+        }
+
+        lastUnreadRef.current = count;
       } catch { /* ignore */ }
     };
+
     checkUnread();
-    const iv = setInterval(checkUnread, 30000);
+    const iv = setInterval(checkUnread, 10000); // poll every 10s
     return () => clearInterval(iv);
   }, []);
 
@@ -222,6 +257,14 @@ export default function CaregiverDashboardScreen({
 
   return (
     <SafeAreaView style={styles.page}>
+      {/* In-app notification banner — fires when resident sends a new message */}
+      <InAppNotificationBanner
+        visible={bannerVisible}
+        senderName={bannerSender}
+        preview={bannerPreview}
+        onPress={() => { setShowMessagesModal(true); setMsgUnread(0); }}
+        onDismiss={() => setBannerVisible(false)}
+      />
       <StatusBar barStyle="dark-content" />
 
       {/* -----------------------------
