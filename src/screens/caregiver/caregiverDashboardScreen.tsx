@@ -282,7 +282,8 @@ export default function CaregiverDashboardScreen({
         <View style={styles.topBarRight}>
           {/* Backend messages */}
           <Pressable style={styles.chatIconBtn} onPress={() => setShowMessagesModal(true)}>
-            <Feather name="message-square" size={20} color="#6D6B3B" />
+            <Feather name="message-square" size={16} color="#6D6B3B" />
+            <Text style={styles.chatIconBtnText}>Messages</Text>
             {msgUnread > 0 && (
               <View style={styles.chatBadge}>
                 <Text style={styles.chatBadgeText}>
@@ -676,12 +677,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   chatIconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F5F3EF',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: '#F0EEE4',
+    borderWidth: 1.5,
+    borderColor: '#6D6B3B30',
+  },
+  chatIconBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6D6B3B',
   },
   chatBadge: {
     position: 'absolute',
