@@ -134,7 +134,7 @@ export default function ResidentChatModal({
           <View style={s.header}>
             <View style={s.headerLeft}>
               <View style={s.headerIcon}>
-                <Feather name="phone-call" size={18} color={OLIVE} />
+                <Feather name="message-square" size={18} color={OLIVE} />
               </View>
               <View>
                 <Text style={s.headerTitle}>Contact Caregiver</Text>

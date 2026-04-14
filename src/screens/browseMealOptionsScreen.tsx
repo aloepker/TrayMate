@@ -1330,7 +1330,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => setShowMessagesModal(true)}
             activeOpacity={0.85}
           >
-            <Feather name="phone-call" size={18} color="#FFFFFF" />
+            <Feather name="message-square" size={18} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}

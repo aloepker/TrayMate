@@ -64,7 +64,7 @@ export default function InAppNotificationBanner({
     <Animated.View style={[s.container, { transform: [{ translateY }] }]}>
       <Pressable style={s.inner} onPress={() => { hide(); onPress(); }}>
         <View style={s.iconWrap}>
-          <Feather name="phone-call" size={20} color="#FFFFFF" />
+          <Feather name="message-square" size={20} color="#FFFFFF" />
         </View>
         <View style={s.textWrap}>
           <Text style={s.sender} numberOfLines={1}>

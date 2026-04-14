@@ -370,7 +370,7 @@ function SettingsScreen({ navigation, route }: any) {
             >
               <View style={styles.caregiverContactLeft}>
                 <View style={[styles.caregiverAvatar, { backgroundColor: '#717644' }]}>
-                  <Feather name="phone-call" size={16} color="#FFFFFF" />
+                  <Feather name="message-square" size={16} color="#FFFFFF" />
                 </View>
                 <View>
                   <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
