@@ -14,6 +14,8 @@ import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
 import { sendMessage } from '../services/api';
+import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
+import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -72,11 +74,30 @@ function SettingsScreen({ navigation, route }: any) {
         ...(Array.isArray(route?.params?.foodAllergies)       ? route.params.foodAllergies       as string[] : []),
       ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
 
-  // Assigned caregiver — passed from admin dashboard via BrowseMealOptions
-  const caregiverId:   string | null = route?.params?.caregiverId   ?? null;
-  const caregiverName: string | null = route?.params?.caregiverName ?? null;
+  // Assigned caregiver — passed via route params; persisted to/from storage
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
+
+  useEffect(() => {
+    if (!residentId) return;
+    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
+    const paramCgName = route?.params?.caregiverName as string | null ?? null;
+    if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+    } else {
+      getResidentCaregiver(residentId).then((stored) => {
+        if (stored) {
+          setCaregiverId(stored.caregiverId);
+          setCaregiverName(stored.caregiverName);
+        }
+      });
+    }
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
 
   const [sendingMsg, setSendingMsg] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;
@@ -341,33 +362,28 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
 
-            {/* Contact caregiver — only shown when one is assigned */}
-            {caregiverId && caregiverName ? (
-              <>
-                <TouchableOpacity
-                  style={[styles.accountRow, { minHeight: touchTarget }]}
-                  onPress={contactCaregiver}
-                  disabled={sendingMsg}
-                  accessibilityRole="button"
-                >
-                  <View style={styles.caregiverContactLeft}>
-                    <View style={styles.caregiverAvatar}>
-                      <Text style={styles.caregiverAvatarText}>{caregiverName.charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <View>
-                      <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
-                        Contact Caregiver
-                      </Text>
-                      <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
-                        {caregiverName}
-                      </Text>
-                    </View>
-                  </View>
-                  <Feather name={sendingMsg ? 'loader' : 'message-circle'} size={20} color="#717644" />
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            ) : null}
+            {/* Contact Caregiver — always visible */}
+            <TouchableOpacity
+              style={[styles.accountRow, { minHeight: touchTarget }]}
+              onPress={() => setShowMessagesModal(true)}
+              accessibilityRole="button"
+            >
+              <View style={styles.caregiverContactLeft}>
+                <View style={[styles.caregiverAvatar, { backgroundColor: '#717644' }]}>
+                  <Feather name="phone-call" size={16} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
+                    {caregiverName ? `Contact ${caregiverName}` : 'Contact Caregiver'}
+                  </Text>
+                  <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
+                    {caregiverName ? 'Send a message to your caregiver' : 'Message your care team'}
+                  </Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <View style={styles.divider} />
 
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
@@ -379,6 +395,11 @@ function SettingsScreen({ navigation, route }: any) {
           </View>
         </View>
       </ScrollView>
+
+      <ResidentChatModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
     </View>
   );
 }

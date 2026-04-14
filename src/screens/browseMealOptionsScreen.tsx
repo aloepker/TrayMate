@@ -57,7 +57,10 @@ import {
 
 import { geminiChat } from "../services/geminiService";
 import { useClock } from '../context/useClock';
+import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
+import { sendMessage as sendApiMessage } from '../services/api';
+import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -788,14 +791,36 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   // Caregiver chat
-  const caregiverId   = route?.params?.caregiverId   as string | null ?? null;
-  const caregiverName = route?.params?.caregiverName as string | null ?? null;
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   as string | null ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
+
+  // Persist caregiver info to storage when provided via params; load from storage as fallback
+  useEffect(() => {
+    if (!residentId) return;
+    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
+    const paramCgName = route?.params?.caregiverName as string | null ?? null;
+    if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+    } else {
+      // No params — try storage
+      getResidentCaregiver(residentId).then((stored) => {
+        if (stored) {
+          setCaregiverId(stored.caregiverId);
+          setCaregiverName(stored.caregiverName);
+        }
+      });
+    }
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;
+    const cg = caregiverName ?? 'Caregiver';
     Alert.alert(
-      `Message ${caregiverName ?? 'Caregiver'}`,
+      `Message ${cg}`,
       `Send a message about ${residentName}'s meal.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -804,9 +829,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           onPress: async () => {
             setSendingCgMsg(true);
             try {
-              const { sendMessage } = require('../services/api');
-              await sendMessage(caregiverId, `Hi, ${residentName} needs assistance with their meal. Please check in when possible.`);
-              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+              await sendApiMessage(caregiverId, `Hi, ${residentName} needs assistance with their meal. Please check in when possible.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
             } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
             finally { setSendingCgMsg(false); }
           },
@@ -816,9 +840,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           onPress: async () => {
             setSendingCgMsg(true);
             try {
-              const { sendMessage } = require('../services/api');
-              await sendMessage(caregiverId, `Hi, ${residentName} has a question about their meal. Please follow up when available.`);
-              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+              await sendApiMessage(caregiverId, `Hi, ${residentName} has a question about their meal. Please follow up when available.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
             } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
             finally { setSendingCgMsg(false); }
           },
@@ -828,9 +851,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           onPress: async () => {
             setSendingCgMsg(true);
             try {
-              const { sendMessage } = require('../services/api');
-              await sendMessage(caregiverId, `Hi, ${residentName} has a dietary concern about their current meal selection. Please review when available.`);
-              Alert.alert('Sent ✓', `${caregiverName ?? 'Caregiver'} has been notified.`);
+              await sendApiMessage(caregiverId, `Hi, ${residentName} has a dietary concern about their current meal selection. Please review when available.`);
+              Alert.alert('Sent ✓', `${cg} has been notified.`);
             } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
             finally { setSendingCgMsg(false); }
           },
@@ -1299,21 +1321,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
-          {/* Caregiver chat button — only shown when a caregiver is assigned */}
-          {caregiverId ? (
-            <TouchableOpacity
-              style={[
-                styles.headerActionBtn,
-                { backgroundColor: pt.tabActiveBg, borderColor: pt.tabActiveBg, borderWidth: 1.5 },
-                sendingCgMsg && { opacity: 0.5 },
-              ]}
-              onPress={contactCaregiver}
-              disabled={sendingCgMsg}
-              activeOpacity={0.85}
-            >
-              <Feather name="message-circle" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          ) : null}
+          {/* Caregiver contact button — phone-call icon, always visible */}
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              { backgroundColor: pt.tabActiveBg, borderColor: pt.tabActiveBg, borderWidth: 1.5 },
+            ]}
+            onPress={() => setShowMessagesModal(true)}
+            activeOpacity={0.85}
+          >
+            <Feather name="phone-call" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
@@ -1785,6 +1803,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Caregiver-only chat modal */}
+      <ResidentChatModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
     </SafeAreaView>
   );
 };
