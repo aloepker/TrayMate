@@ -60,7 +60,7 @@ import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage } from '../services/api';
-import MessagesModal from './components/messaging/MessagesModal';
+import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1321,7 +1321,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
-          {/* Messaging button — always visible, opens full chat modal */}
+          {/* Caregiver contact button — phone-call icon, always visible */}
           <TouchableOpacity
             style={[
               styles.headerActionBtn,
@@ -1330,7 +1330,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => setShowMessagesModal(true)}
             activeOpacity={0.85}
           >
-            <Feather name="message-circle" size={20} color="#FFFFFF" />
+            <Feather name="phone-call" size={18} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
@@ -1804,8 +1804,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </Modal>
 
-      {/* Messaging modal — lets resident chat with staff/caregivers */}
-      <MessagesModal
+      {/* Caregiver-only chat modal */}
+      <ResidentChatModal
         visible={showMessagesModal}
         onClose={() => setShowMessagesModal(false)}
       />

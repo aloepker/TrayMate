@@ -15,7 +15,7 @@ import { useSettings, Language, TextSize } from './context/SettingsContext';
 import { ResidentService } from '../services/localDataService';
 import { sendMessage } from '../services/api';
 import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
-import MessagesModal from './components/messaging/MessagesModal';
+import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -362,7 +362,7 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
 
-            {/* Messages — always visible, opens full chat modal */}
+            {/* Contact Caregiver — always visible */}
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
               onPress={() => setShowMessagesModal(true)}
@@ -370,14 +370,14 @@ function SettingsScreen({ navigation, route }: any) {
             >
               <View style={styles.caregiverContactLeft}>
                 <View style={[styles.caregiverAvatar, { backgroundColor: '#717644' }]}>
-                  <Feather name="message-circle" size={18} color="#FFFFFF" />
+                  <Feather name="phone-call" size={16} color="#FFFFFF" />
                 </View>
                 <View>
                   <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
-                    {caregiverName ? `Message ${caregiverName}` : 'Messages'}
+                    {caregiverName ? `Contact ${caregiverName}` : 'Contact Caregiver'}
                   </Text>
                   <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
-                    {caregiverName ? 'Chat with your assigned caregiver' : 'Chat with staff'}
+                    {caregiverName ? 'Send a message to your caregiver' : 'Message your care team'}
                   </Text>
                 </View>
               </View>
@@ -396,7 +396,7 @@ function SettingsScreen({ navigation, route }: any) {
         </View>
       </ScrollView>
 
-      <MessagesModal
+      <ResidentChatModal
         visible={showMessagesModal}
         onClose={() => setShowMessagesModal(false)}
       />
