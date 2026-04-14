@@ -117,14 +117,12 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         });
       });
 
-      // If /messages/chats returned nothing but /messages/users has people,
-      // fall back to showing all staff so existing conversations are accessible
-      const sidebarUsers = withHistory.length > 0 ? withHistory : staff;
-      setHistoryUsers(sidebarUsers);
+      // Sidebar: ONLY users with actual chat history — no fallback to all staff
+      setHistoryUsers(withHistory);
       setConversationPreviews(previewMap);
 
-      // Auto-fetch previews for sidebar users not covered by /chats
-      const uncovered = sidebarUsers.filter(u => !previewMap[u.id]);
+      // Fetch previews for history users not yet covered by /chats
+      const uncovered = withHistory.filter(u => !previewMap[u.id]);
       if (uncovered.length > 0 && myId) {
         fetchMissingPreviews(uncovered.slice(0, 20), myId, previewMap);
       }
