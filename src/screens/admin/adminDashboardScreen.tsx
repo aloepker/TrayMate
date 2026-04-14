@@ -629,11 +629,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       const firstCgName = firstCgId
                         ? (caregivers.find(c => String(c.id) === firstCgId)?.name ?? null)
                         : null;
-                      // Save full array to storage
+                      // Build full array and pass it directly as a param so the
+                      // browse screen has it immediately (storage write is async).
                       const caregiversArray = cgIds.map(id => {
                         const found = caregivers.find(c => String(c.id) === id);
                         return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
                       }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+                      // Also persist to storage for future navigations
                       setResidentCaregivers(String(r.id), caregiversArray);
                       navigation.navigate("BrowseMealOptions", {
                         residentId: r.id,
@@ -642,6 +644,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                         foodAllergies: r.foodAllergies ?? [],
                         caregiverId: firstCgId,
                         caregiverName: firstCgName,
+                        assignedCaregivers: caregiversArray,
                       });
                     }}
                   >

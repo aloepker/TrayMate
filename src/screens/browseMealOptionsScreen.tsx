@@ -800,14 +800,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Persist caregiver info to storage when provided via params; load from storage as fallback
   useEffect(() => {
     if (!residentId) return;
-    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
-    const paramCgName = route?.params?.caregiverName as string | null ?? null;
-    if (paramCgId && paramCgName) {
+    const paramCgId       = route?.params?.caregiverId       as string | null ?? null;
+    const paramCgName     = route?.params?.caregiverName     as string | null ?? null;
+    const paramAllCaregivers = route?.params?.assignedCaregivers as Array<{ caregiverId: string; caregiverName: string }> | undefined;
+
+    if (paramAllCaregivers && paramAllCaregivers.length > 0) {
+      // Admin passed the full array directly — use it immediately (no storage timing issue)
+      setAssignedCaregivers(paramAllCaregivers);
+      setCaregiverId(paramAllCaregivers[0].caregiverId);
+      setCaregiverName(paramAllCaregivers[0].caregiverName);
+      // Persist so future navigations without params still work
+      setResidentCaregivers(residentId, paramAllCaregivers);
+    } else if (paramCgId && paramCgName) {
       setCaregiverId(paramCgId);
       setCaregiverName(paramCgName);
       setResidentCaregiver(residentId, paramCgId, paramCgName);
-      // Load the FULL stored array (admin may have assigned multiple caregivers).
-      // Only add paramCgId if it's not already present — never overwrite the whole array.
+      // Load the FULL stored array; only append param caregiver if missing
       getResidentCaregivers(residentId).then((stored) => {
         const alreadyIn = stored.some((c) => c.caregiverId === paramCgId);
         const updated   = alreadyIn
@@ -833,7 +841,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         }
       });
     }
-  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName, route?.params?.assignedCaregivers]);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;
@@ -887,8 +895,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       residentName,
       dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
       foodAllergies: route?.params?.foodAllergies ?? [],
-      caregiverId:   route?.params?.caregiverId   ?? null,
-      caregiverName: route?.params?.caregiverName ?? null,
+      caregiverId:        route?.params?.caregiverId        ?? null,
+      caregiverName:      route?.params?.caregiverName      ?? null,
+      assignedCaregivers: assignedCaregivers.length > 0 ? assignedCaregivers : undefined,
     });
   };
 

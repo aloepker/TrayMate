@@ -81,9 +81,17 @@ function SettingsScreen({ navigation, route }: any) {
 
   useEffect(() => {
     if (!residentId) return;
-    const paramCgId   = route?.params?.caregiverId   as string | null ?? null;
-    const paramCgName = route?.params?.caregiverName as string | null ?? null;
-    if (paramCgId && paramCgName) {
+    const paramCgId          = route?.params?.caregiverId       as string | null ?? null;
+    const paramCgName        = route?.params?.caregiverName     as string | null ?? null;
+    const paramAllCaregivers = route?.params?.assignedCaregivers as Array<{ caregiverId: string; caregiverName: string }> | undefined;
+
+    if (paramAllCaregivers && paramAllCaregivers.length > 0) {
+      // Full array passed directly — use immediately, persist for future
+      setAssignedCaregivers(paramAllCaregivers);
+      setCaregiverId(paramAllCaregivers[0].caregiverId);
+      setCaregiverName(paramAllCaregivers[0].caregiverName);
+      setResidentCaregivers(residentId, paramAllCaregivers);
+    } else if (paramCgId && paramCgName) {
       setCaregiverId(paramCgId);
       setCaregiverName(paramCgName);
       setResidentCaregiver(residentId, paramCgId, paramCgName);
@@ -109,7 +117,7 @@ function SettingsScreen({ navigation, route }: any) {
         }
       });
     }
-  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName, route?.params?.assignedCaregivers]);
 
   const [sendingMsg, setSendingMsg] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
