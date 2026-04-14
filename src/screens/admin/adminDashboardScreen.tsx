@@ -17,7 +17,7 @@ import {
   StatusBar,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
-import { getUserEmail } from "../../services/storage";
+import { getUserEmail, setResidentCaregivers } from "../../services/storage";
 /**
  * FILE PATHS
  */
@@ -77,8 +77,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ---- Single-caregiver map: residentId -> caregiverId | null (mirrors backend) ----
-  const [residentCaregiverMap, setResidentCaregiverMap] = useState<Record<string, string | null>>({});
+  // ---- Multi-caregiver map: residentId -> caregiverId[] ----
+  const [residentCaregiversMap, setResidentCaregiversMap] = useState<Record<string, string[]>>({});
 
   // ---- Assign-caregiver picker modal ----
   const [assigningCaregiverToResidentId, setAssigningCaregiverToResidentId] = useState<string | null>(null);
@@ -141,16 +141,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           setResidents(rs);
           setKitchenStaff(ks);
 
-          // Build single-caregiver map from backend data (one caregiver per resident)
-          const map: Record<string, string | null> = {};
+          // Build multi-caregiver map from backend data (wrap single backend caregiver in array)
+          const map: Record<string, string[]> = {};
           for (const r of rs) {
             const rid = String(r.id);
             const cid = r.caregiverId != null && String(r.caregiverId).trim() !== ""
               ? String(r.caregiverId)
               : null;
-            map[rid] = cid;
+            map[rid] = cid ? [cid] : [];
           }
-          setResidentCaregiverMap(map);
+          setResidentCaregiversMap(map);
         }
       } catch (e: any) {
         Alert.alert("Failed to load admin data", e.message);
@@ -173,15 +173,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     try {
       const rs = await getResidents();
       setResidents(rs);
-      // Re-sync map from backend (single caregiver per resident)
-      const map: Record<string, string | null> = {};
+      // Re-sync map from backend (wrap single backend caregiver in array)
+      const map: Record<string, string[]> = {};
       for (const r of rs) {
         const rid = String(r.id);
-        map[rid] = r.caregiverId != null && String(r.caregiverId).trim() !== ""
+        const cid = r.caregiverId != null && String(r.caregiverId).trim() !== ""
           ? String(r.caregiverId)
           : null;
+        map[rid] = cid ? [cid] : [];
       }
-      setResidentCaregiverMap(map);
+      setResidentCaregiversMap(map);
     } catch (e: any) {
       Alert.alert("Failed to refresh residents", e.message);
     }
@@ -211,14 +212,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const stats = useMemo(() => {
     const total = residents.length;
     const assigned = residents.filter(
-      (r) => residentCaregiverMap[String(r.id)] != null
+      (r) => (residentCaregiversMap[String(r.id)] ?? []).length > 0
     ).length;
     return {
       total,
       assigned,
       unassigned: total - assigned
     };
-  }, [residents, residentCaregiverMap]);
+  }, [residents, residentCaregiversMap]);
 
   const caregiverPatientCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -226,21 +227,37 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       map[String(c.id)] = 0;
     }
     for (const r of residents) {
-      const cid = residentCaregiverMap[String(r.id)];
-      if (cid && cid !== "null" && cid !== "undefined") {
-        map[String(cid)] = (map[String(cid)] ?? 0) + 1;
+      const cgIds = residentCaregiversMap[String(r.id)] ?? [];
+      for (const cid of cgIds) {
+        if (cid && cid !== "null" && cid !== "undefined") {
+          map[String(cid)] = (map[String(cid)] ?? 0) + 1;
+        }
       }
     }
     return map;
-  }, [caregivers, residents, residentCaregiverMap]);
+  }, [caregivers, residents, residentCaregiversMap]);
 
   /**
-   * Caregiver assignment handlers — single caregiver per resident (mirrors backend)
+   * Caregiver assignment handlers — multi-caregiver per resident
    */
   const onAssignCaregiver = async (residentId: string, caregiverId: string) => {
     try {
       await assignResident(residentId, caregiverId);
-      setResidentCaregiverMap(prev => ({ ...prev, [residentId]: caregiverId }));
+      setResidentCaregiversMap(prev => {
+        const existing = prev[residentId] ?? [];
+        if (existing.includes(caregiverId)) return prev;
+        const next = [...existing, caregiverId];
+        // Persist full array to storage
+        const cg = caregivers.find(c => String(c.id) === caregiverId);
+        if (cg) {
+          const caregiversArray = next.map(id => {
+            const found = caregivers.find(c => String(c.id) === id);
+            return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+          }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+          setResidentCaregivers(residentId, caregiversArray);
+        }
+        return { ...prev, [residentId]: next };
+      });
       setResidents(prev =>
         prev.map(r => r.id === residentId ? { ...r, caregiverId } : r)
       );
@@ -249,15 +266,28 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
   };
 
-  const onUnassignCaregiver = async (residentId: string) => {
+  const onRemoveCaregiver = async (residentId: string, caregiverId: string) => {
     try {
-      await assignResident(residentId, null);
-      setResidentCaregiverMap(prev => ({ ...prev, [residentId]: null }));
+      const current = residentCaregiversMap[residentId] ?? [];
+      const remaining = current.filter(id => id !== caregiverId);
+      // Call backend with null if no caregivers remain, or with the first remaining one
+      await assignResident(residentId, remaining.length > 0 ? remaining[0] : null);
+      setResidentCaregiversMap(prev => {
+        const caregiversArray = remaining.map(id => {
+          const found = caregivers.find(c => String(c.id) === id);
+          return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+        }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+        setResidentCaregivers(residentId, caregiversArray);
+        return { ...prev, [residentId]: remaining };
+      });
       setResidents(prev =>
-        prev.map(r => r.id === residentId ? { ...r, caregiverId: null } : r)
+        prev.map(r => r.id === residentId
+          ? { ...r, caregiverId: remaining.length > 0 ? remaining[0] : null }
+          : r
+        )
       );
     } catch (e: any) {
-      Alert.alert("Unassign failed", e.message);
+      Alert.alert("Remove caregiver failed", e.message);
     }
   };
 
@@ -288,7 +318,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       if (pendingDelete.kind === "resident") {
         await deleteEntity("resident", pendingDelete.id);
         setResidents((prev) => prev.filter((r) => r.id !== pendingDelete.id));
-        setResidentCaregiverMap(prev => {
+        setResidentCaregiversMap(prev => {
           const next = { ...prev };
           delete next[pendingDelete.id];
           return next;
@@ -501,16 +531,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             )}
             {residents.map((r, idx) => {
               const rid = String(r.id);
-              const assignedCgId = residentCaregiverMap[rid] ?? null;
-              const assignedCaregiver = assignedCgId
-                ? caregivers.find(c => String(c.id) === assignedCgId) ?? null
-                : null;
+              const assignedCgIds = residentCaregiversMap[rid] ?? [];
+              const assignedCaregiverObjects = assignedCgIds
+                .map(id => caregivers.find(c => String(c.id) === id))
+                .filter(Boolean) as Caregiver[];
               const allTags = [
                 ...(r.dietaryRestrictions ?? []),
                 ...(r.foodAllergies ?? []),
                 ...(r.medicalConditions ?? []),
               ];
-              const isUnassigned = !assignedCgId;
+              const isUnassigned = assignedCgIds.length === 0;
 
               return (
                 <View key={r.id || `res-${idx}`} style={[styles.assignRow, isUnassigned && styles.assignRowWarning]}>
@@ -549,42 +579,42 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   <View style={styles.caregiverAssignArea}>
                     <View style={styles.caregiverAssignLabelRow}>
                       <Feather name="user" size={12} color="#6A6A6A" />
-                      <Text style={styles.caregiverAssignLabel}>Assigned Caregiver</Text>
+                      <Text style={styles.caregiverAssignLabel}>Assigned Caregivers</Text>
                     </View>
 
                     <View style={styles.caregiverChipRow}>
-                      {assignedCaregiver ? (
-                        /* ── Assigned chip with unassign X ── */
-                        <View style={styles.caregiverChip}>
-                          <View style={styles.cgAvatar}>
-                            <Text style={styles.cgAvatarText}>{assignedCaregiver.name.charAt(0).toUpperCase()}</Text>
-                          </View>
-                          <Text style={styles.caregiverChipText}>{assignedCaregiver.name}</Text>
-                          <Pressable
-                            onPress={() => onUnassignCaregiver(rid)}
-                            hitSlop={10}
-                            style={styles.caregiverChipX}
-                          >
-                            <Feather name="x" size={10} color="#6D6B3B" />
-                          </Pressable>
-                        </View>
-                      ) : (
+                      {isUnassigned ? (
                         /* ── Unassigned warning badge ── */
                         <View style={styles.noCaregiversBadge}>
                           <Feather name="alert-triangle" size={11} color="#9A6700" />
                           <Text style={styles.noCaregiversText}>Unassigned</Text>
                         </View>
+                      ) : (
+                        /* ── All assigned caregiver chips with X to remove ── */
+                        assignedCaregiverObjects.map(cg => (
+                          <View key={String(cg.id)} style={styles.caregiverChip}>
+                            <View style={styles.cgAvatar}>
+                              <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
+                            </View>
+                            <Text style={styles.caregiverChipText}>{cg.name}</Text>
+                            <Pressable
+                              onPress={() => onRemoveCaregiver(rid, String(cg.id))}
+                              hitSlop={10}
+                              style={styles.caregiverChipX}
+                            >
+                              <Feather name="x" size={10} color="#6D6B3B" />
+                            </Pressable>
+                          </View>
+                        ))
                       )}
 
-                      {/* ── Assign / Reassign button ── */}
+                      {/* ── Add Caregiver button ── */}
                       <Pressable
                         style={styles.addCaregiverChip}
                         onPress={() => setAssigningCaregiverToResidentId(rid)}
                       >
                         <Feather name="user-plus" size={12} color="#6D6B3B" />
-                        <Text style={styles.addCaregiverChipText}>
-                          {assignedCaregiver ? "Reassign" : "Assign"}
-                        </Text>
+                        <Text style={styles.addCaregiverChipText}>Add Caregiver</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -593,15 +623,24 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   <Pressable
                     style={styles.selectResidentBtn}
                     onPress={() => {
-                      const cgId   = residentCaregiverMap[rid] ?? null;
-                      const cgName = cgId ? (caregivers.find(c => String(c.id) === cgId)?.name ?? null) : null;
+                      const cgIds = residentCaregiversMap[rid] ?? [];
+                      const firstCgId = cgIds.length > 0 ? cgIds[0] : null;
+                      const firstCgName = firstCgId
+                        ? (caregivers.find(c => String(c.id) === firstCgId)?.name ?? null)
+                        : null;
+                      // Save full array to storage
+                      const caregiversArray = cgIds.map(id => {
+                        const found = caregivers.find(c => String(c.id) === id);
+                        return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+                      }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+                      setResidentCaregivers(String(r.id), caregiversArray);
                       navigation.navigate("BrowseMealOptions", {
                         residentId: r.id,
                         residentName: r.name,
                         dietaryRestrictions: r.dietaryRestrictions ?? [],
                         foodAllergies: r.foodAllergies ?? [],
-                        caregiverId: cgId,
-                        caregiverName: cgName,
+                        caregiverId: firstCgId,
+                        caregiverName: firstCgName,
                       });
                     }}
                   >

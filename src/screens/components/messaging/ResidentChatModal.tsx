@@ -1,7 +1,9 @@
 /**
- * ResidentChatModal — resident-only chat with their ASSIGNED caregiver.
- * Shows exactly one caregiver (the one assigned in admin). No list of all caregivers.
- * If no caregiver is assigned, shows an informational empty state.
+ * ResidentChatModal — resident-only chat with their ASSIGNED caregiver(s).
+ * - 0 caregivers: shows "No caregiver assigned" empty state
+ * - 1 caregiver: goes directly into chat (original behavior)
+ * - 2+ caregivers: shows a selection list first, then opens chat with chosen one
+ * Backward-compatible: still accepts single assignedCaregiverId/assignedCaregiverName props.
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -23,12 +25,16 @@ import {
 } from "../../../services/api";
 import { Message } from "./messagingTypes";
 
+type CaregiverEntry = { caregiverId: string; caregiverName: string };
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  /** ID of the caregiver assigned to this resident (from admin / storage) */
+  /** Array of caregivers assigned to this resident */
+  assignedCaregivers?: CaregiverEntry[];
+  /** Backward-compat: single caregiver ID */
   assignedCaregiverId?: string | null;
-  /** Display name of the assigned caregiver */
+  /** Backward-compat: single caregiver name */
   assignedCaregiverName?: string | null;
 };
 
@@ -38,31 +44,55 @@ const OLIVE_LIGHT = "#F0EEE4";
 export default function ResidentChatModal({
   visible,
   onClose,
+  assignedCaregivers,
   assignedCaregiverId   = null,
   assignedCaregiverName = null,
 }: Props) {
-  const [messages,      setMessages]      = useState<Message[]>([]);
-  const [myId,          setMyId]          = useState<string | null>(null);
-  const [text,          setText]          = useState("");
-  const [loadingInit,   setLoadingInit]   = useState(false);
-  const [sending,       setSending]       = useState(false);
+  // Derive the effective list of caregivers
+  const effectiveCaregivers: CaregiverEntry[] = assignedCaregivers && assignedCaregivers.length > 0
+    ? assignedCaregivers
+    : (assignedCaregiverId
+        ? [{ caregiverId: assignedCaregiverId, caregiverName: assignedCaregiverName ?? "Caregiver" }]
+        : []);
+
+  const isMulti = effectiveCaregivers.length > 1;
+
+  // When there's only one caregiver, auto-select it; otherwise null until user picks
+  const [selectedCaregiver, setSelectedCaregiver] = useState<CaregiverEntry | null>(
+    effectiveCaregivers.length === 1 ? effectiveCaregivers[0] : null
+  );
+
+  const [messages,    setMessages]    = useState<Message[]>([]);
+  const [myId,        setMyId]        = useState<string | null>(null);
+  const [text,        setText]        = useState("");
+  const [loadingInit, setLoadingInit] = useState(false);
+  const [sending,     setSending]     = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // ─── Init ──────────────────────────────────────────────────────────────────
+  // Re-derive selected caregiver when props change
+  useEffect(() => {
+    if (effectiveCaregivers.length === 1) {
+      setSelectedCaregiver(effectiveCaregivers[0]);
+    } else if (effectiveCaregivers.length === 0) {
+      setSelectedCaregiver(null);
+    }
+    // For multi, keep current selection unless it's no longer in the list
+  }, [visible]);
+
+  // ─── Init chat when a caregiver is selected ─────────────────────────────────
 
   useEffect(() => {
-    if (!visible || !assignedCaregiverId) return;
-    init();
-  }, [visible, assignedCaregiverId]);
+    if (!visible || !selectedCaregiver) return;
+    initChat(selectedCaregiver.caregiverId);
+  }, [visible, selectedCaregiver]);
 
-  const init = async () => {
-    if (!assignedCaregiverId) return;
+  const initChat = async (cgId: string) => {
     setLoadingInit(true);
     try {
       const [meRes, msgsRes] = await Promise.allSettled([
         getMe(),
-        getConversation(assignedCaregiverId),
+        getConversation(cgId),
       ]);
 
       if (meRes.status === "fulfilled") setMyId(String(meRes.value.id));
@@ -81,13 +111,13 @@ export default function ResidentChatModal({
   // ─── Send ──────────────────────────────────────────────────────────────────
 
   const handleSend = async () => {
-    if (!assignedCaregiverId || !text.trim()) return;
+    if (!selectedCaregiver || !text.trim()) return;
     const body = text.trim();
     setText("");
     setSending(true);
     try {
-      await sendMessage(assignedCaregiverId, body);
-      const updated = await getConversation(assignedCaregiverId);
+      await sendMessage(selectedCaregiver.caregiverId, body);
+      const updated = await getConversation(selectedCaregiver.caregiverId);
       setMessages(Array.isArray(updated) ? updated : []);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     } catch {
@@ -116,11 +146,22 @@ export default function ResidentChatModal({
   const handleClose = () => {
     setMessages([]);
     setText("");
+    if (!isMulti) {
+      // For single caregiver, keep selectedCaregiver so next open auto-loads
+    } else {
+      setSelectedCaregiver(null);
+    }
     onClose();
   };
 
-  const cgInitial = assignedCaregiverName
-    ? assignedCaregiverName.charAt(0).toUpperCase()
+  const handleBack = () => {
+    setMessages([]);
+    setText("");
+    setSelectedCaregiver(null);
+  };
+
+  const cgInitial = selectedCaregiver
+    ? selectedCaregiver.caregiverName.charAt(0).toUpperCase()
     : "?";
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -133,14 +174,19 @@ export default function ResidentChatModal({
           {/* ── Header ── */}
           <View style={s.header}>
             <View style={s.headerLeft}>
+              {isMulti && selectedCaregiver && (
+                <Pressable onPress={handleBack} hitSlop={12} style={s.backBtn}>
+                  <Feather name="arrow-left" size={20} color={OLIVE} />
+                </Pressable>
+              )}
               <View style={s.headerIcon}>
                 <Feather name="message-square" size={18} color={OLIVE} />
               </View>
               <View>
                 <Text style={s.headerTitle}>Contact Caregiver</Text>
                 <Text style={s.headerSub}>
-                  {assignedCaregiverName
-                    ? `Chatting with ${assignedCaregiverName}`
+                  {selectedCaregiver
+                    ? `Chatting with ${selectedCaregiver.caregiverName}`
                     : "Your care team messages"}
                 </Text>
               </View>
@@ -151,7 +197,7 @@ export default function ResidentChatModal({
           </View>
 
           {/* ── Body ── */}
-          {!assignedCaregiverId ? (
+          {effectiveCaregivers.length === 0 ? (
 
             /* No caregiver assigned yet */
             <View style={s.unassignedState}>
@@ -165,7 +211,34 @@ export default function ResidentChatModal({
               </Text>
             </View>
 
-          ) : (
+          ) : isMulti && !selectedCaregiver ? (
+
+            /* Caregiver selection list */
+            <ScrollView style={s.pickerScroll} contentContainerStyle={s.pickerContent}>
+              <Text style={s.pickerTitle}>Select a caregiver to message</Text>
+              {effectiveCaregivers.map((cg) => (
+                <Pressable
+                  key={cg.caregiverId}
+                  style={s.pickerCard}
+                  onPress={() => {
+                    setMessages([]);
+                    setSelectedCaregiver(cg);
+                  }}
+                >
+                  <View style={s.pickerAvatar}>
+                    <Text style={s.pickerAvatarText}>{cg.caregiverName.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={s.pickerInfo}>
+                    <Text style={s.pickerName}>{cg.caregiverName}</Text>
+                    <Text style={s.pickerLabel}>Assigned caregiver</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color="#9CA3AF" />
+                </Pressable>
+              ))}
+            </ScrollView>
+
+          ) : selectedCaregiver ? (
+
             <View style={s.chatWrap}>
 
               {/* Caregiver info bar */}
@@ -174,7 +247,7 @@ export default function ResidentChatModal({
                   <Text style={s.cgAvatarText}>{cgInitial}</Text>
                 </View>
                 <View>
-                  <Text style={s.cgName}>{assignedCaregiverName ?? "Your Caregiver"}</Text>
+                  <Text style={s.cgName}>{selectedCaregiver.caregiverName}</Text>
                   <Text style={s.cgLabel}>Your assigned caregiver</Text>
                 </View>
               </View>
@@ -224,7 +297,7 @@ export default function ResidentChatModal({
                 <TextInput
                   value={text}
                   onChangeText={setText}
-                  placeholder={`Message ${assignedCaregiverName ?? "your caregiver"}...`}
+                  placeholder={`Message ${selectedCaregiver.caregiverName}...`}
                   placeholderTextColor="#9CA3AF"
                   style={s.input}
                   multiline
@@ -241,7 +314,7 @@ export default function ResidentChatModal({
                 </Pressable>
               </View>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -273,12 +346,24 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: "900", color: "#1F2937" },
   headerSub:   { marginTop: 2, fontSize: 12, color: "#6B7280", fontWeight: "600" },
   closeBtn:    { width: 36, height: 36, borderRadius: 18, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  backBtn:     { width: 36, height: 36, borderRadius: 18, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
 
   // No caregiver assigned
   unassignedState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, gap: 14 },
   unassignedIcon:  { width: 84, height: 84, borderRadius: 42, backgroundColor: OLIVE_LIGHT, alignItems: "center", justifyContent: "center" },
   unassignedTitle: { fontSize: 20, fontWeight: "900", color: "#374151", textAlign: "center" },
   unassignedSub:   { fontSize: 14, color: "#9CA3AF", textAlign: "center", lineHeight: 22 },
+
+  // Caregiver picker list
+  pickerScroll:   { flex: 1 },
+  pickerContent:  { padding: 20, gap: 12 },
+  pickerTitle:    { fontSize: 15, fontWeight: "700", color: "#374151", marginBottom: 4 },
+  pickerCard:     { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#FAFAF8", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#E8E5DE" },
+  pickerAvatar:   { width: 44, height: 44, borderRadius: 22, backgroundColor: OLIVE, alignItems: "center", justifyContent: "center" },
+  pickerAvatarText: { fontSize: 18, fontWeight: "900", color: "#FFF" },
+  pickerInfo:     { flex: 1 },
+  pickerName:     { fontSize: 15, fontWeight: "900", color: "#1F2937" },
+  pickerLabel:    { marginTop: 2, fontSize: 12, color: "#6B7280", fontWeight: "600" },
 
   // Chat wrap
   chatWrap: { flex: 1 },
