@@ -55,12 +55,11 @@ export default function ResidentChatModal({
         ? [{ caregiverId: assignedCaregiverId, caregiverName: assignedCaregiverName ?? "Caregiver" }]
         : []);
 
+  // Show the picker whenever there are 2+ caregivers
   const isMulti = effectiveCaregivers.length > 1;
 
-  // When there's only one caregiver, auto-select it; otherwise null until user picks
-  const [selectedCaregiver, setSelectedCaregiver] = useState<CaregiverEntry | null>(
-    effectiveCaregivers.length === 1 ? effectiveCaregivers[0] : null
-  );
+  // Start with no selection — useEffect resolves the correct initial state after mount
+  const [selectedCaregiver, setSelectedCaregiver] = useState<CaregiverEntry | null>(null);
 
   const [messages,    setMessages]    = useState<Message[]>([]);
   const [myId,        setMyId]        = useState<string | null>(null);
@@ -70,14 +69,18 @@ export default function ResidentChatModal({
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // Re-derive selected caregiver when props change
+  // Re-derive selected caregiver when the modal opens
   useEffect(() => {
-    if (effectiveCaregivers.length === 1) {
+    if (!visible) return; // only act when opening
+    if (effectiveCaregivers.length === 0) {
+      setSelectedCaregiver(null);
+    } else if (effectiveCaregivers.length === 1) {
+      // Single caregiver — go straight to chat
       setSelectedCaregiver(effectiveCaregivers[0]);
-    } else if (effectiveCaregivers.length === 0) {
+    } else {
+      // Multiple caregivers — always reset to picker so user chooses
       setSelectedCaregiver(null);
     }
-    // For multi, keep current selection unless it's no longer in the list
   }, [visible]);
 
   // ─── Init chat when a caregiver is selected ─────────────────────────────────
@@ -146,11 +149,7 @@ export default function ResidentChatModal({
   const handleClose = () => {
     setMessages([]);
     setText("");
-    if (!isMulti) {
-      // For single caregiver, keep selectedCaregiver so next open auto-loads
-    } else {
-      setSelectedCaregiver(null);
-    }
+    setSelectedCaregiver(null); // always reset; useEffect re-applies on next open
     onClose();
   };
 

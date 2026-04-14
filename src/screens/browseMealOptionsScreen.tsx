@@ -806,11 +806,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setCaregiverId(paramCgId);
       setCaregiverName(paramCgName);
       setResidentCaregiver(residentId, paramCgId, paramCgName);
-      // Save as single-item array to plural storage, then read back the full array
-      setResidentCaregivers(residentId, [{ caregiverId: paramCgId, caregiverName: paramCgName }]).then(() => {
-        getResidentCaregivers(residentId).then((stored) => {
-          setAssignedCaregivers(stored.length > 0 ? stored : [{ caregiverId: paramCgId, caregiverName: paramCgName }]);
-        });
+      // Load the FULL stored array (admin may have assigned multiple caregivers).
+      // Only add paramCgId if it's not already present — never overwrite the whole array.
+      getResidentCaregivers(residentId).then((stored) => {
+        const alreadyIn = stored.some((c) => c.caregiverId === paramCgId);
+        const updated   = alreadyIn
+          ? stored
+          : [...stored, { caregiverId: paramCgId, caregiverName: paramCgName }];
+        setAssignedCaregivers(updated.length > 0 ? updated : [{ caregiverId: paramCgId, caregiverName: paramCgName }]);
       });
     } else {
       // No params — try plural storage first, then singular storage
