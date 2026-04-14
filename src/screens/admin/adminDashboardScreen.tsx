@@ -865,25 +865,25 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             <Text style={styles.dropdownTitle}>Assign Caregiver</Text>
             {assigningCaregiverToResidentId !== null && (() => {
               const rid = assigningCaregiverToResidentId;
-              const currentId = (residentCaregiversMap[rid] ?? [])[0] ?? null;
+              const assignedIds = new Set(residentCaregiversMap[rid] ?? []);
               if (caregivers.length === 0) {
                 return <Text style={styles.dropdownEmpty}>No caregivers available.</Text>;
               }
               return caregivers.map((cg) => {
-                const isCurrentlyAssigned = String(cg.id) === currentId;
+                const isAssigned = assignedIds.has(String(cg.id));
                 return (
                   <Pressable
                     key={`dropdown-${cg.id}`}
-                    style={[styles.dropdownItem, isCurrentlyAssigned && styles.dropdownItemActive]}
+                    style={[styles.dropdownItem, isAssigned && styles.dropdownItemActive]}
                     onPress={() => {
-                      if (!isCurrentlyAssigned) {
+                      if (!isAssigned) {
                         onAssignCaregiver(rid, String(cg.id));
                       }
                       setAssigningCaregiverToResidentId(null);
                     }}
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <View style={[styles.cgAvatar, isCurrentlyAssigned && { backgroundColor: "#3A3820" }]}>
+                      <View style={[styles.cgAvatar, isAssigned && { backgroundColor: "#3A3820" }]}>
                         <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
                       </View>
                       <View>
@@ -891,8 +891,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                         <Text style={styles.dropdownItemEmail}>{cg.email}</Text>
                       </View>
                     </View>
-                    {isCurrentlyAssigned && (
-                      <Text style={styles.dropdownItemCurrentLabel}>Current</Text>
+                    {isAssigned && (
+                      <Text style={styles.dropdownItemCurrentLabel}>Assigned</Text>
                     )}
                   </Pressable>
                 );
