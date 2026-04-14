@@ -1349,16 +1349,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
-          {/* Caregiver contact button — phone-call icon, always visible */}
+          {/* Caregiver contact button — labelled pill for elderly readability */}
           <TouchableOpacity
-            style={[
-              styles.headerActionBtn,
-              { backgroundColor: pt.tabActiveBg, borderColor: pt.tabActiveBg, borderWidth: 1.5 },
-            ]}
+            style={[styles.caregiverPillBtn, { backgroundColor: pt.tabActiveBg }]}
             onPress={() => setShowMessagesModal(true)}
             activeOpacity={0.85}
           >
-            <Feather name="message-square" size={18} color="#FFFFFF" />
+            <Feather name="message-circle" size={17} color="#FFFFFF" />
+            <Text style={styles.caregiverPillText}>Caregiver</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
@@ -1931,6 +1929,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  caregiverPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 44,
+    paddingHorizontal: 14,
+    borderRadius: 13,
+  },
+  caregiverPillText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   headerActionBtn: {
     width: 44,
