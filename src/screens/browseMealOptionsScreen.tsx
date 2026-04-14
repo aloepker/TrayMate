@@ -57,7 +57,7 @@ import {
 
 import { geminiChat } from "../services/geminiService";
 import { useClock } from '../context/useClock';
-import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage } from '../services/api';
 import ResidentChatModal from './components/messaging/ResidentChatModal';
@@ -793,6 +793,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Caregiver chat
   const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   as string | null ?? null);
   const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
+  const [assignedCaregivers, setAssignedCaregivers] = useState<Array<{ caregiverId: string; caregiverName: string }>>([]);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
 
@@ -805,12 +806,27 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setCaregiverId(paramCgId);
       setCaregiverName(paramCgName);
       setResidentCaregiver(residentId, paramCgId, paramCgName);
+      // Save as single-item array to plural storage, then read back the full array
+      setResidentCaregivers(residentId, [{ caregiverId: paramCgId, caregiverName: paramCgName }]).then(() => {
+        getResidentCaregivers(residentId).then((stored) => {
+          setAssignedCaregivers(stored.length > 0 ? stored : [{ caregiverId: paramCgId, caregiverName: paramCgName }]);
+        });
+      });
     } else {
-      // No params — try storage
-      getResidentCaregiver(residentId).then((stored) => {
-        if (stored) {
-          setCaregiverId(stored.caregiverId);
-          setCaregiverName(stored.caregiverName);
+      // No params — try plural storage first, then singular storage
+      getResidentCaregivers(residentId).then((stored) => {
+        if (stored.length > 0) {
+          setAssignedCaregivers(stored);
+          setCaregiverId(stored[0].caregiverId);
+          setCaregiverName(stored[0].caregiverName);
+        } else {
+          getResidentCaregiver(residentId).then((single) => {
+            if (single) {
+              setCaregiverId(single.caregiverId);
+              setCaregiverName(single.caregiverName);
+              setAssignedCaregivers([single]);
+            }
+          });
         }
       });
     }
@@ -1330,7 +1346,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => setShowMessagesModal(true)}
             activeOpacity={0.85}
           >
-            <Feather name="phone-call" size={18} color="#FFFFFF" />
+            <Feather name="message-square" size={18} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
@@ -1804,10 +1820,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </Modal>
 
-      {/* Caregiver-only chat modal */}
+      {/* Caregiver-only chat modal — scoped to assigned caregivers */}
       <ResidentChatModal
         visible={showMessagesModal}
         onClose={() => setShowMessagesModal(false)}
+        assignedCaregivers={assignedCaregivers}
+        assignedCaregiverId={caregiverId}
+        assignedCaregiverName={caregiverName}
       />
     </SafeAreaView>
   );

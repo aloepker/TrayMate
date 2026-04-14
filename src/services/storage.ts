@@ -73,6 +73,31 @@ export async function getResidentCaregiver(
   }
 }
 
+const CAREGIVERS_KEY_PREFIX = 'resident_caregivers_';
+
+export async function setResidentCaregivers(
+  residentId: string,
+  caregivers: Array<{ caregiverId: string; caregiverName: string }>
+): Promise<void> {
+  try {
+    await EncryptedStorage.setItem(
+      `${CAREGIVERS_KEY_PREFIX}${residentId}`,
+      JSON.stringify(caregivers)
+    );
+  } catch {}
+}
+
+export async function getResidentCaregivers(
+  residentId: string
+): Promise<Array<{ caregiverId: string; caregiverName: string }>> {
+  try {
+    const raw = await EncryptedStorage.getItem(`${CAREGIVERS_KEY_PREFIX}${residentId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 /*import { Platform } from "react-native";
 import EncryptedStorage from "react-native-encrypted-storage";
 

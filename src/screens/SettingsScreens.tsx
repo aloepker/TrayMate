@@ -14,7 +14,7 @@ import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
 import { sendMessage } from '../services/api';
-import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -77,6 +77,7 @@ function SettingsScreen({ navigation, route }: any) {
   // Assigned caregiver — passed via route params; persisted to/from storage
   const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
   const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
+  const [assignedCaregivers, setAssignedCaregivers] = useState<Array<{ caregiverId: string; caregiverName: string }>>([]);
 
   useEffect(() => {
     if (!residentId) return;
@@ -86,11 +87,25 @@ function SettingsScreen({ navigation, route }: any) {
       setCaregiverId(paramCgId);
       setCaregiverName(paramCgName);
       setResidentCaregiver(residentId, paramCgId, paramCgName);
+      // Read the full array from plural storage (may have been set by admin dashboard)
+      getResidentCaregivers(residentId).then((stored) => {
+        setAssignedCaregivers(stored.length > 0 ? stored : [{ caregiverId: paramCgId, caregiverName: paramCgName }]);
+      });
     } else {
-      getResidentCaregiver(residentId).then((stored) => {
-        if (stored) {
-          setCaregiverId(stored.caregiverId);
-          setCaregiverName(stored.caregiverName);
+      // Try plural storage first, then singular
+      getResidentCaregivers(residentId).then((stored) => {
+        if (stored.length > 0) {
+          setAssignedCaregivers(stored);
+          setCaregiverId(stored[0].caregiverId);
+          setCaregiverName(stored[0].caregiverName);
+        } else {
+          getResidentCaregiver(residentId).then((single) => {
+            if (single) {
+              setCaregiverId(single.caregiverId);
+              setCaregiverName(single.caregiverName);
+              setAssignedCaregivers([single]);
+            }
+          });
         }
       });
     }
@@ -370,7 +385,7 @@ function SettingsScreen({ navigation, route }: any) {
             >
               <View style={styles.caregiverContactLeft}>
                 <View style={[styles.caregiverAvatar, { backgroundColor: '#717644' }]}>
-                  <Feather name="phone-call" size={16} color="#FFFFFF" />
+                  <Feather name="message-square" size={16} color="#FFFFFF" />
                 </View>
                 <View>
                   <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
@@ -399,6 +414,9 @@ function SettingsScreen({ navigation, route }: any) {
       <ResidentChatModal
         visible={showMessagesModal}
         onClose={() => setShowMessagesModal(false)}
+        assignedCaregivers={assignedCaregivers}
+        assignedCaregiverId={caregiverId}
+        assignedCaregiverName={caregiverName}
       />
     </View>
   );
