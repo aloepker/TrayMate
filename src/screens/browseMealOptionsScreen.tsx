@@ -60,6 +60,7 @@ import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage } from '../services/api';
+import MessagesModal from './components/messaging/MessagesModal';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -793,6 +794,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   as string | null ?? null);
   const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
 
   // Persist caregiver info to storage when provided via params; load from storage as fallback
   useEffect(() => {
@@ -1319,21 +1321,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
-          {/* Caregiver chat button — only shown when a caregiver is assigned */}
-          {caregiverId ? (
-            <TouchableOpacity
-              style={[
-                styles.headerActionBtn,
-                { backgroundColor: pt.tabActiveBg, borderColor: pt.tabActiveBg, borderWidth: 1.5 },
-                sendingCgMsg && { opacity: 0.5 },
-              ]}
-              onPress={contactCaregiver}
-              disabled={sendingCgMsg}
-              activeOpacity={0.85}
-            >
-              <Feather name="message-circle" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          ) : null}
+          {/* Messaging button — always visible, opens full chat modal */}
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              { backgroundColor: pt.tabActiveBg, borderColor: pt.tabActiveBg, borderWidth: 1.5 },
+            ]}
+            onPress={() => setShowMessagesModal(true)}
+            activeOpacity={0.85}
+          >
+            <Feather name="message-circle" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
@@ -1805,6 +1803,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Messaging modal — lets resident chat with staff/caregivers */}
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
     </SafeAreaView>
   );
 };

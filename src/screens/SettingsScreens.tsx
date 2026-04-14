@@ -15,6 +15,7 @@ import { useSettings, Language, TextSize } from './context/SettingsContext';
 import { ResidentService } from '../services/localDataService';
 import { sendMessage } from '../services/api';
 import { setResidentCaregiver, getResidentCaregiver } from '../services/storage';
+import MessagesModal from './components/messaging/MessagesModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -96,6 +97,7 @@ function SettingsScreen({ navigation, route }: any) {
   }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName]);
 
   const [sendingMsg, setSendingMsg] = useState(false);
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
 
   const contactCaregiver = useCallback(() => {
     if (!caregiverId) return;
@@ -360,33 +362,28 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
 
-            {/* Contact caregiver — only shown when one is assigned */}
-            {caregiverId && caregiverName ? (
-              <>
-                <TouchableOpacity
-                  style={[styles.accountRow, { minHeight: touchTarget }]}
-                  onPress={contactCaregiver}
-                  disabled={sendingMsg}
-                  accessibilityRole="button"
-                >
-                  <View style={styles.caregiverContactLeft}>
-                    <View style={styles.caregiverAvatar}>
-                      <Text style={styles.caregiverAvatarText}>{caregiverName.charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <View>
-                      <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
-                        Contact Caregiver
-                      </Text>
-                      <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
-                        {caregiverName}
-                      </Text>
-                    </View>
-                  </View>
-                  <Feather name={sendingMsg ? 'loader' : 'message-circle'} size={20} color="#717644" />
-                </TouchableOpacity>
-                <View style={styles.divider} />
-              </>
-            ) : null}
+            {/* Messages — always visible, opens full chat modal */}
+            <TouchableOpacity
+              style={[styles.accountRow, { minHeight: touchTarget }]}
+              onPress={() => setShowMessagesModal(true)}
+              accessibilityRole="button"
+            >
+              <View style={styles.caregiverContactLeft}>
+                <View style={[styles.caregiverAvatar, { backgroundColor: '#717644' }]}>
+                  <Feather name="message-circle" size={18} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
+                    {caregiverName ? `Message ${caregiverName}` : 'Messages'}
+                  </Text>
+                  <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
+                    {caregiverName ? 'Chat with your assigned caregiver' : 'Chat with staff'}
+                  </Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <View style={styles.divider} />
 
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
@@ -398,6 +395,11 @@ function SettingsScreen({ navigation, route }: any) {
           </View>
         </View>
       </ScrollView>
+
+      <MessagesModal
+        visible={showMessagesModal}
+        onClose={() => setShowMessagesModal(false)}
+      />
     </View>
   );
 }
