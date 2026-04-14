@@ -25,27 +25,31 @@ import {
   MessagesModalProps,
 } from "./messagingTypes";
 
+const OLIVE      = "#717644";
+const OLIVE_BG   = "#F0EEE4";
+const SURFACE    = "#FAFAF8";
+const BORDER     = "#EDECE8";
+
 type SidebarEntry = {
-  userId: string;
-  name: string;
-  role: string;
-  preview: string;
+  userId:    string;
+  name:      string;
+  role:      string;
+  preview:   string;
   createdAt: string;
-  isUnread: boolean;
+  isUnread:  boolean;
 };
 
 export default function MessagesModal({ visible, onClose }: MessagesModalProps) {
-  const [users, setUsers]                   = useState<MessageUser[]>([]); // sidebar: only with history
-  const [allStaffUsers, setAllStaffUsers]   = useState<MessageUser[]>([]); // new chat picker: all staff
-  const [chats, setChats]                   = useState<ChatPreview[]>([]);
+  const [allStaffUsers, setAllStaffUsers]   = useState<MessageUser[]>([]);
+  const [historyUsers,  setHistoryUsers]    = useState<MessageUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [messages, setMessages]             = useState<Message[]>([]);
-  const [messageText, setMessageText]       = useState("");
-  const [currentUserId, setCurrentUserId]   = useState<string | null>(null);
-  const [loadingInit, setLoadingInit]       = useState(false);
-  const [loadingConvo, setLoadingConvo]     = useState(false);
-  const [sending, setSending]               = useState(false);
-  const [showNewChat, setShowNewChat]       = useState(false);
+  const [messages,       setMessages]       = useState<Message[]>([]);
+  const [messageText,    setMessageText]    = useState("");
+  const [currentUserId,  setCurrentUserId]  = useState<string | null>(null);
+  const [loadingInit,    setLoadingInit]    = useState(false);
+  const [loadingConvo,   setLoadingConvo]   = useState(false);
+  const [sending,        setSending]        = useState(false);
+  const [showNewChat,    setShowNewChat]    = useState(false);
   const [conversationPreviews, setConversationPreviews] = useState<
     Record<string, { preview: string; createdAt: string; isUnread: boolean }>
   >({});
@@ -62,75 +66,67 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
   const init = async () => {
     setLoadingInit(true);
     try {
-      // Fetch me + full user list + chat previews in parallel
-      const [meResult, usersResult, chatsResult] = await Promise.allSettled([
+      const [meRes, usersRes, chatsRes] = await Promise.allSettled([
         getMe(),
         getMessageUsers(),
         getChats(),
       ]);
 
-      const myId = meResult.status === "fulfilled" ? String(meResult.value.id) : null;
+      const myId = meRes.status === "fulfilled" ? String(meRes.value.id) : null;
       setCurrentUserId(myId);
 
       const chatList: ChatPreview[] =
-        chatsResult.status === "fulfilled" && Array.isArray(chatsResult.value)
-          ? chatsResult.value
-          : [];
-      setChats(chatList);
+        chatsRes.status === "fulfilled" && Array.isArray(chatsRes.value)
+          ? chatsRes.value : [];
 
-      // ── Build preview map from /messages/chats ────────────────────────────
+      // Build preview map: keep newest per partner
       const previewMap: Record<string, { preview: string; createdAt: string; isUnread: boolean }> = {};
       chatList.forEach(chat => {
-        const isSender = myId !== null && String(chat.senderId) === myId;
-        const otherId  = isSender ? String(chat.receiverId) : String(chat.senderId);
-        const existing = previewMap[otherId];
-        const isNewer  = !existing || new Date(chat.createdAt) > new Date(existing.createdAt);
-        if (isNewer) {
-          previewMap[otherId] = {
+        const isMine  = myId !== null && String(chat.senderId) === myId;
+        const other   = isMine ? String(chat.receiverId) : String(chat.senderId);
+        const ex      = previewMap[other];
+        if (!ex || new Date(chat.createdAt) > new Date(ex.createdAt)) {
+          previewMap[other] = {
             preview:   chat.content || "",
             createdAt: chat.createdAt,
-            isUnread:  !isSender && !chat.isRead,
+            isUnread:  !isMine && !chat.isRead,
           };
         }
       });
 
-      // ── Build full user list ──────────────────────────────────────────────
-      // /messages/users is the primary source — it includes ALL users the
-      // logged-in account has ever exchanged messages with (per backend).
-      const allUsers: MessageUser[] =
-        usersResult.status === "fulfilled" && Array.isArray(usersResult.value)
-          ? usersResult.value.filter(u => u.id !== myId)
-          : [];
+      // All staff (for New Chat picker)
+      const staff: MessageUser[] =
+        usersRes.status === "fulfilled" && Array.isArray(usersRes.value)
+          ? usersRes.value.filter(u => u.id !== myId) : [];
+      setAllStaffUsers(staff);
 
-      // Also pull any users only visible in the chat list (edge case: user
-      // deleted from /messages/users but old messages still exist).
-      const seenIds = new Set<string>(allUsers.map(u => u.id));
+      // Sidebar: ONLY users who appear in actual chat history
+      const seenIds   = new Set<string>();
+      const withHistory: MessageUser[] = [];
+
       chatList.forEach(chat => {
         [
           { id: String(chat.senderId),   fullName: chat.senderName   || `User ${chat.senderId}`,   role: "" },
           { id: String(chat.receiverId), fullName: chat.receiverName || `User ${chat.receiverId}`, role: "" },
         ].forEach(c => {
-          if (c.id && c.id !== myId && !seenIds.has(c.id)) {
-            seenIds.add(c.id);
-            allUsers.push(c);
-          }
+          if (c.id === myId || seenIds.has(c.id)) return;
+          seenIds.add(c.id);
+          // Enrich name/role from staff list if possible
+          const enriched = staff.find(u => u.id === c.id);
+          withHistory.push(enriched ?? c);
         });
       });
 
-      // Sidebar = ALL users (those with history will show preview; others show
-      // "no messages yet"). New Chat picker also uses the same list.
-      setUsers(allUsers);
-      setAllStaffUsers(allUsers);
+      setHistoryUsers(withHistory);
       setConversationPreviews(previewMap);
 
-      // For users already in the list but whose preview wasn't in /chats,
-      // fetch their conversation to get a preview (catches older messages).
-      const uncovered = allUsers.filter(u => !previewMap[u.id]);
+      // Fetch previews for history users not covered by /chats
+      const uncovered = withHistory.filter(u => !previewMap[u.id]);
       if (uncovered.length > 0 && myId) {
         fetchMissingPreviews(uncovered.slice(0, 20), myId, previewMap);
       }
     } catch (e) {
-      console.log("MessagesModal init error:", e);
+      console.warn("MessagesModal init error:", e);
     } finally {
       setLoadingInit(false);
     }
@@ -143,12 +139,12 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
   ) => {
     const updated = { ...existing };
     await Promise.all(
-      uncovered.map(async user => {
+      uncovered.map(async u => {
         try {
-          const msgs = await getConversation(user.id);
+          const msgs = await getConversation(u.id);
           if (!Array.isArray(msgs) || msgs.length === 0) return;
           const last = msgs[msgs.length - 1];
-          updated[user.id] = {
+          updated[u.id] = {
             preview:   last.content || "",
             createdAt: last.createdAt,
             isUnread:  String(last.senderId) !== myId && !last.isRead,
@@ -159,10 +155,10 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
     setConversationPreviews(prev => ({ ...prev, ...updated }));
   };
 
-  // ─── Sidebar list ──────────────────────────────────────────────────────────
+  // ─── Sidebar list — only history users, sorted newest first ───────────────
 
-  const sidebarList = useMemo((): SidebarEntry[] => {
-    return users
+  const sidebarList = useMemo((): SidebarEntry[] =>
+    historyUsers
       .map(u => {
         const p = conversationPreviews[u.id];
         return {
@@ -180,8 +176,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         if (a.createdAt) return -1;
         if (b.createdAt) return 1;
         return a.name.localeCompare(b.name);
-      });
-  }, [users, conversationPreviews]);
+      }),
+  [historyUsers, conversationPreviews]);
 
   // ─── Load conversation ─────────────────────────────────────────────────────
 
@@ -204,8 +200,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         }));
       }
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 80);
-    } catch (e) {
-      console.log("Load conversation error:", e);
+    } catch {
       setMessages([]);
     } finally {
       setLoadingConvo(false);
@@ -214,8 +209,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
   const handleSelectNewChatUser = async (user: MessageUser) => {
     setShowNewChat(false);
-    // Add to sidebar history list so they appear after conversation starts
-    setUsers(prev => prev.find(u => u.id === user.id) ? prev : [user, ...prev]);
+    // Add to history sidebar so it persists after first message
+    setHistoryUsers(prev => prev.find(u => u.id === user.id) ? prev : [user, ...prev]);
     await loadConversation(user.id);
   };
 
@@ -239,11 +234,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         }));
       }
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
-    } catch (e) {
-      console.log("Send error:", e);
-    } finally {
-      setSending(false);
-    }
+    } catch { /* silent */ }
+    finally { setSending(false); }
   };
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -253,23 +245,18 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
   const formatTime = (value: string) => {
     if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    const now = new Date();
-    const isToday =
-      date.getDate()     === now.getDate()     &&
-      date.getMonth()    === now.getMonth()    &&
-      date.getFullYear() === now.getFullYear();
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const now     = new Date();
+    const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     return isToday
-      ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : date.toLocaleDateString([], { month: "short", day: "numeric" });
+      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : d.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
-  const selectedUser    = [...users, ...allStaffUsers].find(u => u.id === selectedUserId);
-  const totalUnread     = Object.values(conversationPreviews).filter(p => p.isUnread).length;
-
-  // New Chat picker: all staff, falling back to history users if staff list is empty
-  const newChatUsers    = allStaffUsers.length > 0 ? allStaffUsers : users;
+  const selectedUser = [...historyUsers, ...allStaffUsers].find(u => u.id === selectedUserId);
+  const totalUnread  = Object.values(conversationPreviews).filter(p => p.isUnread).length;
+  const newChatUsers = allStaffUsers.length > 0 ? allStaffUsers : historyUsers;
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -280,18 +267,21 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         <View style={s.backdrop}>
           <View style={s.card}>
 
-            {/* Header */}
+            {/* ── Modal header ── */}
             <View style={s.header}>
               <View style={s.headerLeft}>
-                <Text style={s.headerTitle}>Messages</Text>
-                {totalUnread > 0 && (
-                  <View style={s.headerBadge}>
-                    <Text style={s.headerBadgeText}>{totalUnread}</Text>
-                  </View>
-                )}
+                <View style={s.headerIconWrap}>
+                  <Feather name="message-square" size={18} color={OLIVE} />
+                </View>
+                <View>
+                  <Text style={s.headerTitle}>Messages</Text>
+                  {totalUnread > 0 && (
+                    <Text style={s.headerUnread}>{totalUnread} unread</Text>
+                  )}
+                </View>
               </View>
               <Pressable onPress={onClose} hitSlop={10} style={s.closeBtn}>
-                <Feather name="x" size={22} color="#111827" />
+                <Feather name="x" size={20} color="#6B7280" />
               </Pressable>
             </View>
 
@@ -300,83 +290,72 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
               {/* ── Sidebar ── */}
               <View style={s.sidebar}>
 
-                <View style={s.sidebarHeader}>
-                  <Text style={s.sidebarTitle}>Conversations</Text>
-                  {/* Compose button for any user not yet in sidebar */}
-                  <Pressable style={s.composeBtn} onPress={() => setShowNewChat(true)} hitSlop={8}>
-                    <Feather name="edit-3" size={15} color="#6D6B3B" />
-                  </Pressable>
-                </View>
+                {/* New Chat CTA */}
+                <Pressable style={s.newChatBtn} onPress={() => setShowNewChat(true)}>
+                  <Feather name="edit-3" size={14} color="#FFF" />
+                  <Text style={s.newChatBtnText}>New Chat</Text>
+                </Pressable>
+
+                <Text style={s.sidebarLabel}>CONVERSATIONS</Text>
 
                 {loadingInit ? (
-                  <View style={s.centerWrap}>
-                    <ActivityIndicator size="small" color="#6D6B3B" />
+                  <View style={s.center}>
+                    <ActivityIndicator color={OLIVE} />
                   </View>
                 ) : sidebarList.length === 0 ? (
-                  <View style={s.centerWrap}>
-                    <Feather name="message-circle" size={28} color="#D1D5DB" />
-                    <Text style={s.emptyText}>No conversations yet</Text>
-                    <Text style={s.emptySubText}>Tap the pencil to start one</Text>
+                  <View style={s.center}>
+                    <View style={s.emptyIconWrap}>
+                      <Feather name="message-circle" size={28} color={OLIVE} />
+                    </View>
+                    <Text style={s.emptyTitle}>No chats yet</Text>
+                    <Text style={s.emptySub}>Start a new conversation above</Text>
                   </View>
                 ) : (
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.chatList}>
-                    {sidebarList.map(entry => (
-                      <Pressable
-                        key={entry.userId}
-                        style={[s.chatItem, selectedUserId === entry.userId && s.chatItemActive]}
-                        onPress={() => loadConversation(entry.userId)}
-                      >
-                        {/* Avatar */}
-                        <View style={[s.avatar, selectedUserId === entry.userId && s.avatarActive]}>
-                          <Text style={[s.avatarText, selectedUserId === entry.userId && s.avatarTextActive]}>
-                            {entry.name.charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-
-                        {/* Info */}
-                        <View style={s.chatItemBody}>
-                          <View style={s.chatItemRow}>
-                            <Text
-                              style={[
-                                s.chatName,
-                                entry.isUnread && s.chatNameUnread,
-                                selectedUserId === entry.userId && s.chatNameActive,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {entry.name}
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
+                    {sidebarList.map(entry => {
+                      const active = selectedUserId === entry.userId;
+                      return (
+                        <Pressable
+                          key={entry.userId}
+                          style={[s.chatRow, active && s.chatRowActive]}
+                          onPress={() => loadConversation(entry.userId)}
+                        >
+                          {/* Avatar */}
+                          <View style={[s.avatar, active && s.avatarActive]}>
+                            <Text style={[s.avatarText, active && s.avatarTextActive]}>
+                              {entry.name.charAt(0).toUpperCase()}
                             </Text>
-                            {!!entry.createdAt && (
-                              <Text style={[s.chatTime, selectedUserId === entry.userId && s.chatTimeActive]}>
-                                {formatTime(entry.createdAt)}
+                          </View>
+
+                          {/* Text */}
+                          <View style={s.chatRowBody}>
+                            <View style={s.chatRowTop}>
+                              <Text style={[s.chatName, entry.isUnread && s.chatNameBold, active && s.chatNameActive]} numberOfLines={1}>
+                                {entry.name}
+                              </Text>
+                              {!!entry.createdAt && (
+                                <Text style={[s.chatTime, active && s.chatTimeActive]}>
+                                  {formatTime(entry.createdAt)}
+                                </Text>
+                              )}
+                            </View>
+                            {!!entry.role && (
+                              <Text style={[s.chatRole, active && s.chatRoleActive]}>
+                                {formatRole(entry.role)}
+                              </Text>
+                            )}
+                            {!!entry.preview && (
+                              <Text style={[s.chatPreview, entry.isUnread && s.chatPreviewBold, active && s.chatPreviewActive]} numberOfLines={1}>
+                                {entry.preview}
                               </Text>
                             )}
                           </View>
-                          {!!entry.role && (
-                            <Text style={[s.chatRole, selectedUserId === entry.userId && s.chatRoleActive]}>
-                              {formatRole(entry.role)}
-                            </Text>
-                          )}
-                          {!!entry.preview && (
-                            <Text
-                              numberOfLines={1}
-                              style={[
-                                s.chatPreview,
-                                entry.isUnread && s.chatPreviewUnread,
-                                selectedUserId === entry.userId && s.chatPreviewActive,
-                              ]}
-                            >
-                              {entry.preview}
-                            </Text>
-                          )}
-                        </View>
 
-                        {/* Unread dot */}
-                        {entry.isUnread && (
-                          <View style={s.unreadDot} />
-                        )}
-                      </Pressable>
-                    ))}
+                          {/* Unread pip */}
+                          {entry.isUnread && <View style={[s.pip, active && s.pipActive]} />}
+                        </Pressable>
+                      );
+                    })}
                   </ScrollView>
                 )}
               </View>
@@ -384,55 +363,61 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
               {/* ── Chat panel ── */}
               <View style={s.chatPanel}>
                 {!selectedUserId ? (
-                  <View style={s.emptyState}>
-                    <Feather name="message-circle" size={44} color="#C9CDD4" />
-                    <Text style={s.emptyStateTitle}>Select a conversation</Text>
-                    <Text style={s.emptyStateSub}>Choose a chat or tap "New Chat" to start one.</Text>
+                  <View style={s.emptyPanel}>
+                    <View style={s.emptyPanelIcon}>
+                      <Feather name="message-square" size={38} color={OLIVE} />
+                    </View>
+                    <Text style={s.emptyPanelTitle}>Select a conversation</Text>
+                    <Text style={s.emptyPanelSub}>Choose from the list or start a new chat</Text>
                   </View>
                 ) : (
                   <>
-                    {/* Chat header */}
-                    <View style={s.chatHeader}>
-                      <View style={s.avatarSm}>
-                        <Text style={s.avatarSmText}>
+                    {/* Chat top bar */}
+                    <View style={s.chatTopBar}>
+                      <View style={s.avatarMd}>
+                        <Text style={s.avatarMdText}>
                           {selectedUser?.fullName.charAt(0).toUpperCase() ?? "?"}
                         </Text>
                       </View>
                       <View>
-                        <Text style={s.chatHeaderName}>
-                          {selectedUser?.fullName ?? `User ${selectedUserId}`}
-                        </Text>
-                        <Text style={s.chatHeaderRole}>
-                          {formatRole(selectedUser?.role ?? "")}
-                        </Text>
+                        <Text style={s.chatTopName}>{selectedUser?.fullName ?? `User ${selectedUserId}`}</Text>
+                        {!!selectedUser?.role && (
+                          <Text style={s.chatTopRole}>{formatRole(selectedUser.role)}</Text>
+                        )}
                       </View>
                     </View>
 
                     {/* Messages */}
                     <ScrollView
                       ref={scrollRef}
-                      style={s.messagesArea}
-                      contentContainerStyle={s.messagesContent}
+                      style={s.msgArea}
+                      contentContainerStyle={s.msgContent}
                       showsVerticalScrollIndicator={false}
                     >
                       {loadingConvo ? (
-                        <View style={s.centerWrap}>
-                          <ActivityIndicator size="small" color="#6D6B3B" />
-                        </View>
+                        <View style={s.center}><ActivityIndicator color={OLIVE} /></View>
                       ) : messages.length === 0 ? (
-                        <View style={s.emptyMsgs}>
-                          <Text style={s.emptyMsgsText}>No messages yet — say hello! 👋</Text>
+                        <View style={s.center}>
+                          <Feather name="message-circle" size={28} color="#D1D5DB" />
+                          <Text style={s.emptyMsgs}>No messages yet — say hello! 👋</Text>
                         </View>
                       ) : (
                         messages.map(msg => {
                           const isOut = currentUserId !== null && String(msg.senderId) === String(currentUserId);
                           return (
-                            <View key={msg.id} style={[s.bubbleRow, isOut ? s.bubbleRowOut : s.bubbleRowIn]}>
-                              <View style={[s.bubble, isOut ? s.bubbleOut : s.bubbleIn]}>
-                                <Text style={[s.bubbleText, isOut ? s.bubbleTextOut : s.bubbleTextIn]}>
+                            <View key={msg.id} style={[s.bubbleRow, isOut ? s.bubbleOut : s.bubbleIn]}>
+                              {!isOut && (
+                                <View style={s.bubbleAvatar}>
+                                  <Text style={s.bubbleAvatarText}>
+                                    {selectedUser?.fullName.charAt(0).toUpperCase() ?? "?"}
+                                  </Text>
+                                </View>
+                              )}
+                              <View style={[s.bubble, isOut ? s.bubbleSentBg : s.bubbleRecvBg]}>
+                                <Text style={[s.bubbleText, isOut ? s.bubbleTextSent : s.bubbleTextRecv]}>
                                   {msg.content}
                                 </Text>
-                                <Text style={[s.bubbleTime, isOut && s.bubbleTimeOut]}>
+                                <Text style={[s.bubbleTimestamp, isOut && s.bubbleTimestampSent]}>
                                   {formatTime(msg.createdAt)}
                                 </Text>
                               </View>
@@ -442,18 +427,18 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                       )}
                     </ScrollView>
 
-                    {/* Input */}
+                    {/* Input row */}
                     <View style={s.inputRow}>
                       <TextInput
                         value={messageText}
                         onChangeText={setMessageText}
-                        placeholder="Type a message..."
+                        placeholder={`Message ${selectedUser?.fullName ?? ""}…`}
                         placeholderTextColor="#9CA3AF"
                         style={s.input}
                         multiline
                       />
                       <Pressable
-                        style={[s.sendBtn, (!messageText.trim() || sending) && s.sendBtnDisabled]}
+                        style={[s.sendBtn, (!messageText.trim() || sending) && s.sendBtnOff]}
                         onPress={handleSend}
                         disabled={!messageText.trim() || sending}
                       >
@@ -476,33 +461,35 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         <View style={s.pickerBackdrop}>
           <View style={s.pickerCard}>
             <View style={s.pickerHeader}>
-              <Text style={s.pickerTitle}>Start New Chat</Text>
-              <Pressable onPress={() => setShowNewChat(false)} hitSlop={10}>
-                <Feather name="x" size={20} color="#111827" />
+              <Text style={s.pickerTitle}>New Conversation</Text>
+              <Pressable onPress={() => setShowNewChat(false)} hitSlop={10} style={s.pickerClose}>
+                <Feather name="x" size={20} color="#6B7280" />
               </Pressable>
             </View>
+            <Text style={s.pickerSub}>Choose who you'd like to message</Text>
 
             {loadingInit ? (
-              <ActivityIndicator size="small" color="#6D6B3B" style={{ marginVertical: 20 }} />
+              <ActivityIndicator color={OLIVE} style={{ marginVertical: 24 }} />
             ) : newChatUsers.length === 0 ? (
               <Text style={s.pickerEmpty}>No users available</Text>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 360 }}>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
                 {newChatUsers.map(user => (
                   <Pressable
                     key={user.id}
-                    style={s.pickerUser}
+                    style={s.pickerRow}
                     onPress={() => handleSelectNewChatUser(user)}
                   >
                     <View style={s.pickerAvatar}>
                       <Text style={s.pickerAvatarText}>{user.fullName.charAt(0).toUpperCase()}</Text>
                     </View>
-                    <View>
-                      <Text style={s.pickerUserName}>{user.fullName}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.pickerName}>{user.fullName}</Text>
                       {!!user.role && (
-                        <Text style={s.pickerUserRole}>{formatRole(user.role)}</Text>
+                        <Text style={s.pickerRole}>{formatRole(user.role)}</Text>
                       )}
                     </View>
+                    <Feather name="chevron-right" size={16} color="#C4C9D4" />
                   </Pressable>
                 ))}
               </ScrollView>
@@ -515,111 +502,113 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 }
 
 const s = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.32)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  card: {
-    width: "92%",
-    maxWidth: 1050,
-    height: "82%",
-    backgroundColor: "#FFF",
-    borderRadius: 20,
-    overflow: "hidden",
+  // ── Backdrop / card
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "center", alignItems: "center", padding: 16 },
+  card:     {
+    width: "94%", maxWidth: 1060, height: "84%",
+    backgroundColor: "#FFF", borderRadius: 22, overflow: "hidden",
     ...Platform.select({
-      ios:     { shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 14 },
-      android: { elevation: 6 },
+      ios:     { shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 18 },
+      android: { elevation: 8 },
     }),
   },
 
-  // Header
-  header:          { height: 68, borderBottomWidth: 1, borderBottomColor: "#ECECEC", paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerLeft:      { flexDirection: "row", alignItems: "center", gap: 10 },
-  headerTitle:     { fontSize: 19, fontWeight: "900", color: "#111827" },
-  headerBadge:     { backgroundColor: "#DC2626", borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
-  headerBadgeText: { color: "#FFF", fontSize: 11, fontWeight: "800" },
-  closeBtn:        { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  // ── Header
+  header:        { height: 64, borderBottomWidth: 1, borderBottomColor: BORDER, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: OLIVE_BG },
+  headerLeft:    { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerIconWrap:{ width: 38, height: 38, borderRadius: 19, backgroundColor: "#FFF", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: OLIVE + "30" },
+  headerTitle:   { fontSize: 17, fontWeight: "900", color: "#1F2937" },
+  headerUnread:  { fontSize: 11, color: OLIVE, fontWeight: "700", marginTop: 1 },
+  closeBtn:      { width: 34, height: 34, borderRadius: 17, backgroundColor: "#FFF", alignItems: "center", justifyContent: "center" },
 
-  body:    { flex: 1, flexDirection: "row" },
+  body: { flex: 1, flexDirection: "row" },
 
-  // Sidebar
-  sidebar:      { width: 300, borderRightWidth: 1, borderRightColor: "#ECECEC", backgroundColor: "#FAFAFA", paddingHorizontal: 10, paddingTop: 10, paddingBottom: 10 },
-  sidebarHeader:{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, marginBottom: 10 },
-  sidebarTitle: { fontSize: 13, fontWeight: "900", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.5 },
-  composeBtn:   { width: 30, height: 30, borderRadius: 8, backgroundColor: "#E8E5DC", alignItems: "center", justifyContent: "center" },
-  chatList:     { paddingBottom: 10 },
+  // ── Sidebar
+  sidebar:      { width: 288, borderRightWidth: 1, borderRightColor: BORDER, backgroundColor: SURFACE, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12 },
+  newChatBtn:   { height: 42, borderRadius: 12, backgroundColor: OLIVE, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 },
+  newChatBtnText: { color: "#FFF", fontSize: 13, fontWeight: "800" },
+  sidebarLabel: { fontSize: 11, fontWeight: "800", color: "#9CA3AF", letterSpacing: 0.8, marginBottom: 10, paddingHorizontal: 2 },
 
-  chatItem:        { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#FFF", borderRadius: 14, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: "#E8E8E8", position: "relative" },
-  chatItemActive:  { backgroundColor: "#6D6B3B", borderColor: "#6D6B3B" },
-  chatItemBody:    { flex: 1, minWidth: 0 },
-  chatItemRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  center:       { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 32, gap: 10 },
+  emptyIconWrap:{ width: 56, height: 56, borderRadius: 28, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center" },
+  emptyTitle:   { fontSize: 14, fontWeight: "800", color: "#6B7280" },
+  emptySub:     { fontSize: 12, color: "#C4C9D4", fontWeight: "600", textAlign: "center" },
 
-  avatar:          { width: 40, height: 40, borderRadius: 20, backgroundColor: "#E8E5DC", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  avatarActive:    { backgroundColor: "rgba(255,255,255,0.2)" },
-  avatarText:      { fontSize: 16, fontWeight: "800", color: "#6D6B3B" },
+  // Chat row
+  chatRow:      { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, padding: 10, marginBottom: 4, position: "relative" },
+  chatRowActive:{ backgroundColor: OLIVE },
+  chatRowBody:  { flex: 1, minWidth: 0 },
+  chatRowTop:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+
+  avatar:          { width: 42, height: 42, borderRadius: 21, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  avatarActive:    { backgroundColor: "rgba(255,255,255,0.22)" },
+  avatarText:      { fontSize: 16, fontWeight: "900", color: OLIVE },
   avatarTextActive:{ color: "#FFF" },
 
-  chatName:         { flex: 1, fontSize: 14, fontWeight: "700", color: "#111827" },
-  chatNameUnread:   { fontWeight: "900" },
-  chatNameActive:   { color: "#FFF", fontWeight: "900" },
-  chatTime:         { fontSize: 11, color: "#9CA3AF", fontWeight: "600", flexShrink: 0 },
-  chatTimeActive:   { color: "#EAEAEA" },
-  chatRole:         { fontSize: 11, fontWeight: "600", color: "#9CA3AF", marginTop: 1, textTransform: "capitalize" },
-  chatRoleActive:   { color: "#EAEAEA" },
-  chatPreview:      { marginTop: 3, fontSize: 12, color: "#6B7280" },
-  chatPreviewUnread:{ fontWeight: "700", color: "#374151" },
-  chatPreviewActive:{ color: "#F0EDE5" },
-  unreadDot:        { position: "absolute", top: 10, right: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: "#DC2626", borderWidth: 2, borderColor: "#FFF" },
+  chatName:       { flex: 1, fontSize: 14, fontWeight: "700", color: "#111827" },
+  chatNameBold:   { fontWeight: "900" },
+  chatNameActive: { color: "#FFF", fontWeight: "900" },
+  chatTime:       { fontSize: 11, color: "#9CA3AF", fontWeight: "600", flexShrink: 0 },
+  chatTimeActive: { color: "rgba(255,255,255,0.7)" },
+  chatRole:       { fontSize: 11, color: "#9CA3AF", fontWeight: "600", marginTop: 1, textTransform: "capitalize" },
+  chatRoleActive: { color: "rgba(255,255,255,0.7)" },
+  chatPreview:    { marginTop: 3, fontSize: 12, color: "#9CA3AF" },
+  chatPreviewBold:{ color: "#374151", fontWeight: "700" },
+  chatPreviewActive: { color: "rgba(255,255,255,0.75)" },
 
-  centerWrap:   { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 30, gap: 8 },
-  emptyText:    { fontSize: 14, color: "#9CA3AF", fontWeight: "700" },
-  emptySubText: { fontSize: 12, color: "#C4C9D4", fontWeight: "600" },
+  pip:       { position: "absolute", top: 12, right: 10, width: 9, height: 9, borderRadius: 5, backgroundColor: "#DC2626", borderWidth: 2, borderColor: SURFACE },
+  pipActive: { borderColor: OLIVE },
 
-  // Chat panel
-  chatPanel:  { flex: 1, backgroundColor: "#FFF" },
-  chatHeader: { height: 68, borderBottomWidth: 1, borderBottomColor: "#ECECEC", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18 },
-  avatarSm:     { width: 38, height: 38, borderRadius: 19, backgroundColor: "#6D6B3B22", alignItems: "center", justifyContent: "center" },
-  avatarSmText: { fontSize: 16, fontWeight: "800", color: "#6D6B3B" },
-  chatHeaderName: { fontSize: 16, fontWeight: "900", color: "#111827" },
-  chatHeaderRole: { marginTop: 1, fontSize: 12, color: "#6B7280", fontWeight: "700", textTransform: "capitalize" },
+  // ── Chat panel
+  chatPanel:   { flex: 1, backgroundColor: "#FFF" },
 
-  messagesArea:    { flex: 1 },
-  messagesContent: { padding: 16, paddingBottom: 8 },
-  bubbleRow:    { marginBottom: 10 },
-  bubbleRowOut: { alignItems: "flex-end" },
-  bubbleRowIn:  { alignItems: "flex-start" },
-  bubble:           { maxWidth: "72%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
-  bubbleOut:        { backgroundColor: "#6D6B3B", borderBottomRightRadius: 4 },
-  bubbleIn:         { backgroundColor: "#F0F0F0", borderBottomLeftRadius: 4 },
+  chatTopBar:   { height: 64, borderBottomWidth: 1, borderBottomColor: BORDER, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, backgroundColor: SURFACE },
+  avatarMd:     { width: 40, height: 40, borderRadius: 20, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center" },
+  avatarMdText: { fontSize: 16, fontWeight: "900", color: OLIVE },
+  chatTopName:  { fontSize: 15, fontWeight: "900", color: "#1F2937" },
+  chatTopRole:  { marginTop: 1, fontSize: 11, color: "#9CA3AF", fontWeight: "700", textTransform: "capitalize" },
+
+  msgArea:    { flex: 1, backgroundColor: "#F9F8F6" },
+  msgContent: { padding: 18, paddingBottom: 10 },
+
+  bubbleRow: { flexDirection: "row", alignItems: "flex-end", marginBottom: 12, gap: 8 },
+  bubbleIn:  { justifyContent: "flex-start" },
+  bubbleOut: { justifyContent: "flex-end" },
+
+  bubbleAvatar:     { width: 28, height: 28, borderRadius: 14, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center", flexShrink: 0, marginBottom: 2 },
+  bubbleAvatarText: { fontSize: 11, fontWeight: "900", color: OLIVE },
+
+  bubble:           { maxWidth: "68%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  bubbleSentBg:     { backgroundColor: OLIVE, borderBottomRightRadius: 4 },
+  bubbleRecvBg:     { backgroundColor: "#FFFFFF", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: BORDER },
   bubbleText:       { fontSize: 14, lineHeight: 20 },
-  bubbleTextOut:    { color: "#FFF" },
-  bubbleTextIn:     { color: "#111827" },
-  bubbleTime:       { marginTop: 4, fontSize: 10, color: "#9CA3AF", alignSelf: "flex-end" },
-  bubbleTimeOut:    { color: "rgba(255,255,255,0.6)" },
+  bubbleTextSent:   { color: "#FFF" },
+  bubbleTextRecv:   { color: "#1F2937" },
+  bubbleTimestamp:  { marginTop: 4, fontSize: 10, color: "#9CA3AF", alignSelf: "flex-end" },
+  bubbleTimestampSent: { color: "rgba(255,255,255,0.55)" },
 
-  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 10, padding: 14, borderTopWidth: 1, borderTopColor: "#ECECEC" },
-  input:    { flex: 1, minHeight: 46, maxHeight: 110, borderRadius: 24, backgroundColor: "#F3F4F6", paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: "#111827", borderWidth: 1, borderColor: "#E5E7EB" },
-  sendBtn:         { width: 46, height: 46, borderRadius: 23, backgroundColor: "#6D6B3B", alignItems: "center", justifyContent: "center" },
-  sendBtnDisabled: { opacity: 0.45 },
+  emptyPanel:     { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, backgroundColor: "#F9F8F6" },
+  emptyPanelIcon: { width: 78, height: 78, borderRadius: 39, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  emptyPanelTitle:{ fontSize: 18, fontWeight: "900", color: "#374151" },
+  emptyPanelSub:  { marginTop: 6, fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
+  emptyMsgs:      { marginTop: 10, fontSize: 14, color: "#9CA3AF", fontWeight: "700" },
 
-  emptyState:     { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
-  emptyStateTitle:{ marginTop: 14, fontSize: 20, fontWeight: "900", color: "#4B5563" },
-  emptyStateSub:  { marginTop: 6, fontSize: 14, color: "#9CA3AF", textAlign: "center" },
-  emptyMsgs:      { alignItems: "center", paddingVertical: 40 },
-  emptyMsgsText:  { fontSize: 14, color: "#9CA3AF", fontWeight: "700" },
+  inputRow: { flexDirection: "row", alignItems: "flex-end", gap: 10, padding: 14, borderTopWidth: 1, borderTopColor: BORDER, backgroundColor: "#FFF" },
+  input:    { flex: 1, minHeight: 46, maxHeight: 110, borderRadius: 24, backgroundColor: "#F3F4F6", paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: "#1F2937", borderWidth: 1, borderColor: "#E5E7EB" },
+  sendBtn:    { width: 46, height: 46, borderRadius: 23, backgroundColor: OLIVE, alignItems: "center", justifyContent: "center" },
+  sendBtnOff: { opacity: 0.4 },
 
-  // New Chat picker
+  // ── New Chat picker
   pickerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center", padding: 24 },
-  pickerCard:     { width: "100%", maxWidth: 420, backgroundColor: "#FFF", borderRadius: 20, padding: 18 },
-  pickerHeader:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  pickerTitle:    { fontSize: 17, fontWeight: "900", color: "#111827" },
+  pickerCard:     { width: "100%", maxWidth: 440, backgroundColor: "#FFF", borderRadius: 22, padding: 20 },
+  pickerHeader:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  pickerClose:    { width: 32, height: 32, borderRadius: 16, backgroundColor: SURFACE, alignItems: "center", justifyContent: "center" },
+  pickerTitle:    { fontSize: 18, fontWeight: "900", color: "#1F2937" },
+  pickerSub:      { fontSize: 13, color: "#9CA3AF", marginBottom: 16, fontWeight: "600" },
   pickerEmpty:    { textAlign: "center", color: "#9CA3AF", paddingVertical: 20, fontSize: 14 },
-  pickerUser:     { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F9FAFB", borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#E5E7EB" },
-  pickerAvatar:   { width: 40, height: 40, borderRadius: 20, backgroundColor: "#E8E5DC", alignItems: "center", justifyContent: "center" },
-  pickerAvatarText: { fontSize: 16, fontWeight: "800", color: "#6D6B3B" },
-  pickerUserName: { fontSize: 14, fontWeight: "800", color: "#111827" },
-  pickerUserRole: { marginTop: 2, fontSize: 12, fontWeight: "600", color: "#6B7280", textTransform: "capitalize" },
+  pickerRow:      { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, padding: 12, marginBottom: 8, backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER },
+  pickerAvatar:   { width: 42, height: 42, borderRadius: 21, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  pickerAvatarText: { fontSize: 16, fontWeight: "900", color: OLIVE },
+  pickerName:     { fontSize: 14, fontWeight: "800", color: "#1F2937" },
+  pickerRole:     { marginTop: 2, fontSize: 12, fontWeight: "600", color: "#9CA3AF", textTransform: "capitalize" },
 });
