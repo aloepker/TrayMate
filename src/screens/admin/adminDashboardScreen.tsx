@@ -864,7 +864,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             <Text style={styles.dropdownTitle}>Assign Caregiver</Text>
             {assigningCaregiverToResidentId !== null && (() => {
               const rid = assigningCaregiverToResidentId;
-              const currentId = residentCaregiverMap[rid];
+              const currentId = (residentCaregiversMap[rid] ?? [])[0] ?? null;
               if (caregivers.length === 0) {
                 return <Text style={styles.dropdownEmpty}>No caregivers available.</Text>;
               }
