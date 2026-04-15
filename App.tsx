@@ -18,12 +18,12 @@ import CartScreen from './src/screens/CartScreen';
 import LoginScreen from './src/screens/loginScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
+import OrderHistoryScreen from './src/screens/OrderHistoryScreen';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
-import KitchenBoardScreen from './src/screens/kitchen/kitchenBoardScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboard';
 
-// Caregiver dashboard screen
+//Caregiver dashboard screen
 import CaregiverDashboardScreen from './src/screens/caregiver/caregiverDashboardScreen';
 
 const Stack = createStackNavigator();
@@ -31,7 +31,7 @@ const Stack = createStackNavigator();
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* 2. ClockProvider is at the top so it runs globally */}
+      {/* ClockProvider is at the top so it runs globally */}
       <ClockProvider>
         <SettingsProvider>
           <KitchenMessageProvider>
@@ -52,8 +52,8 @@ export default function App() {
                   <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
                   <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
                   <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
-                  <Stack.Screen name="KitchenBoard" component={KitchenBoardScreen} />
                   <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+                  <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
                 </Stack.Navigator>
               </NavigationContainer>
             </CartProvider>

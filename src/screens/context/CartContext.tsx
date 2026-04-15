@@ -3,6 +3,7 @@ import {
   placeOrderApi,
   replaceOrderApi,
   getOrderHistoryApi,
+  deleteOrderApi,
   type MealOrderResponse,
 } from '../../services/api';
 
@@ -25,7 +26,7 @@ export type Order = {
   backendId?: number;       // ID from backend /mealOrders
   residentId: string;
   items: Meal[];
-  status: 'confirmed' | 'preparing' | 'ready' | 'completed';
+  status: 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'substitution_requested';
   placedAt: Date;
   totalNutrition: { calories: number; sodium: number; protein: number };
 };
@@ -45,7 +46,8 @@ type CartContextType = {
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
   fetchOrderHistory: (userId: string) => Promise<void>;
-  clearAllOrders: () => void;
+  clearAllOrders: (residentId?: string) => Promise<void>;
+  removeOrder: (orderId: string) => Promise<void>;
 };
 
 // Create the context
@@ -55,6 +57,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [cart, setCart] = useState<Meal[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [deletedBackendIds, setDeletedBackendIds] = useState<Set<number>>(new Set());
 
   const addToCart = (meal: Meal) => {
     setCart((prev) => [...prev, meal]);
@@ -137,6 +140,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Success — backend returned 201
       const newOrder = buildLocalOrder(rid, response.id);
+      setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       return { order: newOrder };
     } catch (err: any) {
@@ -212,7 +216,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       const history = await getOrderHistoryApi(userId);
       if (!history || history.length === 0) return;
 
-      const backendOrders: Order[] = history.map((entry) => ({
+      const backendOrders: Order[] = history
+      .filter((entry) => !deletedBackendIds.has(entry.order.id))
+      .map((entry) => ({
         id: `backend_${entry.order.id}`,
         backendId: entry.order.id,
         residentId: entry.order.userId,
@@ -226,8 +232,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           protein_g: m.protein,
           tags: m.tags ? m.tags.split(',').map((t) => t.trim()) : [],
         })),
-        status: entry.order.status === 'pending' ? 'confirmed' : (entry.order.status as Order['status']),
-        placedAt: new Date(entry.order.date),
+        status: (() => {
+          const s = entry.order.status as string;
+          if (s === 'pending') return 'confirmed';
+          if (s === 'cancelled' || s === 'canceled') return 'cancelled';
+          if (s === 'substitution_requested') return 'substitution_requested';
+          if (['confirmed','preparing','ready','completed'].includes(s)) return s as Order['status'];
+          return 'confirmed';
+        })(),
+        // Use ISO string from backend directly — preserves actual timestamp
+        placedAt: new Date((entry.order as any).date ?? (entry.order as any).createdAt ?? Date.now()),
         totalNutrition: {
           calories: entry.meals.reduce((sum, m) => sum + m.calories, 0),
           sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),
@@ -235,10 +249,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         },
       }));
 
-      // Fully replace orders for this resident with backend data (prevents duplicates)
+      // Merge: keep local-only orders (no backendId) + replace backend orders
+      // Use String() compare to handle numeric vs string ID mismatch
       setOrders((prev) => [
-        ...prev.filter((o) => o.residentId !== userId),
+        ...prev.filter((o) => String(o.residentId) !== String(userId)),
         ...backendOrders,
+        // Preserve local-only orders for this resident that have no backend record yet
+        ...prev.filter((o) => String(o.residentId) === String(userId) && !o.backendId),
       ]);
     } catch (err: any) {
       console.warn('Failed to fetch order history:', err?.message);
@@ -252,13 +269,51 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getOrdersForResident = (residentId: string): Order[] => {
-    return orders.filter((o) => o.residentId === residentId);
+    // Use String() compare — backend may return numeric IDs while route params are strings
+    return orders.filter((o) => String(o.residentId) === String(residentId));
   };
 
-  /** Wipe all locally cached orders (e.g. on logout or dev reset) */
-  const clearAllOrders = () => {
-    setOrders([]);
-    setCart([]);
+  /**
+   * Remove a single order — deletes from backend first, then local state.
+   * Falls back to local-only removal if backend call fails.
+   */
+  const removeOrder = async (orderId: string): Promise<void> => {
+    const order = orders.find((o) => o.id === orderId);
+    if (order?.backendId) {
+      // Track this ID so fetchOrderHistory won't re-add it even if delete fails
+      setDeletedBackendIds((prev) => new Set(prev).add(order.backendId!));
+      try {
+        await deleteOrderApi(order.backendId);
+      } catch (err: any) {
+        console.warn('Backend delete failed, removing locally only:', err?.message);
+      }
+    }
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+  };
+
+  /**
+   * Clear all orders for a specific resident (or all if no residentId).
+   * Deletes each order from the backend, then clears local state.
+   */
+  const clearAllOrders = async (residentId?: string): Promise<void> => {
+    const toDelete = residentId
+      ? orders.filter((o) => String(o.residentId) === String(residentId))
+      : orders;
+
+    // Delete from backend in parallel, ignoring individual failures
+    await Promise.allSettled(
+      toDelete
+        .filter((o) => o.backendId != null)
+        .map((o) => deleteOrderApi(o.backendId!))
+    );
+
+    // Remove cleared orders from local state
+    if (residentId) {
+      setOrders((prev) => prev.filter((o) => String(o.residentId) !== String(residentId)));
+    } else {
+      setOrders([]);
+      setCart([]);
+    }
   };
 
   return (
@@ -277,6 +332,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         getOrdersForResident,
         fetchOrderHistory,
         clearAllOrders,
+        removeOrder,
       }}
     >
       {children}

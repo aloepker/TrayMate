@@ -1,7 +1,6 @@
 // src/screens/caregiver/caregiverDashboardScreen.tsx
 
-import React, { useEffect, useMemo, useState } from "react";
-import MessagesModal from "../components/messaging/MessagesModal";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,8 +14,6 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
-  TextInput,
-  TouchableOpacity,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import {
@@ -25,6 +22,11 @@ import {
   getCaregiverResidents,
   getCaregiverNotifications,
 } from "../../services/api";
+import { useKitchenMessages } from "../context/KitchenMessageContext";
+import MessagesModal from "../components/messaging/MessagesModal";
+import { getChats, getMe, sendMessage, searchOrdersApi, deleteOrderApi } from "../../services/api";
+import InAppNotificationBanner from "../components/InAppNotificationBanner";
+import { getCaregiverResidentList } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -35,6 +37,96 @@ interface CaregiverDashboardProps {
 export default function CaregiverDashboardScreen({
   navigation,
 }: CaregiverDashboardProps) {
+  // Kitchen messages from context (sent by kitchen staff per order)
+  const { messages: kitchenMessages, unreadCount: kitchenUnread } = useKitchenMessages();
+
+  // Backend messages modal
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [msgUnread, setMsgUnread] = useState(0);
+
+  // In-app notification banner state
+  const [bannerVisible,    setBannerVisible]    = useState(false);
+  const [bannerSender,     setBannerSender]     = useState("");
+  const [bannerPreview,    setBannerPreview]    = useState("");
+
+  // Track last-seen unread count so we only fire banner on genuinely new messages
+  const lastUnreadRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let myIdCache: string | null = null;
+
+    const checkUnread = async () => {
+      try {
+        const chats = await getChats();
+        if (!Array.isArray(chats)) return;
+
+        if (!myIdCache) {
+          const me = await getMe();
+          myIdCache = String(me.id);
+        }
+
+        // Only count messages where I am the receiver and they are unread
+        const unreadChats = chats.filter(
+          c => !c.isRead && String(c.receiverId) === myIdCache
+        );
+        const count = unreadChats.length;
+        setMsgUnread(count);
+
+        // Show banner if unread count has increased since last poll
+        if (lastUnreadRef.current !== null && count > lastUnreadRef.current) {
+          const newest = unreadChats.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )[0];
+          if (newest) {
+            const content = newest.content || "";
+            const isAutoOrder = content.includes("Auto-order placed") || content.includes("placed an order");
+
+            if (isAutoOrder) {
+              // Show accept/deny alert for auto-placed orders
+              Alert.alert(
+                "New Order",
+                `${newest.senderName || "A resident"}: ${content}`,
+                [
+                  {
+                    text: "Deny",
+                    style: "destructive",
+                    onPress: async () => {
+                      try {
+                        // Reply to resident that order was denied
+                        await sendMessage(newest.senderId, "Your auto-placed order has been reviewed and cancelled by your caregiver. Please place a new order manually.");
+                        Alert.alert("Order Denied", "The resident has been notified.");
+                      } catch { /* ignore */ }
+                    },
+                  },
+                  {
+                    text: "Accept",
+                    style: "default",
+                    onPress: async () => {
+                      try {
+                        await sendMessage(newest.senderId, "Your order has been confirmed by your caregiver!");
+                        Alert.alert("Order Accepted", "The resident has been notified.");
+                      } catch { /* ignore */ }
+                    },
+                  },
+                ]
+              );
+            } else {
+              setBannerSender(newest.senderName || "A resident");
+              setBannerPreview(content || "Sent you a message");
+              setBannerVisible(true);
+            }
+          }
+        }
+
+        lastUnreadRef.current = count;
+      } catch { /* ignore */ }
+    };
+
+    checkUnread();
+    const iv = setInterval(checkUnread, 10000); // poll every 10s
+    return () => clearInterval(iv);
+  }, []);
+
   // -----------------------------
   // Main screen state
   // -----------------------------
@@ -57,8 +149,6 @@ export default function CaregiverDashboardScreen({
   // Controls resident detail popup
   const [showResidentModal, setShowResidentModal] = useState(false);
 
-  const [showMessagesModal, setShowMessagesModal] = useState(false);
-
   // -----------------------------
   // Initial data load
   // -----------------------------
@@ -69,24 +159,56 @@ export default function CaregiverDashboardScreen({
       try {
         setLoading(true);
 
-        // Role-based caregiver endpoint:
-        // returns ONLY residents assigned to the logged-in caregiver
-        const residentData = await getCaregiverResidents();
-
-        // Notifications endpoint for caregiver dashboard
-        // If backend does not have this ready yet, the catch below prevents the whole page from failing
-        let notifData: KitchenNotification[] = [];
+        // Get my ID for storage lookups
+        let myId: string | null = null;
         try {
-          notifData = await getCaregiverNotifications();
-        } catch {
-          notifData = [];
+          const me = await getMe();
+          myId = String(me.id);
+        } catch (e) {
+          console.warn("[CaregiverDashboard] getMe failed:", e);
         }
+
+        // Fetch from all sources in parallel
+        const [backendResult, storedResult, notifResult] = await Promise.allSettled([
+          getCaregiverResidents(),
+          myId ? getCaregiverResidentList(myId) : Promise.resolve([]),
+          getCaregiverNotifications(),
+        ]);
+
+        const backendList: Resident[] =
+          backendResult.status === "fulfilled" ? backendResult.value ?? [] : [];
+
+        console.log("[CaregiverDashboard] Backend returned", backendList.length, "residents");
+
+        // Merge storage residents with backend list (dedup by id)
+        const storedList =
+          storedResult.status === "fulfilled" ? storedResult.value : [];
+        const mergedMap = new Map<string, Resident>();
+        for (const r of backendList) mergedMap.set(r.id, r);
+        for (const s of storedList) {
+          if (!mergedMap.has(s.id)) {
+            mergedMap.set(s.id, {
+              id: s.id,
+              name: s.name,
+              room: s.room,
+              dietaryRestrictions: s.dietaryRestrictions,
+              foodAllergies: s.foodAllergies,
+              medicalConditions: [],
+              medications: [],
+              caregiverId: myId,
+            });
+          }
+        }
+
+        const notifData: KitchenNotification[] =
+          notifResult.status === "fulfilled" ? notifResult.value ?? [] : [];
 
         if (!cancelled) {
-          setResidents(residentData || []);
-          setNotifications(notifData || []);
+          setResidents([...mergedMap.values()]);
+          setNotifications(notifData);
         }
       } catch (e: any) {
+        console.warn("[CaregiverDashboard] loadDashboard error:", e);
         if (!cancelled) {
           Alert.alert(
             "Failed to load caregiver dashboard",
@@ -113,9 +235,9 @@ export default function CaregiverDashboardScreen({
   const stats = useMemo(() => {
     return {
       assignedResidents: residents.length,
-      activeAlerts: notifications.filter((n) => !n.read).length,
+      activeAlerts: notifications.filter((n) => !n.read).length + kitchenUnread,
     };
-  }, [residents, notifications]);
+  }, [residents, notifications, kitchenUnread]);
 
   // -----------------------------
   // Group notifications by residentId
@@ -150,22 +272,37 @@ export default function CaregiverDashboardScreen({
     setSelectedResident(null);
   };
 
+  // Kitchen messages grouped by resident
+  const kitchenMessagesByResident = useMemo(() => {
+    const map: Record<string, typeof kitchenMessages> = {};
+    for (const msg of kitchenMessages) {
+      const residentId = String(msg.residentId ?? "").trim();
+      if (!residentId) continue;
+      if (!map[residentId]) map[residentId] = [];
+      map[residentId].push(msg);
+    }
+    return map;
+  }, [kitchenMessages]);
+
   // -----------------------------
   // Bell icon click:
-  // show all notifications for that resident
+  // show all notifications + kitchen messages for that resident
   // -----------------------------
   const handleNotificationPress = (residentId: string) => {
     const residentNotifications = notificationsByResident[residentId] || [];
+    const residentKitchenMsgs = kitchenMessagesByResident[residentId] || [];
 
-    if (!residentNotifications.length) {
+    const allLines = [
+      ...residentNotifications.map((n) => `• ${n.message}`),
+      ...residentKitchenMsgs.map((m) => `🍳 Kitchen${m.orderId != null ? ` · Order #${m.orderId}` : ""}: ${m.text}`),
+    ];
+
+    if (!allLines.length) {
       Alert.alert("Notifications", "No updates for this resident yet.");
       return;
     }
 
-    Alert.alert(
-      "Resident Updates",
-      residentNotifications.map((n) => `• ${n.message}`).join("\n")
-    );
+    Alert.alert("Resident Updates", allLines.join("\n"));
   };
 
   // -----------------------------
@@ -180,11 +317,20 @@ export default function CaregiverDashboardScreen({
       residentId: resident.id,
       residentName: resident.name,
       dietaryRestrictions: resident.dietaryRestrictions ?? [],
+      foodAllergies: resident.foodAllergies ?? [],
     });
   };
 
   return (
     <SafeAreaView style={styles.page}>
+      {/* In-app notification banner — fires when resident sends a new message */}
+      <InAppNotificationBanner
+        visible={bannerVisible}
+        senderName={bannerSender}
+        preview={bannerPreview}
+        onPress={() => { setShowMessagesModal(true); setMsgUnread(0); }}
+        onDismiss={() => setBannerVisible(false)}
+      />
       <StatusBar barStyle="dark-content" />
 
       {/* -----------------------------
@@ -200,13 +346,30 @@ export default function CaregiverDashboardScreen({
         </View>
 
         <View style={styles.topBarRight}>
-            <Pressable
-              style={styles.logoutBtn}
-              onPress={() => setShowMessagesModal(true)}
-         >
-              <Text style={styles.logoutText}>Messages</Text>
-            </Pressable>
+          {/* Backend messages */}
+          <Pressable style={styles.chatIconBtn} onPress={() => setShowMessagesModal(true)}>
+            <Feather name="message-square" size={16} color="#6D6B3B" />
+            <Text style={styles.chatIconBtnText}>Messages</Text>
+            {msgUnread > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {msgUnread > 9 ? "9+" : msgUnread}
+                </Text>
+              </View>
+            )}
+          </Pressable>
 
+          {/* Kitchen messages bell */}
+          {kitchenUnread > 0 && (
+            <View style={styles.kitchenAlertBadge}>
+              <Feather name="bell" size={16} color="#DC2626" />
+              <View style={styles.kitchenAlertCount}>
+                <Text style={styles.kitchenAlertCountText}>
+                  {kitchenUnread > 9 ? "9+" : kitchenUnread}
+                </Text>
+              </View>
+            </View>
+          )}
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -266,7 +429,11 @@ export default function CaregiverDashboardScreen({
                 {residents.map((resident, idx) => {
                   const residentNotifications =
                     notificationsByResident[resident.id] || [];
-                  const hasNotifications = residentNotifications.length > 0;
+                  const residentKitchenMsgs =
+                    kitchenMessagesByResident[resident.id] || [];
+                  const unreadKitchen = residentKitchenMsgs.filter((m) => !m.read).length;
+                  const hasNotifications = residentNotifications.length > 0 || residentKitchenMsgs.length > 0;
+                  const hasUrgent = unreadKitchen > 0;
 
                   return (
                     <Pressable
@@ -276,12 +443,15 @@ export default function CaregiverDashboardScreen({
                     >
                       {/* Notification bell at top-right of resident card */}
                       <Pressable
-                        style={styles.cardBell}
+                        style={[
+                          styles.cardBell,
+                          hasUrgent && styles.cardBellUrgent,
+                        ]}
                         onPress={() => handleNotificationPress(resident.id)}
                         hitSlop={10}
                       >
-                        <Feather name="bell" size={18} color="#6D6B3B" />
-                        {hasNotifications && <View style={styles.notificationDot} />}
+                        <Feather name="bell" size={18} color={hasUrgent ? "#DC2626" : "#6D6B3B"} />
+                        {hasNotifications && <View style={[styles.notificationDot, hasUrgent && styles.notificationDotUrgent]} />}
                       </Pressable>
 
                       {/* Room badge */}
@@ -448,9 +618,10 @@ export default function CaregiverDashboardScreen({
         </View>
       </Modal>
 
+      {/* Backend Messages Modal */}
       <MessagesModal
         visible={showMessagesModal}
-        onClose={() => setShowMessagesModal(false)}
+        onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
 
     </SafeAreaView>
@@ -570,6 +741,67 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
+  },
+  chatIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: '#F0EEE4',
+    borderWidth: 1.5,
+    borderColor: '#6D6B3B30',
+  },
+  chatIconBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6D6B3B',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E53935',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  chatBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  kitchenAlertBadge: {
+    position: "relative",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  kitchenAlertCount: {
+    position: "absolute",
+    top: -2,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  kitchenAlertCountText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "800",
   },
   logoutBtn: {
     height: 44,
@@ -732,6 +964,19 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 999,
     backgroundColor: "#DC2626",
+  },
+  notificationDotUrgent: {
+    width: 12,
+    height: 12,
+    top: 2,
+    right: 3,
+    borderWidth: 2,
+    borderColor: "#FFF",
+  },
+  cardBellUrgent: {
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
 
   // Room pill

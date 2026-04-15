@@ -1,4 +1,4 @@
-import { setAuth } from "../services/storage";
+import { setAuth, setUserEmail } from "../services/storage";
 import React, { useState } from "react";
 import {
   View,
@@ -34,7 +34,7 @@ export default function Login({ navigation }: any) {
     switch (role) {
       case "ROLE_ADMIN":        navigation.replace("AdminDashboard"); break;
       case "ROLE_CAREGIVER":    navigation.replace("CaregiverDashboard"); break;
-      case "ROLE_KITCHEN":      navigation.replace("KitchenBoard"); break;
+      case "ROLE_KITCHEN":      navigation.replace("KitchenDashboard"); break;
       case "ROLE_KITCHEN_STAFF":navigation.replace("KitchenDashboard"); break;
       default:                  navigation.replace("Home");
     }
@@ -58,6 +58,7 @@ export default function Login({ navigation }: any) {
       }
 
       await setAuth(data.token, data.role);
+      await setUserEmail(email.trim().toLowerCase());
       navigateByRole(data.role);
     } catch (err: any) {
       // Network unreachable — try mock credentials
@@ -66,6 +67,7 @@ export default function Login({ navigation }: any) {
         const mock = MOCK_USERS[key];
         if (mock) {
           await setAuth(mock.token, mock.role);
+          await setUserEmail(key);
           navigateByRole(mock.role);
           return;
         }
@@ -94,7 +96,7 @@ export default function Login({ navigation }: any) {
         <TextInput
           value={email}
           onChangeText={setEmail}
-          placeholder="caregiver@traymate.com"
+          placeholder="you@traymate.com"
           placeholderTextColor="#8E8E93"
           keyboardType="email-address"
           autoCapitalize="none"

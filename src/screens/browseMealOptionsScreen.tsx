@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   SafeAreaView,
@@ -36,6 +37,7 @@ import {
   ResidentService,
   RecommendationService,
   Meal as ServiceMeal,
+  Resident,
 } from "../services/localDataService";
 import {
   translateMealDescription,
@@ -43,10 +45,21 @@ import {
   translateMealPeriod,
   translateMealTag,
   translateMealTimeRange,
+  hasMealNameTranslation,
+  hasMealDescriptionTranslation,
+  setCachedMealTranslations,
+  setCachedDescriptionTranslations,
 } from "../services/mealLocalization";
+import {
+  translateMealNamesWithGemini,
+  translateMealDescriptionsWithGemini,
+} from "../services/geminiService";
 
 import { geminiChat } from "../services/geminiService";
+import { useClock } from '../context/useClock';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
+import { sendMessage as sendApiMessage } from '../services/api';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -203,6 +216,7 @@ type Recommendation = {
   meal_name: string;
   reason: string;
   dietary_restrictions: string[];
+  targetPeriod?: string; // upcoming period this recommendation targets
 };
 
 
@@ -210,6 +224,38 @@ type Recommendation = {
 type PeriodOption = {
   key: string;
   value: Meal["meal_period"] | null;
+};
+
+// ── Period accent colours (for card left strip) ───────────────────────────────
+const PERIOD_ACCENT: Record<string, { color: string; light: string }> = {
+  Breakfast: { color: '#C47A2A', light: '#FEF3C7' },
+  Lunch:     { color: '#2D7A52', light: '#DCFCE7' },
+  Dinner:    { color: '#4F4FA8', light: '#EEF2FF' },
+  Drinks:    { color: '#2A6FA8', light: '#E0F2FE' },
+  Sides:     { color: '#7A3A6A', light: '#FCE7F3' },
+  'All Day': { color: '#717644', light: '#F0EFE6' },
+};
+
+// ── Per-period header themes ──────────────────────────────────────────────────
+const PERIOD_THEMES: Record<string, {
+  bg: string;
+  titleColor: string;
+  subColor: string;
+  tabActiveBg: string;
+  tabActiveText: string;
+  tabInactiveBg: string;
+  tabInactiveText: string;
+  icon: string;
+  buttonBg: string;
+  buttonBorder: string;
+}> = {
+  allDay:    { bg: '#FAFAF8', titleColor: '#1C1C1C', subColor: '#888880', tabActiveBg: '#717644', tabActiveText: '#FFF', tabInactiveBg: 'rgba(0,0,0,0.04)',    tabInactiveText: '#555550', icon: '🍽',  buttonBg: '#FFFFFF', buttonBorder: 'rgba(113,118,68,0.2)'  },
+  breakfast: { bg: '#FFFCF5', titleColor: '#3B2A14', subColor: '#8A6A40', tabActiveBg: '#9A7230', tabActiveText: '#FFF', tabInactiveBg: 'rgba(154,114,48,0.08)', tabInactiveText: '#7A5A30', icon: '🌅', buttonBg: '#FFFDF8', buttonBorder: 'rgba(154,114,48,0.2)'  },
+  lunch:     { bg: '#F7FAF8', titleColor: '#1A3028', subColor: '#4A6A58', tabActiveBg: '#4A7A60', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,96,0.07)',  tabInactiveText: '#3A5A48', icon: '☀️', buttonBg: '#F5F9F6', buttonBorder: 'rgba(74,122,96,0.2)'   },
+  dinner:    { bg: '#22213A', titleColor: '#D8DAF0', subColor: '#8A8DB0', tabActiveBg: '#5C5FA8', tabActiveText: '#FFF', tabInactiveBg: 'rgba(200,205,240,0.1)', tabInactiveText: '#A8AACC', icon: '🌙', buttonBg: '#2E2C4A', buttonBorder: 'rgba(200,205,240,0.18)' },
+  beverages: { bg: '#F5F9FC', titleColor: '#1A3040', subColor: '#4A6A80', tabActiveBg: '#4A7A9A', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,154,0.07)', tabInactiveText: '#3A607A', icon: '🥤', buttonBg: '#F2F7FA', buttonBorder: 'rgba(74,122,154,0.2)'  },
+  desserts:  { bg: '#FCF7FA', titleColor: '#32142A', subColor: '#7A4A68', tabActiveBg: '#8A4A72', tabActiveText: '#FFF', tabInactiveBg: 'rgba(138,74,114,0.07)', tabInactiveText: '#6A3A58', icon: '🍰', buttonBg: '#FAF4F8', buttonBorder: 'rgba(138,74,114,0.2)'  },
+  seasonal:  { bg: '#F6FAF6', titleColor: '#1A3020', subColor: '#4A6848', tabActiveBg: '#4A7850', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,120,80,0.07)',  tabInactiveText: '#3A5840', icon: '🌸', buttonBg: '#F4F9F4', buttonBorder: 'rgba(74,120,80,0.2)'   },
 };
 
 const PERIOD_KEYS: PeriodOption[] = [
@@ -496,31 +542,36 @@ const AIAssistantChat = ({
     >
       <View style={chatStyles.overlay}>
         <TouchableOpacity style={chatStyles.backdrop} onPress={onClose} activeOpacity={1} />
-        <Animated.View 
-          style={[
-            chatStyles.container,
-            { transform: [{ translateX: slideAnim }] }
-          ]}
-        >
-          {/* Header */}
+        <Animated.View style={[chatStyles.container, { transform: [{ translateX: slideAnim }] }]}>
+
+          {/* ── Header ── */}
           <View style={chatStyles.header}>
-            <View style={chatStyles.headerIcon}>
-              <Text style={chatStyles.headerIconText}>👵</Text>
+            <View style={chatStyles.headerAvatarWrap}>
+              <Image
+                source={require('../styles/pictures/grandma.png')}
+                style={chatStyles.headerAvatar}
+                resizeMode="contain"
+              />
             </View>
             <View style={chatStyles.headerText}>
-              <Text style={[chatStyles.headerTitle, { fontSize: scaled(20) }]}>{t.grannyGBT}</Text>
-              <Text style={[chatStyles.headerSubtitle, { fontSize: scaled(15) }]}>{t.mealAdvisorFor} {residentName}</Text>
+              <View style={chatStyles.headerTitleRow}>
+                <Text style={[chatStyles.headerTitle, { fontSize: scaled(19) }]}>{t.grannyGBT}</Text>
+                <View style={[chatStyles.statusPill, aiAvailable ? chatStyles.aiOn : chatStyles.aiOff]}>
+                  <Text style={[chatStyles.statusText, { fontSize: scaled(11) }]}>
+                    {aiAvailable ? '✦ AI' : '○ Offline'}
+                  </Text>
+                </View>
               </View>
-              {/* AI status badge */}
-              <View style={[chatStyles.statusBadge, aiAvailable ? chatStyles.aiOn : chatStyles.aiOff]}>
-                <Text style={chatStyles.statusText}>{aiAvailable ? '✨ AI' : '💤 Offline'}</Text>
-              </View>
-            <TouchableOpacity onPress={onClose} style={chatStyles.closeButton}>
-              <Text style={[chatStyles.closeButtonText, { fontSize: scaled(18) }]}>✕</Text>
+              <Text style={[chatStyles.headerSubtitle, { fontSize: scaled(13) }]}>
+                {t.mealAdvisorFor} {residentName}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={chatStyles.closeButton} hitSlop={10}>
+              <Feather name="x" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Messages */}
+          {/* ── Messages ── */}
           <ScrollView
             ref={scrollViewRef}
             style={chatStyles.messagesContainer}
@@ -529,21 +580,16 @@ const AIAssistantChat = ({
             keyboardShouldPersistTaps="handled"
           >
             {messages.map((message) => (
-              <View key={message.id}>
+              <View key={message.id} style={message.role === 'user' ? chatStyles.userRow : chatStyles.assistantRow}>
                 {message.role === 'assistant' && (
-                  <View style={chatStyles.avatarRow}>
-                    <View style={chatStyles.avatarBadge}>
-                      <Text style={chatStyles.avatarEmoji}>👵</Text>
-                    </View>
-                    <Text style={[chatStyles.avatarLabel, { fontSize: scaled(12) }]}>{t.grannyGBT}</Text>
+                  <View style={chatStyles.avatarBadge}>
+                    <Image source={require('../styles/pictures/grandma.png')} style={chatStyles.bubbleAvatar} resizeMode="contain" />
                   </View>
                 )}
-                <View
-                  style={[
-                    chatStyles.messageBubble,
-                    message.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble
-                  ]}
-                >
+                <View style={[
+                  chatStyles.messageBubble,
+                  message.role === 'user' ? chatStyles.userBubble : chatStyles.assistantBubble,
+                ]}>
                   <ChatRichText
                     text={message.content}
                     isUser={message.role === 'user'}
@@ -553,8 +599,8 @@ const AIAssistantChat = ({
                   />
                   <Text style={[
                     chatStyles.timestamp,
-                    { fontSize: scaled(11) },
-                    message.role === 'user' && chatStyles.userTimestamp
+                    { fontSize: scaled(10) },
+                    message.role === 'user' && chatStyles.userTimestamp,
                   ]}>
                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
@@ -562,12 +608,9 @@ const AIAssistantChat = ({
               </View>
             ))}
             {isTyping && (
-              <View>
-                <View style={chatStyles.avatarRow}>
-                  <View style={chatStyles.avatarBadge}>
-                    <Text style={chatStyles.avatarEmoji}>👵</Text>
-                  </View>
-                  <Text style={[chatStyles.avatarLabel, { fontSize: scaled(12) }]}>{t.grannyGBT}</Text>
+              <View style={chatStyles.assistantRow}>
+                <View style={chatStyles.avatarBadge}>
+                  <Image source={require('../styles/pictures/grandma.png')} style={chatStyles.bubbleAvatar} resizeMode="contain" />
                 </View>
                 <View style={[chatStyles.messageBubble, chatStyles.assistantBubble]}>
                   <Text style={[chatStyles.typingText, { fontSize: scaled(14) }]}>{t.thinking}</Text>
@@ -576,48 +619,41 @@ const AIAssistantChat = ({
             )}
           </ScrollView>
 
-          {/* Quick Questions */}
+          {/* ── Quick Questions ── */}
           <View style={chatStyles.quickQuestionsContainer}>
-            <Text style={[chatStyles.quickQuestionsLabel, { fontSize: scaled(13) }]}>{t.quickQuestionsLabel}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={chatStyles.quickQuestionsRow}>
-                {QUICK_QUESTIONS.map((question, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={chatStyles.quickQuestionButton}
-                    onPress={() => handleQuickQuestion(question)}
-                  >
-                    <Text style={[chatStyles.quickQuestionText, { fontSize: scaled(14) }]}>{question}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <Text style={[chatStyles.quickQuestionsLabel, { fontSize: scaled(12) }]}>{t.quickQuestionsLabel}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+              {QUICK_QUESTIONS.map((question, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={chatStyles.quickQuestionButton}
+                  onPress={() => handleQuickQuestion(question)}
+                >
+                  <Text style={[chatStyles.quickQuestionText, { fontSize: scaled(13) }]}>{question}</Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
 
-          {/* Input */}
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
+          {/* ── Input ── */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={chatStyles.inputContainer}>
               <TextInput
-                style={[chatStyles.input, { fontSize: scaled(16) }]}
+                style={[chatStyles.input, { fontSize: scaled(15) }]}
                 value={inputText}
                 onChangeText={setInputText}
                 placeholder={t.typeYourMessage}
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor="#A8A89A"
                 multiline
                 maxLength={500}
                 onSubmitEditing={handleSend}
               />
-              <TouchableOpacity 
-                style={[
-                  chatStyles.sendButton,
-                  !inputText.trim() && chatStyles.sendButtonDisabled
-                ]} 
+              <TouchableOpacity
+                style={[chatStyles.sendButton, !inputText.trim() && chatStyles.sendButtonDisabled]}
                 onPress={handleSend}
                 disabled={!inputText.trim()}
               >
-                <Text style={[chatStyles.sendButtonText, { fontSize: scaled(20) }]}>➤</Text>
+                <Feather name="send" size={18} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -640,11 +676,10 @@ function parseTimeToMinutes(s: string): number {
   return hours * 60;
 }
 
-function isWithinTimeRange(timeRange: string, period?: string): boolean {
+function isWithinTimeRange(timeRange: string, period?: string, now: Date = new Date()): boolean {
   // Drinks and Sides are available all day
   if (period === 'Drinks' || period === 'Sides') return true;
   if (!timeRange || timeRange.trim() === '') return true;
-  const now = new Date();
   const currentMins = now.getHours() * 60 + now.getMinutes();
   // normalize en-dash / em-dash to hyphen
   const normalized = timeRange.replace(/[–—]/g, '-');
@@ -664,22 +699,62 @@ function timeRangeStartMinutes(timeRange: string): number {
 }
 
 /** Sort meals: available-now first (ordered by start time), then unavailable (ordered by start time) */
-function sortMealsByAvailability(meals: Meal[]): Meal[] {
-  const now = new Date();
-  const currentMins = now.getHours() * 60 + now.getMinutes();
+function sortMealsByAvailability(meals: Meal[], now: Date = new Date()): Meal[] {
   return [...meals].sort((a, b) => {
-    const aAvail = isWithinTimeRange(a.time_range, a.meal_period);
-    const bAvail = isWithinTimeRange(b.time_range, b.meal_period);
+    const aAvail = isWithinTimeRange(a.time_range, a.meal_period, now);
+    const bAvail = isWithinTimeRange(b.time_range, b.meal_period, now);
     if (aAvail && !bAvail) return -1;
     if (!aAvail && bAvail) return 1;
     return timeRangeStartMinutes(a.time_range) - timeRangeStartMinutes(b.time_range);
   });
 }
 
+// ---------- Meal Schedule (iPad device time) ----------
+const MEAL_SCHEDULE = [
+  { label: 'Breakfast', start: 7 * 60, end: 10 * 60, color: '#D97706', icon: '☀️' },
+  { label: 'Lunch',     start: 11 * 60, end: 14 * 60, color: '#4A7A60', icon: '🍽️' },
+  { label: 'Dinner',    start: 16 * 60, end: 19 * 60, color: '#5C5FA8', icon: '🌙' },
+];
+
+function getCurrentMealPeriod(now: Date = new Date()): string | null {
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const found = MEAL_SCHEDULE.find((s) => mins >= s.start && mins <= s.end);
+  return found ? found.label : null;
+}
+
+/**
+ * Returns the current-or-next meal period and how many minutes until it starts/ends.
+ * If we're inside a meal period, returns that period with minsRemaining.
+ * Otherwise returns the next upcoming one with minsUntil.
+ */
+function getNextMealPeriod(now: Date = new Date()): { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean } | null {
+  const mins = now.getHours() * 60 + now.getMinutes();
+  // Check if we're currently inside a meal period
+  const current = MEAL_SCHEDULE.find((s) => mins >= s.start && mins < s.end);
+  if (current) return { period: current, minsUntil: current.end - mins, isNow: true };
+  // Otherwise next upcoming
+  const next = MEAL_SCHEDULE.find((s) => s.start > mins);
+  if (next) return { period: next, minsUntil: next.start - mins, isNow: false };
+  // After dinner — wrap to tomorrow's breakfast
+  const breakfast = MEAL_SCHEDULE[0];
+  return { period: breakfast, minsUntil: 24 * 60 - mins + breakfast.start, isNow: false };
+}
+
+function formatMinsUntil(mins: number): string {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
+  // --- all hooks at the top, unconditionally, in fixed order ---
+  const { currentTime } = useClock();
+  const { addToCart, clearCart, getCartCount, orders, getOrdersForResident, fetchOrderHistory, placeOrder } = useCart();
+
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
@@ -688,18 +763,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [showMealDetail, setShowMealDetail] = useState(false);
   const [specialNote, setSpecialNote] = useState('');
+  const [recPeriodMeals, setRecPeriodMeals] = useState<Meal[]>([]); // meals for the recommended period
   const [availableDrinks, setAvailableDrinks] = useState<Meal[]>([]);
   const [selectedDrink, setSelectedDrink] = useState<Meal | null>(null);
   const [availableSides, setAvailableSides] = useState<Meal[]>([]);
   const [selectedSide, setSelectedSide] = useState<Meal | null>(null);
-
-  // Use the cart context
-  const { addToCart, getCartCount } = useCart();
-
   const [menuLoading, setMenuLoading] = useState<boolean>(true);
   const [recLoading, setRecLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [showBrowseSupport, setShowBrowseSupport] = useState(false);
+  const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; isNow: boolean; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
+  const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
+  const [autoPlaced, setAutoPlaced] = useState(false);            // whether we already auto-placed for this period
+  const autoPlaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // derived (not hooks)
+  const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
+  const activePeriod = getCurrentMealPeriod(currentTime);
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -718,9 +799,69 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
   };
 
+  // Caregiver chat
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   as string | null ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
+  const [assignedCaregivers, setAssignedCaregivers] = useState<Array<{ caregiverId: string; caregiverName: string }>>([]);
+  const [sendingCgMsg, setSendingCgMsg] = useState(false);
+
+  // Persist caregiver info to storage when provided via params; load from storage as fallback
+  useEffect(() => {
+    if (!residentId) return;
+    const paramCgId       = route?.params?.caregiverId       as string | null ?? null;
+    const paramCgName     = route?.params?.caregiverName     as string | null ?? null;
+    const paramAllCaregivers = route?.params?.assignedCaregivers as Array<{ caregiverId: string; caregiverName: string }> | undefined;
+
+    if (paramAllCaregivers && paramAllCaregivers.length > 0) {
+      // Admin passed the full array directly — use it immediately (no storage timing issue)
+      setAssignedCaregivers(paramAllCaregivers);
+      setCaregiverId(paramAllCaregivers[0].caregiverId);
+      setCaregiverName(paramAllCaregivers[0].caregiverName);
+      // Persist so future navigations without params still work
+      setResidentCaregivers(residentId, paramAllCaregivers);
+    } else if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+      // Load the FULL stored array; only append param caregiver if missing
+      getResidentCaregivers(residentId).then((stored) => {
+        const alreadyIn = stored.some((c) => c.caregiverId === paramCgId);
+        const updated   = alreadyIn
+          ? stored
+          : [...stored, { caregiverId: paramCgId, caregiverName: paramCgName }];
+        setAssignedCaregivers(updated.length > 0 ? updated : [{ caregiverId: paramCgId, caregiverName: paramCgName }]);
+      });
+    } else {
+      // No params — try plural storage first, then singular storage
+      getResidentCaregivers(residentId).then((stored) => {
+        if (stored.length > 0) {
+          setAssignedCaregivers(stored);
+          setCaregiverId(stored[0].caregiverId);
+          setCaregiverName(stored[0].caregiverName);
+        } else {
+          getResidentCaregiver(residentId).then((single) => {
+            if (single) {
+              setCaregiverId(single.caregiverId);
+              setCaregiverName(single.caregiverName);
+              setAssignedCaregivers([single]);
+            }
+          });
+        }
+      });
+    }
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName, route?.params?.assignedCaregivers]);
+
   // Navigate to settings with resident context
   const goToSettings = () => {
-    navigation.navigate('Settings', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
+    navigation.navigate('Settings', {
+      residentId,
+      residentName,
+      dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
+      foodAllergies: route?.params?.foodAllergies ?? [],
+      caregiverId:        route?.params?.caregiverId        ?? null,
+      caregiverName:      route?.params?.caregiverName      ?? null,
+      assignedCaregivers: assignedCaregivers.length > 0 ? assignedCaregivers : undefined,
+    });
   };
 
   // Fetch meals from API (async)
@@ -738,9 +879,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const resId = residentId || ResidentService.getDefaultResident().id;
       const resident = ResidentService.getResidentById(resId);
       if (resident) {
+        // Local DB resident — use full safety check
         serviceMeals = serviceMeals.filter((m) =>
           ResidentService.isMealSafeForResident(m, resident)
         );
+      } else {
+        // API/backend resident — filter using both dietaryRestrictions AND foodAllergies from caregiver
+        const allRestrictions = [
+          ...(route?.params?.dietaryRestrictions ?? []),
+          ...(route?.params?.foodAllergies ?? []),
+        ].map((r: string) => r.toLowerCase());
+        if (allRestrictions.length > 0) {
+          serviceMeals = serviceMeals.filter((m) => {
+            const mealAllergens = m.allergenInfo.map((a) => a.toLowerCase());
+            return !mealAllergens.some((allergen) =>
+              allRestrictions.some((r) => r.includes(allergen) || allergen.includes(r))
+            );
+          });
+        }
       }
 
       // mapServiceMeal imported from mealDisplayService.ts
@@ -755,32 +911,113 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setRawServiceMeals(serviceMeals);
       setMeals(mapped);
       setMenuLoading(false);
+
+      // Translate any API/kitchen meals not in the static lookup table.
+      // We translate names and descriptions in parallel so residents who
+      // switch languages see the whole card in their language, not just
+      // the title.
+      const unknownNames = Array.from(new Set(
+        mapped.map(m => m.name).filter(n => !hasMealNameTranslation(n))
+      ));
+      const unknownDescriptions = Array.from(new Set(
+        mapped
+          .map(m => m.description)
+          .filter((d): d is string => !!d && !hasMealDescriptionTranslation(d))
+      ));
+
+      const jobs: Promise<void>[] = [];
+      if (unknownNames.length > 0) {
+        jobs.push(
+          translateMealNamesWithGemini(unknownNames).then(results => {
+            if (Object.keys(results).length > 0) setCachedMealTranslations(results);
+          }),
+        );
+      }
+      if (unknownDescriptions.length > 0) {
+        jobs.push(
+          translateMealDescriptionsWithGemini(unknownDescriptions).then(results => {
+            if (Object.keys(results).length > 0) setCachedDescriptionTranslations(results);
+          }),
+        );
+      }
+      if (jobs.length > 0) {
+        Promise.all(jobs).then(() => {
+          // Trigger a re-render with a fresh reference so translated text shows
+          setMeals(prev => [...prev]);
+        });
+      }
     } catch {
       setError("Failed to load meals");
       setMenuLoading(false);
     }
   }, [residentId]);
 
-  // Fetch recommendation from API (async)
+  // Fetch recommendation — targets the CURRENT meal period if we're in one,
+  // otherwise the next upcoming period so the suggestion is always actionable.
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
 
     try {
       const resId = residentId || ResidentService.getDefaultResident().id;
-      const rec = await RecommendationService.getTopRecommendation(resId, selectedPeriod.value);
-      setRecommendation(rec);
+      const localResident = ResidentService.getResidentById(resId);
+
+      // Prefer current period (meal is available right now); fall back to next
+      const currentPeriod = getCurrentMealPeriod(new Date());
+      const nextPeriod    = getNextMealPeriod(new Date());
+      const targetPeriod  = currentPeriod ?? nextPeriod?.period.label ?? selectedPeriod.value;
+
+      let rec;
+      if (localResident) {
+        // local resident — use normal path
+        rec = await RecommendationService.getTopRecommendation(resId, targetPeriod as any);
+      } else {
+        // backend resident — build a virtual resident from route params
+        // Combine both dietaryRestrictions AND foodAllergies from caregiver dashboard
+        const rawAllergies: string[] = [
+          ...(route?.params?.dietaryRestrictions ?? []),
+          ...(route?.params?.foodAllergies ?? []),
+        ];
+        const virtualResident: Resident = {
+          id: resId,
+          firstName: (route?.params?.residentName ?? 'Resident').split(' ')[0],
+          lastName: '',
+          fullName: route?.params?.residentName ?? 'Resident',
+          email: '',
+          phone: '',
+          roomNumber: '',
+          role: 'resident',
+          dietaryRestrictions: rawAllergies.map((name: string) => ({
+            type: 'allergy' as const,
+            name,
+            severity: 'moderate' as const,
+          })),
+          nutritionGoals: { dailyCalories: 1800, maxSodium: 2000, minProtein: 45, maxCholesterol: 250, maxSugar: 40 },
+          dislikedIngredients: [],
+          favoriteMealIds: [],
+          isActive: true,
+        };
+        rec = await RecommendationService.getTopRecommendationForResident(virtualResident, targetPeriod as any);
+      }
+
+      // Pre-load meals for the target period so the card can open meal details
+      const targetMeals = await MealService.getMealsByPeriod(targetPeriod as any);
+      setRecPeriodMeals(targetMeals.map(mapServiceMeal));
+
+      setRecommendation(rec ? { ...rec, targetPeriod: targetPeriod ?? undefined } : null);
       setRecLoading(false);
     } catch {
       setRecommendation(null);
       setRecLoading(false);
     }
-  }, [residentId, selectedPeriod.value]);
+  }, [residentId, selectedPeriod.value, route?.params]);
 
-  // Pre-load drinks & sides once on mount so add-on pickers are always ready
+  // Pre-load drinks, sides, and backend order history once on mount
   useEffect(() => {
     MealService.getMealsByPeriod("Drinks").then(d => setAvailableDrinks(d.map(mapServiceMeal)));
     MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
+    if (residentId) fetchOrderHistory(residentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load menu and recommendation when component mounts or period changes
@@ -788,6 +1025,171 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     loadMenu(selectedPeriod.value, selectedPeriod.key);
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
+
+  // Auto-suggest next upcoming meal from past orders (always visible, time-aware)
+  useEffect(() => {
+    if (autoSuggestDismissed || meals.length === 0) return;
+
+    const next = getNextMealPeriod(currentTime);
+    if (!next) return;
+    const upcoming = next.period;
+
+    // Check if resident already has a current order for this period
+    const resOrders = residentId ? getOrdersForResident(residentId) : orders;
+    const hasOrderForPeriod = resOrders.some((o) =>
+      o.items.some((i) => i.meal_period === upcoming.label)
+    );
+    if (hasOrderForPeriod) return;
+
+    const allPastItems = resOrders.flatMap((o) => o.items);
+
+    // Resident dietary restrictions — used to filter auto-suggest candidates
+    const allRestrictions: string[] = [
+      ...(route?.params?.dietaryRestrictions ?? []),
+      ...(route?.params?.foodAllergies ?? []),
+    ].map((r: string) => r.toLowerCase());
+
+    const isSafeForResident = (m: Meal): boolean => {
+      if (allRestrictions.length === 0) return true;
+      const allergens = (m.allergens ?? []).map((a: string) => a.toLowerCase());
+      return !allRestrictions.some(r =>
+        allergens.some(a => a.includes(r) || r.includes(a))
+      );
+    };
+
+    // Helper: count frequency of each item name in history for a given period
+    const getFrequencyRanked = (period: string): Map<string, number> => {
+      const freq = new Map<string, number>();
+      for (const item of allPastItems) {
+        if (item.meal_period === period) {
+          const key = item.name.toLowerCase();
+          freq.set(key, (freq.get(key) ?? 0) + 1);
+        }
+      }
+      return freq;
+    };
+
+    // Pick main meal — most frequently ordered for this period, then fallback
+    const mealFreq = getFrequencyRanked(upcoming.label);
+    let mainMeal: Meal | null = null;
+    if (mealFreq.size > 0) {
+      // Sort by frequency descending, try each until we find a safe available match
+      const ranked = [...mealFreq.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [name] of ranked) {
+        const candidate = meals.find(
+          (m) => m.meal_period === upcoming.label && m.name.toLowerCase() === name && isSafeForResident(m)
+        );
+        if (candidate) { mainMeal = candidate; break; }
+      }
+    }
+    if (!mainMeal) {
+      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label && isSafeForResident(m));
+      mainMeal = periodMeals[0] ?? null;
+    }
+    if (!mainMeal) return;
+
+    // Pick drink — most frequently ordered, then fallback
+    const safeDrinks = availableDrinks.filter(isSafeForResident);
+    const drinkFreq = getFrequencyRanked('Drinks');
+    let suggestDrink: Meal | undefined;
+    if (drinkFreq.size > 0) {
+      const ranked = [...drinkFreq.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [name] of ranked) {
+        const candidate = safeDrinks.find((d) => d.name.toLowerCase() === name);
+        if (candidate) { suggestDrink = candidate; break; }
+      }
+    }
+    if (!suggestDrink) suggestDrink = safeDrinks[0];
+
+    // Pick side — most frequently ordered, then fallback
+    const safeSides = availableSides.filter(isSafeForResident);
+    const sideFreq = getFrequencyRanked('Sides');
+    let suggestDessert: Meal | undefined;
+    if (sideFreq.size > 0) {
+      const ranked = [...sideFreq.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [name] of ranked) {
+        const candidate = safeSides.find((s) => s.name.toLowerCase() === name);
+        if (candidate) { suggestDessert = candidate; break; }
+      }
+    }
+    if (!suggestDessert) suggestDessert = safeSides[0];
+
+    setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, isNow: next.isNow, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
+  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime]);
+
+  // Auto-place the suggested meal when the meal period starts and resident hasn't ordered.
+  // When isNow is true (we're inside the period) and 15 min have passed without a manual order,
+  // auto-place the suggestion and notify the assigned caregiver.
+  useEffect(() => {
+    if (!autoSuggest || !autoSuggest.isNow || autoPlaced || !residentId) return;
+
+    // Check if resident already ordered for this period
+    const resOrders = getOrdersForResident(residentId);
+    const hasOrder = resOrders.some((o) =>
+      o.items.some((i) => i.meal_period === autoSuggest.period)
+    );
+    if (hasOrder) return;
+
+    // Wait 15 minutes into the meal period before auto-placing
+    // MEAL_SCHEDULE[period].end - minsUntil = current time within period
+    // We wait until 15 min after period start
+    const periodSched = MEAL_SCHEDULE.find(s => s.label === autoSuggest.period);
+    if (!periodSched) return;
+    const now = currentTime.getHours() * 60 + currentTime.getMinutes();
+    const minsSinceStart = now - periodSched.start;
+    const AUTO_PLACE_DELAY = 15; // minutes after period starts
+
+    if (minsSinceStart >= AUTO_PLACE_DELAY) {
+      // Auto-place now
+      const doAutoPlace = async () => {
+        try {
+          // Add items to cart then place order
+          const itemsToOrder = [autoSuggest.meal, autoSuggest.drink, autoSuggest.dessert].filter(Boolean) as Meal[];
+          clearCart();
+          for (const item of itemsToOrder) {
+            addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
+          }
+          // Small delay to let state update
+          await new Promise<void>(r => setTimeout(r, 100));
+          const result = await placeOrder(residentId, autoSuggest.period);
+          if (result.order) {
+            setAutoPlaced(true);
+            setAutoSuggestDismissed(true);
+            setAutoSuggest(null);
+
+            // Notify assigned caregiver(s) via messaging
+            const rName = residentName || 'A resident';
+            const rRoom = route?.params?.roomNumber || '';
+            const itemNames = itemsToOrder.map(i => i.name).join(', ');
+            const msgBody = `Auto-order placed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${autoSuggest.period}: ${itemNames}. Please review and accept or cancel if needed.`;
+
+            for (const cg of assignedCaregivers) {
+              try {
+                await sendApiMessage(cg.caregiverId, msgBody);
+              } catch { /* non-blocking */ }
+            }
+
+            Alert.alert(
+              'Order Auto-Placed',
+              `Your ${autoSuggest.period} has been placed automatically based on your favorites: ${itemNames}.\n\nYour caregiver has been notified.`,
+              [{ text: 'OK' }]
+            );
+          }
+        } catch (e) {
+          console.warn('[AutoPlace] Failed:', e);
+        }
+      };
+      doAutoPlace();
+    }
+  }, [autoSuggest, autoPlaced, residentId, currentTime]);
+
+  // Reset auto-placed flag when the meal period changes
+  useEffect(() => {
+    const next = getNextMealPeriod(currentTime);
+    if (next && !next.isNow) {
+      setAutoPlaced(false);
+    }
+  }, [currentTime]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -806,30 +1208,62 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setShowMealDetail(true);
   };
 
-  // Add meal (and optional drink) to cart from detail modal
+  // Check if a meal conflicts with the resident's dietary profile
+  const getRestrictionConflicts = (meal: Meal): string[] => {
+    const allRestrictions: string[] = [
+      ...(route?.params?.dietaryRestrictions ?? []),
+      ...(route?.params?.foodAllergies ?? []),
+    ];
+    if (allRestrictions.length === 0) return [];
+    const allergens = (meal.allergens ?? []).map((a: string) => a.toLowerCase());
+    return allRestrictions.filter(r =>
+      allergens.some(a => a.includes(r.toLowerCase()) || r.toLowerCase().includes(a))
+    );
+  };
+
+  // Add meal (and optional drink) to cart from detail modal — with dietary warning
   const handleAddToCartFromModal = () => {
     if (!selectedMeal) return;
-    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
-    if (selectedDrink) {
-      addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+    const conflicts = getRestrictionConflicts(selectedMeal);
+    const doAdd = () => {
+      addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
+      if (selectedDrink) addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+      if (selectedSide)  addToCart({ ...selectedSide,  id: parseInt(selectedSide.id)  });
+      setShowMealDetail(false);
+    };
+    if (conflicts.length > 0) {
+      Alert.alert(
+        '⚠️ Dietary Restriction Alert',
+        `This meal contains: ${conflicts.join(', ')}.\n\nThis conflicts with the resident\'s recorded profile. Do you still want to order?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Order Anyway', style: 'destructive', onPress: doAdd },
+        ],
+      );
+    } else {
+      doAdd();
     }
-    if (selectedSide) {
-      addToCart({ ...selectedSide, id: parseInt(selectedSide.id) });
-    }
-    setShowMealDetail(false);
   };
 
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
     const mealImg = !!item.imageUrl;
-    const available = isWithinTimeRange(item.time_range, item.meal_period);
+    // A meal is "available" if the kitchen hasn't disabled it AND we're
+    // within the time window for its meal period.
+    const kitchenEnabled = item.isAvailable !== false;
+    const inTimeWindow = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
+    const available = kitchenEnabled && inTimeWindow;
+    const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
+    const conflicts = getRestrictionConflicts(item);
+    const hasConflict = conflicts.length > 0;
     return (
       <TouchableOpacity
         style={[
           styles.card,
           { backgroundColor: theme.surface, borderColor: theme.border },
           !available && styles.cardUnavailable,
+          hasConflict && { borderColor: '#FCA5A5', borderWidth: 1.5 },
         ]}
         activeOpacity={available ? 0.7 : 1}
         onPress={() => { if (available) openMealDetail(item); }}
@@ -837,8 +1271,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       >
         {!available && (
           <View style={styles.unavailableOverlay}>
-            <Feather name="clock" size={12} color="#717644" />
-            <Text style={styles.unavailableText}>Not available · {item.time_range}</Text>
+            <Feather name={kitchenEnabled ? "clock" : "slash"} size={13} color="#717644" />
+            <Text style={styles.unavailableText}>
+              {kitchenEnabled ? `Not available · ${item.time_range}` : 'Not available today'}
+            </Text>
           </View>
         )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
@@ -856,16 +1292,27 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           {!available && (
             <View style={styles.imageFrost} />
           )}
-          <View style={styles.mealImageOverlay}>
-            <Text style={[styles.mealImageLabel, { color: '#FFFFFF' }]}>
+        </View>
+        {/* Coloured left accent strip */}
+        <View style={[styles.periodStrip, { backgroundColor: accent.color }]} />
+        <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
+          {/* Period pill next to meal title */}
+          <View style={[styles.periodPill, { backgroundColor: accent.light, borderColor: accent.color }]}>
+            <Text style={[styles.periodPillText, { color: accent.color }]}>
               {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
-        </View>
-        <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
-          <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
-            {translateMealName(item.name, language)}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
+              {translateMealName(item.name, language)}
+            </Text>
+            {hasConflict && (
+              <View style={styles.restrictionBadge}>
+                <Feather name="alert-triangle" size={11} color="#DC2626" />
+                <Text style={styles.restrictionBadgeText}>Restricted</Text>
+              </View>
+            )}
+          </View>
           <View style={[styles.timeBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
             <Text style={[styles.timeBadgeText, { fontSize: scaled(14), color: theme.accent }]}>
               {item.time_range}
@@ -916,21 +1363,60 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   const listHeader = (
-    <View style={styles.header}>
-      {/* Back Button & Title */}
+    <View style={[styles.header, { backgroundColor: pt.bg }]}>
+      {/* Decorative period icon — top right of header */}
+      <Text style={styles.headerIcon}>{pt.icon}</Text>
+
+      {/* Back Button, Title & Header Actions */}
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
           <View style={styles.backArrow}>
-            <View style={styles.backArrowLine1} />
-            <View style={styles.backArrowLine2} />
+            <View style={[styles.backArrowLine1, { backgroundColor: pt.titleColor }]} />
+            <View style={[styles.backArrowLine2, { backgroundColor: pt.titleColor }]} />
           </View>
         </TouchableOpacity>
         <View style={styles.titleContainer}>
-          <Text style={[styles.title, { fontSize: scaled(32) }]}>{t.availableMenus}</Text>
-          <Text style={[styles.subtitle, { fontSize: scaled(17) }]}>{t.orderingFor} {residentName}</Text>
+          <Text style={[styles.title, { fontSize: scaled(28), color: pt.titleColor }]}>{t.availableMenus}</Text>
+          <Text style={[styles.subtitle, { fontSize: scaled(15), color: pt.subColor }]}>{t.orderingFor} {residentName}</Text>
+        </View>
+        {/* Header action buttons — right side */}
+        <View style={styles.headerActions}>
+          {getCartCount() > 0 && (
+            <TouchableOpacity
+              style={[styles.headerActionBtn, { backgroundColor: pt.tabActiveBg }]}
+              onPress={goToCart}
+              activeOpacity={0.85}
+            >
+              <Feather name="shopping-cart" size={18} color="#FFF" />
+              <View style={styles.headerCartBadge}>
+                <Text style={styles.headerCartBadgeText}>{getCartCount()}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
+            onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
+            activeOpacity={0.85}
+          >
+            <Feather name="calendar" size={20} color={pt.tabActiveBg} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
+            onPress={() => setShowBrowseSupport(true)}
+            activeOpacity={0.85}
+          >
+            <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
+            onPress={goToSettings}
+            activeOpacity={0.85}
+          >
+            <Feather name="settings" size={20} color={pt.tabActiveBg} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -942,10 +1428,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           return (
             <TouchableOpacity
               key={period.key}
-              style={[styles.tab, isActive && styles.tabActive]}
+              style={[
+                styles.tab,
+                { backgroundColor: isActive ? pt.tabActiveBg : pt.tabInactiveBg },
+                isActive && { borderColor: pt.tabActiveBg },
+              ]}
               onPress={() => setSelectedPeriod(period)}
             >
-              <Text style={[styles.tabText, { fontSize: scaled(16) }, isActive && styles.tabTextActive]}>
+              <Text style={[
+                styles.tabText,
+                { fontSize: scaled(16) },
+                { color: isActive ? pt.tabActiveText : pt.tabInactiveText },
+              ]}>
                 {label}
               </Text>
             </TouchableOpacity>
@@ -956,31 +1450,188 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   );
 
   const listFooter = (
-    <View style={styles.aiRecommendation}>
-      <View style={styles.aiRecommendationIcon}>
-        <Image
-          source={require('../styles/pictures/grandma.png')}
-          style={{ width: 38, height: 38 }}
-          resizeMode="contain"
-        />
+    <View style={styles.bottomCard}>
+      {/* Grandma avatar */}
+      <View style={styles.bottomCardAvatar}>
+        <Image source={require('../styles/pictures/grandma.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />
       </View>
-      <View style={styles.aiRecommendationContent}>
-        <Text style={[styles.aiRecommendationTitle, { fontSize: scaled(15) }]}>
-          {t.recommendAMeal} — {residentName}
-        </Text>
-        {recLoading ? (
-          <ActivityIndicator color="#2563EB" size="small" />
-        ) : recommendation ? (
-          <Text style={[styles.aiRecommendationText, { fontSize: scaled(16) }]}>
-            {recommendation.reason}{' '}
-            <Text style={styles.aiRecommendationHighlight}>
-              {translateMealName(recommendation.meal_name, language)}
-            </Text>.
+
+      <View style={{ flex: 1, gap: 10 }}>
+        {/* Recommendation row */}
+        <View>
+          <Text style={[styles.bottomCardLabel, { fontSize: scaled(12) }]}>
+            GrannyGBT · {residentName}
           </Text>
-        ) : (
-          <Text style={[styles.aiRecommendationText, { fontSize: scaled(16) }]}>
-            {t.noRecommendation}
-          </Text>
+          {recLoading ? (
+            <ActivityIndicator color="#4A5C2A" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
+          ) : recommendation ? (
+            (() => {
+              // Find the recommended meal — search the period-specific cache first,
+              // then fall back to the currently displayed meals list
+              const allSearchable = [...recPeriodMeals, ...meals];
+              const recMeal = allSearchable.find(
+                (m) => m.name === recommendation.meal_name || translateMealName(m.name, language) === recommendation.meal_name
+              );
+              // Use the target period's schedule for availability check
+              const targetSched = recommendation.targetPeriod
+                ? MEAL_SCHEDULE.find((s) => s.label === recommendation.targetPeriod)
+                : recMeal
+                  ? MEAL_SCHEDULE.find((s) => s.label === recMeal.meal_period)
+                  : null;
+              const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+              const isServing = targetSched
+                ? nowMins >= targetSched.start && nowMins <= targetSched.end
+                : true;
+              return (
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => { if (recMeal) openMealDetail(recMeal); }}
+                  style={styles.bottomCardRecRow}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>
+                      {recommendation.reason}{' '}
+                      <Text style={styles.bottomCardMealName}>
+                        {translateMealName(recommendation.meal_name, language)}
+                      </Text>
+                    </Text>
+                    {isServing ? (
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11), color: '#4A7A60' }]}>
+                        ✓ Available now
+                      </Text>
+                    ) : targetSched ? (
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11) }]}>
+                        Not serving now · Available {recMeal?.time_range || (() => {
+                          const sh = targetSched.start / 60;
+                          const eh = targetSched.end / 60;
+                          return `${sh}am – ${eh > 12 ? (eh - 12) + 'pm' : eh + 'am'}`;
+                        })()}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.bottomCardOrderBtn}>
+                    <Feather name="plus" size={14} color="#FFF" />
+                    <Text style={styles.bottomCardOrderBtnText}>Order</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })()
+          ) : (
+            <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>{t.noRecommendation}</Text>
+          )}
+        </View>
+
+        {/* Auto-suggest rows — main meal + optional drink + dessert */}
+        {autoSuggest && !autoSuggestDismissed && (
+          <>
+            <View style={styles.bottomCardDivider} />
+            {/* Header row */}
+            <View style={styles.bottomCardSuggestHeader}>
+              <Feather name="clock" size={13} color="#4A5C2A" />
+              <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(12) }]}>
+                {autoSuggest.isNow
+                  ? `Current meal: ${autoSuggest.period} — ${formatMinsUntil(autoSuggest.minsUntil)} left`
+                  : `Next meal: ${autoSuggest.period} in ${formatMinsUntil(autoSuggest.minsUntil)}`}
+                {' — based on your favorites'}
+              </Text>
+              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
+                <Feather name="x" size={14} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            {/* Main meal row */}
+            <View style={styles.bottomCardSuggestRow}>
+              <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                <Text style={styles.bottomCardSuggestLabel}>Meal: </Text>
+                <Text style={styles.bottomCardMealName}>{autoSuggest.meal.name}</Text>
+              </Text>
+              <TouchableOpacity
+                style={styles.bottomCardSuggestConfirm}
+                onPress={() => {
+                  const m = autoSuggest.meal;
+                  addToCart({ id: Number(m.id), name: m.name, meal_period: m.meal_period as any, description: m.description, kcal: m.kcal, sodium_mg: m.sodium_mg, protein_g: m.protein_g, tags: m.tags });
+                }}
+              >
+                <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Drink row */}
+            {autoSuggest.drink && (
+              <View style={styles.bottomCardSuggestRow}>
+                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                  <Text style={styles.bottomCardSuggestLabel}>Drink: </Text>
+                  <Text style={styles.bottomCardMealName}>{autoSuggest.drink.name}</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.bottomCardSuggestConfirm}
+                  onPress={() => {
+                    const d = autoSuggest.drink!;
+                    addToCart({ id: Number(d.id), name: d.name, meal_period: d.meal_period as any, description: d.description, kcal: d.kcal, sodium_mg: d.sodium_mg, protein_g: d.protein_g, tags: d.tags });
+                  }}
+                >
+                  <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* Dessert row */}
+            {autoSuggest.dessert && (
+              <View style={styles.bottomCardSuggestRow}>
+                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                  <Text style={styles.bottomCardSuggestLabel}>Side: </Text>
+                  <Text style={styles.bottomCardMealName}>{autoSuggest.dessert.name}</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.bottomCardSuggestConfirm}
+                  onPress={() => {
+                    const s = autoSuggest.dessert!;
+                    addToCart({ id: Number(s.id), name: s.name, meal_period: s.meal_period as any, description: s.description, kcal: s.kcal, sodium_mg: s.sodium_mg, protein_g: s.protein_g, tags: s.tags });
+                  }}
+                >
+                  <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* Place All button */}
+            <TouchableOpacity
+              style={styles.bottomCardPlaceAllBtn}
+              onPress={async () => {
+                if (!autoSuggest || !residentId) return;
+                const items = [autoSuggest.meal, autoSuggest.drink, autoSuggest.dessert].filter(Boolean) as Meal[];
+                clearCart();
+                for (const item of items) {
+                  addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
+                }
+                await new Promise<void>(r => setTimeout(r, 100));
+                const result = await placeOrder(residentId, autoSuggest.period);
+                if (result.order) {
+                  setAutoPlaced(true);
+                  setAutoSuggestDismissed(true);
+                  setAutoSuggest(null);
+                  // Notify caregiver
+                  const rName = residentName || 'A resident';
+                  const rRoom = route?.params?.roomNumber || '';
+                  const itemNames = items.map(i => i.name).join(', ');
+                  for (const cg of assignedCaregivers) {
+                    try {
+                      await sendApiMessage(cg.caregiverId,
+                        `${rName}${rRoom ? ` (Room ${rRoom})` : ''} placed an order — ${autoSuggest.period}: ${itemNames}.`
+                      );
+                    } catch {}
+                  }
+                  Alert.alert('Order Placed', `Your ${autoSuggest.period} order has been placed: ${itemNames}`);
+                }
+              }}
+            >
+              <Feather name="check-circle" size={14} color="#FFF" />
+              <Text style={styles.bottomCardPlaceAllText}>Place Order</Text>
+            </TouchableOpacity>
+            {/* Dismiss all */}
+            <TouchableOpacity
+              style={styles.bottomCardSuggestDismiss}
+              onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }}
+            >
+              <Text style={[styles.bottomCardSuggestDismissText, { fontSize: scaled(12) }]}>Dismiss all</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </View>
@@ -1009,7 +1660,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       ) : (
         <FlatList
           key={`meal-list-cols-2`}
-          data={sortMealsByAvailability(meals)}
+          data={sortMealsByAvailability(meals, currentTime)}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMeal}
           numColumns={2}
@@ -1033,30 +1684,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         <Image source={require('../styles/pictures/grandma.png')} style={styles.floatingGrannyImage} resizeMode="contain" />
       </TouchableOpacity>
 
-      <View style={styles.floatingTopActions}>
-        {getCartCount() > 0 && (
-          <TouchableOpacity
-            style={[styles.floatingCartButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-            onPress={goToCart}
-            accessibilityLabel="Cart"
-            activeOpacity={0.85}
-          >
-            <Feather name="shopping-cart" size={20} color="#FFFFFF" />
-            <View style={styles.headerCartBadge}>
-              <Text style={styles.headerCartBadgeText}>{getCartCount()}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          onPress={goToSettings}
-          style={[styles.floatingSettingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-          accessibilityLabel="Settings"
-          accessibilityRole="button"
-          activeOpacity={0.85}
-        >
-          <Feather name="settings" size={22} color={theme.accent} />
-        </TouchableOpacity>
-      </View>
 
       {/* Meal Detail Modal */}
       <Modal
@@ -1247,8 +1874,51 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         onClose={() => setShowAIChat(false)}
         residentName={residentName}
         residentId={residentId || ResidentService.getDefaultResident().id}
-        dietaryRestrictions={route?.params?.dietaryRestrictions || []}
+        dietaryRestrictions={[
+          ...(route?.params?.dietaryRestrictions ?? []),
+          ...(route?.params?.foodAllergies ?? []),
+        ]}
       />
+
+      {/* Browse Support Modal */}
+      <Modal visible={showBrowseSupport} transparent animationType="fade" onRequestClose={() => setShowBrowseSupport(false)}>
+        <View style={styles.supportBackdrop}>
+          <View style={styles.supportCard}>
+            <View style={styles.supportCardHeader}>
+              <Text style={styles.supportCardTitle}>Need Help?</Text>
+              <TouchableOpacity onPress={() => setShowBrowseSupport(false)} hitSlop={10}>
+                <Feather name="x" size={22} color="#1A1A1A" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.supportCardSub}>Contact your care team or kitchen staff for assistance with meal orders.</Text>
+
+            <View style={styles.scheduleCardBlock}>
+              <Text style={styles.scheduleCardTitle}>Kitchen Hours</Text>
+              {MEAL_SCHEDULE.map((s) => {
+                const isActive = activePeriod === s.label;
+                return (
+                  <View key={s.label} style={[styles.scheduleCardRow, isActive && styles.scheduleCardRowActive]}>
+                    <Text style={styles.scheduleCardIcon}>{s.icon}</Text>
+                    <Text style={[styles.scheduleCardLabel, isActive && styles.scheduleCardLabelActive]}>
+                      {s.label}
+                    </Text>
+                    <Text style={[styles.scheduleCardTime, isActive && styles.scheduleCardLabelActive]}>
+                      {s.label === 'Breakfast' ? '7:00 am – 10:00 am' : s.label === 'Lunch' ? '11:00 am – 2:00 pm' : '4:00 pm – 7:00 pm'}
+                    </Text>
+                    {isActive && <View style={styles.scheduleActiveDot} />}
+                  </View>
+                );
+              })}
+              <Text style={styles.scheduleKitchenNote}>Kitchen open 7 am – 7 pm daily</Text>
+            </View>
+
+            <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
+              <Text style={styles.supportCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -1265,7 +1935,15 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingHorizontal: 22,
     paddingBottom: 22,
-    backgroundColor: COLORS.white,
+    overflow: 'hidden',
+  },
+  headerIcon: {
+    position: 'absolute',
+    top: 10,
+    right: 80,
+    fontSize: 72,
+    opacity: 0.07,
+    zIndex: 0,
   },
   titleRow: {
     flexDirection: 'row',
@@ -1273,13 +1951,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
+    marginRight: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: 'rgba(113,118,68,0.25)',
+    shadowColor: '#717644',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   settingsButton: {
     width: 40,
@@ -1320,7 +2005,19 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flex: 1,
-    paddingRight: 72,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   title: {
     fontSize: 32,
@@ -1409,17 +2106,39 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   floatingSettingsButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F3F4F6',
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(113,118,68,0.25)',
+    shadowColor: '#717644',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  floatingUpcomingBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(113,118,68,0.25)',
+    shadowColor: '#717644',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  floatingUpcomingText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
   },
   tabs: {
     flexDirection: 'row',
@@ -1490,19 +2209,30 @@ const styles = StyleSheet.create({
   mealImageEmoji: {
     fontSize: 56,
   },
-  mealImageOverlay: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#D27028',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
   mealImageLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  periodStrip: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    zIndex: 2,
+  },
+  periodPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+  },
+  periodPillText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   cardContent: {
     padding: 16,
@@ -1511,7 +2241,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: COLORS.textDark,
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  restrictionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginBottom: 4,
+  },
+  restrictionBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   timeBadge: {
     alignSelf: 'flex-start',
@@ -1568,6 +2313,143 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.support,
   },
+  // Combined bottom card (recommendation + auto-suggest)
+  bottomCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#F5F2EA',
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#DDD5C0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  bottomCardAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FDE8C0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#F6C97E',
+    overflow: 'hidden',
+  },
+  bottomCardLabel: {
+    fontWeight: '700',
+    color: '#6D6040',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  bottomCardRecRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bottomCardRecText: {
+    color: '#3C3C3C',
+    lineHeight: 20,
+    flex: 1,
+  },
+  bottomCardMealName: {
+    fontWeight: '800',
+    color: '#2D4018',
+  },
+  bottomCardOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#4A5C2A',
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  bottomCardOrderBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  bottomCardAvailBadge: {
+    color: '#B45309',
+    marginTop: 3,
+    fontWeight: '600',
+  },
+  bottomCardDivider: {
+    height: 1,
+    backgroundColor: '#DDD5C0',
+  },
+  bottomCardSuggestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bottomCardSuggestTitle: {
+    flex: 1,
+    fontWeight: '700',
+    color: '#4A5C2A',
+  },
+  bottomCardSuggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bottomCardSuggestText: {
+    color: '#555',
+    lineHeight: 18,
+  },
+  bottomCardSuggestLabel: {
+    fontWeight: '600',
+    color: '#777',
+  },
+  bottomCardSuggestPeriod: {
+    fontWeight: '700',
+    color: '#4A5C2A',
+  },
+  bottomCardSuggestConfirm: {
+    backgroundColor: '#4A5C2A',
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  bottomCardSuggestConfirmText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  bottomCardPlaceAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#4A5C2A',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 6,
+  },
+  bottomCardPlaceAllText: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  bottomCardSuggestDismiss: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+    marginTop: 2,
+  },
+  bottomCardSuggestDismissText: {
+    color: '#9CA3AF',
+    textDecorationLine: 'underline',
+  },
   cardUnavailable: {
     borderColor: '#DDD0B8',
     borderStyle: 'dashed',
@@ -1593,7 +2475,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   unavailableText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#717644',
     letterSpacing: 0.1,
@@ -1869,6 +2751,219 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+
+  // Recommendation tappable highlight
+  aiRecommendationTappable: {
+    textDecorationLine: 'underline',
+  },
+
+  // Auto-suggest banner
+  autoSuggestBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    backgroundColor: '#F0F7E8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C2D9A0',
+    padding: 14,
+    gap: 10,
+  },
+  autoSuggestLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    flex: 1,
+  },
+  autoSuggestTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#3A5020',
+    marginBottom: 2,
+  },
+  autoSuggestBody: {
+    fontSize: 13,
+    color: '#4A5C2A',
+    lineHeight: 18,
+  },
+  autoSuggestMeal: {
+    fontWeight: '700',
+    color: '#2D4018',
+  },
+  autoSuggestActions: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  autoSuggestConfirm: {
+    backgroundColor: '#4A5C2A',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+  },
+  autoSuggestConfirmText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  autoSuggestDeny: {
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#B0C890',
+  },
+  autoSuggestDenyText: {
+    color: '#4A5C2A',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+
+  // Schedule banner in header
+  scheduleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  scheduleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  schedulePill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  schedulePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#555',
+  },
+  schedulePillTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+
+  // Support button in floating actions
+  floatingSupportButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(113,118,68,0.25)',
+    shadowColor: '#717644',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+
+  // Support modal
+  supportBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  supportCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 480,
+  },
+  supportCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  supportCardTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1A1A1A',
+  },
+  supportCardSub: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  scheduleCardBlock: {
+    backgroundColor: '#F8F7F3',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+  },
+  scheduleCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4A4A4A',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scheduleCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginBottom: 4,
+    gap: 8,
+  },
+  scheduleCardRowActive: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  scheduleCardIcon: {
+    fontSize: 16,
+  },
+  scheduleCardLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    width: 72,
+  },
+  scheduleCardLabelActive: {
+    color: '#1D4ED8',
+  },
+  scheduleCardTime: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+  },
+  scheduleActiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
+  },
+  scheduleKitchenNote: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  supportCloseBtn: {
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  supportCloseBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
 });
 
 // ---------- Chat Styles ----------
@@ -1879,212 +2974,220 @@ const chatStyles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   container: {
-    width: SCREEN_WIDTH * 0.85,
-    maxWidth: 400,
-    backgroundColor: COLORS.white,
+    width: SCREEN_WIDTH * 0.88,
+    maxWidth: 440,
+    backgroundColor: '#F7F4EE',
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: -5, height: 0 },
-    elevation: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    shadowOffset: { width: -6, height: 0 },
+    elevation: 14,
+    flexDirection: 'column',
   },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
+    backgroundColor: '#4A5C2A',
+    paddingTop: 18,
+    paddingBottom: 16,
     paddingHorizontal: 16,
+    gap: 12,
   },
-  headerIcon: {
+  headerAvatarWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  headerAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  headerIconText: {
-    fontSize: 20,
   },
   headerText: {
     flex: 1,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFFFFF',
   },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  aiOn: {
+    backgroundColor: 'rgba(52,211,153,0.85)',
+  },
+  aiOff: {
+    backgroundColor: 'rgba(156,163,175,0.75)',
+  },
   headerSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255,255,255,0.75)',
     marginTop: 2,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  closeButtonText: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  avatarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-    marginLeft: 4,
-  },
-  avatarBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#f6a72d',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 5,
-  },
-  avatarEmoji: {
-    fontSize: 12,
-  },
-  avatarLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#b77f3f',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginRight: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  aiOn: {
-    backgroundColor: 'rgba(52, 211, 153, 0.9)'
-  },
-  aiOff: {
-    backgroundColor: 'rgba(107, 114, 128, 0.9)'
-  },
+
+  // Messages
   messagesContainer: {
     flex: 1,
-    backgroundColor: COLORS.neutral,
+    backgroundColor: '#F0EDE5',
   },
   messagesContent: {
     padding: 16,
-    paddingBottom: 30,
+    paddingBottom: 24,
+    gap: 4,
+  },
+  assistantRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginBottom: 10,
+  },
+  userRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 10,
+  },
+  avatarBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FDE8C0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#F6C97E',
+  },
+  bubbleAvatar: {
+    width: 24,
+    height: 24,
   },
   messageBubble: {
-    maxWidth: '85%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
+    maxWidth: '82%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
   },
   assistantBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#4A5C2A',
     borderBottomRightRadius: 4,
   },
-  messageText: {
-    fontSize: 16,
-    color: COLORS.textMid,
-    lineHeight: 24,
-  },
-  userMessageText: {
-    color: '#FFFFFF',
-  },
   timestamp: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginTop: 6,
+    fontSize: 10,
+    color: '#A8A29E',
+    marginTop: 5,
   },
   userTimestamp: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255,255,255,0.55)',
     textAlign: 'right',
   },
   typingText: {
-    fontSize: 14,
     color: '#9CA3AF',
     fontStyle: 'italic',
   },
+
+  // Quick questions
   quickQuestionsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: '#EDE8DF',
   },
   quickQuestionsLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 10,
-  },
-  quickQuestionsRow: {
-    flexDirection: 'row',
-    gap: 8,
+    fontWeight: '700',
+    color: '#A8A29E',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   quickQuestionButton: {
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    backgroundColor: '#F5F0E8',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: '#DDD8CC',
   },
   quickQuestionText: {
-    fontSize: 15,
-    color: COLORS.textMid,
-    fontWeight: '500',
+    color: '#4A5C2A',
+    fontWeight: '600',
   },
+
+  // Input
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: 12,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: '#EDE8DF',
     gap: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 22,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: COLORS.textDark,
-    maxHeight: 140,
+    paddingVertical: 11,
+    color: '#2C2C2C',
+    maxHeight: 120,
+    borderWidth: 1,
+    borderColor: '#DDD8CC',
   },
   sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.accent,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4A5C2A',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#4A5C2A',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: '#C8C3B8',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   sendButtonText: {
     fontSize: 20,

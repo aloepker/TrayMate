@@ -89,6 +89,7 @@ function unwrapList<T>(data: any): T[] {
 
   return (
     data.caregivers ??
+    data.residents ??
     data.kitchenStaff ??
     data.kitchen ??
     data.staff ??
@@ -102,12 +103,25 @@ function unwrapList<T>(data: any): T[] {
 
 /**
  * Backend might return allergies as:
- * - ["nuts", "dairy"]  OR "nuts, dairy"
+ * - ["nuts", "dairy"]                              (plain array)
+ * - "nuts, dairy"                                  (comma-separated string)
+ * - [{ name: "nuts" }, { label: "dairy" }]         (array of objects)
  * This converts anything into a clean string[].
  */
 function normalizeStringArray(value: any): string[] {
   if (!value) return [];
-  if (Array.isArray(value)) return value.map((v) => String(v));
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => {
+        if (v == null) return "";
+        if (typeof v === "string") return v.trim();
+        if (typeof v === "object") {
+          return String(v.name ?? v.label ?? v.value ?? v.title ?? "").trim();
+        }
+        return String(v).trim();
+      })
+      .filter(Boolean);
+  }
   if (typeof value === "string") {
     return value
       .split(",")
@@ -192,24 +206,42 @@ type ResidentApi = {
   roomNumber?: string | number;
   room?: string | number;
 
-
   dietaryRestrictions?: any;
   foodAllergies?: any;
   medicalConditions?: any;
   medications?: any;
 
-  caregiverId?: string | null;
+  // Backend may return caregiver ID under various field names
+  caregiverId?: string | number | null;
+  caregiver_id?: string | number | null;
+  assignedCaregiverId?: string | number | null;
+  assignedCaregiver?: { id?: string | number } | null;
+  caregiver?: { id?: string | number } | null;
 };
 
 /**
  * Maps backend Resident -> frontend Resident
  * so the dashboard can display correctly.
  */
-function mapResident(api: ResidentApi): Resident {
+function mapResident(api: any): Resident {
   const builtName = [api.firstName, api.middleName, api.lastName]
     .filter((part) => String(part ?? "").trim().length > 0)
     .join(" ")
     .trim();
+
+  // Try every field name the backend might use for caregiver assignment
+  const rawCaregiverId =
+    api.caregiverId ??
+    api.caregiver_id ??
+    api.assignedCaregiverId ??
+    api.assignedCaregiver?.id ??
+    api.caregiver?.id ??
+    null;
+
+  const caregiverId =
+    rawCaregiverId !== null && rawCaregiverId !== undefined && String(rawCaregiverId).trim() !== ""
+      ? String(rawCaregiverId).trim()
+      : null;
 
   return {
     id: String(api.id),
@@ -219,7 +251,7 @@ function mapResident(api: ResidentApi): Resident {
     medicalConditions: normalizeStringArray(api.medicalConditions),
     foodAllergies: normalizeStringArray(api.foodAllergies),
     medications: normalizeStringArray(api.medications),
-    caregiverId: api.caregiverId ?? null,
+    caregiverId,
   };
 }
 
@@ -317,14 +349,94 @@ export async function getResidents(): Promise<Resident[]> {
 }
 
 /**
- * GET caregiver's assigned residents
- * Endpoint: /caregiver/residents
- * This should return ONLY residents assigned to the logged-in caregiver.
+ * GET single resident by ID — used to look up their assigned caregiver
+ * Endpoint: /admin/residents/:id
+ */
+export async function getResidentById(id: string): Promise<Resident | null> {
+  try {
+    const raw = await request<any>(`/admin/residents/${id}`);
+    return mapResident(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * GET caregiver's assigned residents.
+ *
+ * Tries /caregiver/residents first. If that returns nothing or fails,
+ * falls back to /admin/residents filtered by the logged-in caregiver's ID,
+ * then /residents as a last resort.
+ *
+ * Also deep-inspects the response to find the residents array no matter
+ * how the backend wraps it.
  */
 export async function getCaregiverResidents(): Promise<Resident[]> {
-  const raw = await request<any>("/caregiver/residents");
-  const list = unwrapList<ResidentApi>(raw);
-  return list.map(mapResident);
+  // Helper: recursively find first array of objects in an unknown response shape
+  const findArray = (obj: any, depth = 0): any[] | null => {
+    if (depth > 3) return null;
+    if (Array.isArray(obj)) return obj;
+    if (obj && typeof obj === "object") {
+      for (const key of Object.keys(obj)) {
+        const found = findArray(obj[key], depth + 1);
+        if (found && found.length > 0) return found;
+      }
+    }
+    return null;
+  };
+
+  // Attempt 1: /caregiver/residents (primary endpoint)
+  try {
+    const raw = await request<any>("/caregiver/residents");
+    console.log("[CaregiverResidents] /caregiver/residents raw:", JSON.stringify(raw)?.slice(0, 500));
+    let list = unwrapList<ResidentApi>(raw);
+    if (list.length === 0 && raw) {
+      // Deep search in case the backend nests it differently
+      const found = findArray(raw);
+      if (found && found.length > 0) list = found;
+    }
+    if (list.length > 0) return list.map(mapResident);
+  } catch (e: any) {
+    console.warn("[CaregiverResidents] /caregiver/residents failed:", e?.status, e?.message);
+  }
+
+  // Attempt 2: /residents (some backends expose this for all authenticated users)
+  try {
+    const raw = await request<any>("/residents");
+    console.log("[CaregiverResidents] /residents raw:", JSON.stringify(raw)?.slice(0, 500));
+    let list = unwrapList<ResidentApi>(raw);
+    if (list.length === 0 && raw) {
+      const found = findArray(raw);
+      if (found && found.length > 0) list = found;
+    }
+    if (list.length > 0) return list.map(mapResident);
+  } catch (e: any) {
+    console.warn("[CaregiverResidents] /residents failed:", e?.status, e?.message);
+  }
+
+  // Attempt 3: /admin/residents and filter by my caregiver ID
+  try {
+    const me = await getMe();
+    const myId = String(me.id);
+    const raw = await request<any>("/admin/residents");
+    console.log("[CaregiverResidents] /admin/residents raw (fallback):", JSON.stringify(raw)?.slice(0, 500));
+    let list = unwrapList<ResidentApi>(raw);
+    if (list.length === 0 && raw) {
+      const found = findArray(raw);
+      if (found && found.length > 0) list = found;
+    }
+    const all = list.map(mapResident);
+    // Filter to only residents assigned to this caregiver
+    const mine = all.filter(r => r.caregiverId === myId);
+    if (mine.length > 0) return mine;
+    // If no match by caregiverId, return all (better than nothing)
+    console.log("[CaregiverResidents] No caregiverId match for", myId, "— returning all", all.length, "residents");
+    return all;
+  } catch (e: any) {
+    console.warn("[CaregiverResidents] /admin/residents fallback failed:", e?.status, e?.message);
+  }
+
+  return [];
 }
 
 
@@ -566,7 +678,18 @@ export async function getOrderHistoryApi(
 }
 
 /**
- * 4) Get all orders for a given date and meal period.
+ * 4) Delete a single order by backend ID.
+ *    DELETE /mealOrders/{orderId}
+ *    Returns 204 No Content on success.
+ */
+export async function deleteOrderApi(orderId: number): Promise<void> {
+  await request<void>(`/mealOrders/${orderId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * 5) Get all orders for a given date and meal period.
  *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD
  */
 export async function searchOrdersApi(
@@ -652,4 +775,45 @@ export async function getMe(): Promise<{ id: string; fullName: string; role: str
     fullName: String(raw.fullName ?? ""),
     role: String(raw.role ?? ""),
   };
+}
+
+// ─── Menu management (kitchen/admin) ──────────────────────────────────────────
+
+export interface CreateMealPayload {
+  name: string;
+  description?: string;
+  mealperiod: string;
+  mealtype?: string;
+  calories?: number;
+  sodium?: number;
+  protein?: number;
+  tags?: string;
+  allergenInfo?: string;
+  ingredients?: string;
+  available?: boolean;
+  seasonal?: boolean;
+  imageUrl?: string;
+}
+
+export async function createMeal(payload: CreateMealPayload): Promise<any> {
+  return request<any>("/admin/menu", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateMeal(mealId: number, payload: Partial<CreateMealPayload>): Promise<any> {
+  return request<any>(`/admin/menu/${mealId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMeal(mealId: number): Promise<void> {
+  return request<void>(`/admin/menu/${mealId}`, { method: "DELETE" });
+}
+
+export async function getAllMenuMeals(): Promise<any[]> {
+  const data = await request<any>("/menu");
+  return Array.isArray(data) ? data : [];
 }

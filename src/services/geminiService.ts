@@ -122,18 +122,17 @@ ${residentContext}
 AVAILABLE MEALS:
 ${mealsContext}
 
-RESPONSE GUIDELINES:
-- Be concise, friendly, and helpful. No over-the-top grandma persona.
-- Answer greetings naturally and casually.
-- When recommending meals, explain WHY they are safe and suitable for this resident.
-- When a meal is unsafe, explain which specific allergen or restriction it violates.
-- Format meal names in bold using **name**.
-- Use bullet points for lists.
-- If asked about a meal not in the database, say you can only recommend from the currently available meals.
-- If asked a general nutrition or diet question, answer helpfully but tie it back to available meals.
-- Keep responses concise — no more than 3-4 short paragraphs.
+RESPONSE RULES — KEEP IT SHORT:
+- Max 2-3 sentences per response. Never write paragraphs.
+- For meal recommendations: one sentence on why it fits, then the meal name in bold.
+- For menu listing: bullet points only, no extra commentary.
+- Never repeat the resident's name back in every sentence.
+- No filler phrases like "Great question!" or "Of course!".
+- Format meal names in bold: **name**.
+- Flag unsafe meals in one short sentence.
+- Only recommend meals from the AVAILABLE MEALS list.
 
-LANGUAGE: You MUST respond in ${language}. All your responses — greetings, recommendations, warnings, everything — must be in ${language}. Meal names can stay in English but all descriptions and conversation must be in ${language}.`;
+LANGUAGE: Respond in ${language} only. Meal names stay in English.`;
 }
 
 /**
@@ -156,7 +155,7 @@ async function callGeminiModel(
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.8 },
+    generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
   };
 
   let resp: Response;
@@ -338,6 +337,100 @@ export class GeminiChatService {
 
 // Singleton for the BrowseMealOptions chat modal
 export const geminiChat = new GeminiChatService();
+
+/**
+ * Batch-translate meal names/descriptions that aren't in the static lookup table.
+ * Returns a map of { name → { Español, Français, 中文 } }.
+ * Tries each model in fallback order; returns empty object on total failure.
+ */
+export async function translateMealNamesWithGemini(
+  names: string[],
+): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (names.length === 0) return {};
+
+  const prompt = `Translate these English food/meal names into Spanish (Español), French (Français), and Chinese (中文).
+Return ONLY valid JSON — no markdown, no explanation — exactly like this example:
+{"Chicken Noodle Soup":{"Español":"Sopa de Fideos con Pollo","Français":"Soupe de Nouilles au Poulet","中文":"鸡肉面条汤"}}
+
+Names to translate:
+${names.join('\n')}`;
+
+  for (const model of GEMINI_CONFIG.models) {
+    try {
+      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+      };
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      // Strip markdown code fences if present
+      const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+      return JSON.parse(clean);
+    } catch {
+      continue;
+    }
+  }
+  return {};
+}
+
+/**
+ * Batch-translate meal descriptions (full sentences) into ES/FR/ZH.
+ * Same shape as translateMealNamesWithGemini, but keyed by the original
+ * English description string.
+ */
+export async function translateMealDescriptionsWithGemini(
+  descriptions: string[],
+): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (descriptions.length === 0) return {};
+
+  // Use numeric keys in the prompt to avoid JSON escaping issues with quotes
+  // and punctuation inside descriptions.
+  const numbered = descriptions.map((d, i) => `${i + 1}. ${d}`).join('\n');
+  const prompt = `Translate these English meal description sentences into Spanish (Español), French (Français), and Chinese (中文).
+Return ONLY valid JSON — no markdown, no explanation — keyed by the same number.
+Example: {"1":{"Español":"...","Français":"...","中文":"..."}, "2":{...}}
+
+Descriptions:
+${numbered}`;
+
+  for (const model of GEMINI_CONFIG.models) {
+    try {
+      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.1 },
+      };
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+      const numbered = JSON.parse(clean) as Record<string, { Español: string; Français: string; 中文: string }>;
+      // Re-key by original English description
+      const result: Record<string, { Español: string; Français: string; 中文: string }> = {};
+      for (const [idx, tr] of Object.entries(numbered)) {
+        const i = Number(idx) - 1;
+        const orig = descriptions[i];
+        if (orig) result[orig] = tr;
+      }
+      return result;
+    } catch {
+      continue;
+    }
+  }
+  return {};
+}
 
 // Factory for creating independent sessions (e.g. the standalone screen)
 export function createGeminiChat(): GeminiChatService {

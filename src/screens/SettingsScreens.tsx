@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
+
+import { ResidentService } from '../services/localDataService';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -40,8 +43,6 @@ function SettingsScreen({ navigation, route }: any) {
     scaled,
     accessibility,
     toggleAccessibility,
-    notifications,
-    toggleNotification,
     theme,
     getTouchTargetSize,
     setCurrentResidentId,
@@ -49,11 +50,72 @@ function SettingsScreen({ navigation, route }: any) {
   const touchTarget = getTouchTargetSize();
   const hc = accessibility.highContrastMode;
 
+
+
   // Activate this resident's settings when screen mounts
   useEffect(() => {
     const residentId = route?.params?.residentId ?? null;
     setCurrentResidentId(residentId);
   }, [route?.params?.residentId, setCurrentResidentId]);
+
+  // Derive resident info and dietary restrictions
+  const residentId = route?.params?.residentId as string | undefined;
+  const localResident = residentId ? ResidentService.getResidentById(residentId) : null;
+  const residentName: string =
+    localResident?.fullName ?? route?.params?.residentName ?? '';
+
+  // Merge local CSV restrictions + backend dietaryRestrictions + foodAllergies params
+  const dietaryPills: string[] = localResident
+    ? localResident.dietaryRestrictions.map(r => r.name)
+    : [
+        ...(Array.isArray(route?.params?.dietaryRestrictions) ? route.params.dietaryRestrictions as string[] : []),
+        ...(Array.isArray(route?.params?.foodAllergies)       ? route.params.foodAllergies       as string[] : []),
+      ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
+
+  // Assigned caregiver — passed via route params; persisted to/from storage
+  const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
+  const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
+  const [assignedCaregivers, setAssignedCaregivers] = useState<Array<{ caregiverId: string; caregiverName: string }>>([]);
+
+  useEffect(() => {
+    if (!residentId) return;
+    const paramCgId          = route?.params?.caregiverId       as string | null ?? null;
+    const paramCgName        = route?.params?.caregiverName     as string | null ?? null;
+    const paramAllCaregivers = route?.params?.assignedCaregivers as Array<{ caregiverId: string; caregiverName: string }> | undefined;
+
+    if (paramAllCaregivers && paramAllCaregivers.length > 0) {
+      // Full array passed directly — use immediately, persist for future
+      setAssignedCaregivers(paramAllCaregivers);
+      setCaregiverId(paramAllCaregivers[0].caregiverId);
+      setCaregiverName(paramAllCaregivers[0].caregiverName);
+      setResidentCaregivers(residentId, paramAllCaregivers);
+    } else if (paramCgId && paramCgName) {
+      setCaregiverId(paramCgId);
+      setCaregiverName(paramCgName);
+      setResidentCaregiver(residentId, paramCgId, paramCgName);
+      // Read the full array from plural storage (may have been set by admin dashboard)
+      getResidentCaregivers(residentId).then((stored) => {
+        setAssignedCaregivers(stored.length > 0 ? stored : [{ caregiverId: paramCgId, caregiverName: paramCgName }]);
+      });
+    } else {
+      // Try plural storage first, then singular
+      getResidentCaregivers(residentId).then((stored) => {
+        if (stored.length > 0) {
+          setAssignedCaregivers(stored);
+          setCaregiverId(stored[0].caregiverId);
+          setCaregiverName(stored[0].caregiverName);
+        } else {
+          getResidentCaregiver(residentId).then((single) => {
+            if (single) {
+              setCaregiverId(single.caregiverId);
+              setCaregiverName(single.caregiverName);
+              setAssignedCaregivers([single]);
+            }
+          });
+        }
+      });
+    }
+  }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName, route?.params?.assignedCaregivers]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -68,7 +130,12 @@ function SettingsScreen({ navigation, route }: any) {
           <Feather name="chevron-left" size={22} color={theme.accent} />
           <Text style={[styles.backText, { fontSize: scaled(16), color: theme.accent }]}>{t.back.replace(/^[←↩⬅]\s*/, '')}</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { fontSize: scaled(22), color: theme.textPrimary }]}>{t.settings}</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.headerTitle, { fontSize: scaled(22), color: theme.textPrimary }]}>{t.settings}</Text>
+          {residentName ? (
+            <Text style={[styles.headerSubtitle, { fontSize: scaled(13), color: theme.textSecondary }]}>{residentName}</Text>
+          ) : null}
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -209,58 +276,16 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.dietaryRestrictions}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <View style={styles.pillContainer}>
-              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>Low Sodium</Text>
-              </View>
-              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>Heart Healthy</Text>
-              </View>
-              <View style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>No Shellfish</Text>
-              </View>
+              {dietaryPills.length > 0 ? (
+                dietaryPills.map((pill, i) => (
+                  <View key={i} style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
+                    <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>{pill}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={[styles.noPillsText, { fontSize: scaled(13), color: theme.textSecondary }]}>None recorded</Text>
+              )}
             </View>
-            <View style={[styles.caregiverNotice, { backgroundColor: hc ? '#1A1A00' : '#FEF9F0' }]}>
-              <Feather name="lock" size={14} color="#8A7A5A" style={{ marginTop: 2 }} />
-              <Text style={[styles.caregiverText, { fontSize: scaled(13), color: theme.textSecondary }]}>
-                {t.managedByCaregiver}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ==================== NOTIFICATIONS ==================== */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.notifications}</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <SettingSwitch
-              label={t.mealReminders}
-              description={t.mealRemindersDesc}
-              value={notifications.mealReminders}
-              onToggle={() => toggleNotification('mealReminders')}
-              fontSize={scaled(16)}
-              descFontSize={scaled(13)}
-              minHeight={touchTarget}
-            />
-            <View style={styles.divider} />
-            <SettingSwitch
-              label={t.orderUpdates}
-              description={t.orderUpdatesDesc}
-              value={notifications.orderUpdates}
-              onToggle={() => toggleNotification('orderUpdates')}
-              fontSize={scaled(16)}
-              descFontSize={scaled(13)}
-              minHeight={touchTarget}
-            />
-            <View style={styles.divider} />
-            <SettingSwitch
-              label={t.menuUpdates}
-              description={t.menuUpdatesDesc}
-              value={notifications.menuUpdates}
-              onToggle={() => toggleNotification('menuUpdates')}
-              fontSize={scaled(16)}
-              descFontSize={scaled(13)}
-              minHeight={touchTarget}
-            />
           </View>
         </View>
 
@@ -273,15 +298,21 @@ function SettingsScreen({ navigation, route }: any) {
             title={t.browseMenus} desc={t.browseMenusDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
-            onPress={() => navigation.navigate('BrowseMealOptions')}
+            onPress={() => navigation.navigate('BrowseMealOptions', {
+              residentId, residentName,
+              dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
+              foodAllergies: route?.params?.foodAllergies ?? [],
+              caregiverId, caregiverName,
+            })}
           />
           <ActionRow
             featherIcon="rotate-ccw" bg="#D8E4D0"
             title={t.orderHistory} desc={t.orderHistoryDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
-            onPress={() => navigation.navigate('UpcomingMeals')}
+            onPress={() => navigation.navigate('OrderHistory', { residentId, residentName })}
           />
+
           <ActionRow
             featherIcon="calendar" bg="#F6D7B8"
             title={t.upcomingMeals} desc={t.upcomingMealsDesc}
@@ -302,25 +333,6 @@ function SettingsScreen({ navigation, route }: any) {
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <TouchableOpacity
-              style={[styles.accountRow, { minHeight: touchTarget }]}
-              onPress={() => Alert.alert(t.deliveryPrefs, 'Coming soon.')}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.deliveryPrefs}</Text>
-              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-            <View style={styles.divider} />
-
-            <TouchableOpacity
-              style={[styles.accountRow, { minHeight: touchTarget }]}
-              onPress={() => Alert.alert(t.supportHelp, 'Contact your facility staff.')}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.textPrimary }]}>{t.supportHelp}</Text>
-              <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-            <View style={styles.divider} />
 
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
@@ -332,6 +344,7 @@ function SettingsScreen({ navigation, route }: any) {
           </View>
         </View>
       </ScrollView>
+
     </View>
   );
 }
@@ -384,6 +397,7 @@ const ActionRow = ({
   fontSize,
   descFontSize,
   minHeight,
+  rightIcon = 'chevron-right',
 }: {
   featherIcon: string;
   bg: string;
@@ -393,6 +407,7 @@ const ActionRow = ({
   fontSize: number;
   descFontSize: number;
   minHeight: number;
+  rightIcon?: string;
 }) => {
   const { theme } = useSettings();
   return (
@@ -404,7 +419,7 @@ const ActionRow = ({
         <Text style={[styles.actionTitle, { fontSize, color: theme.textPrimary }]}>{title}</Text>
         <Text style={[styles.actionDesc, { fontSize: descFontSize, color: theme.textSecondary }]}>{desc}</Text>
       </View>
-      <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+      <Feather name={rightIcon} size={20} color={theme.textSecondary} />
     </TouchableOpacity>
   );
 };
@@ -447,6 +462,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4A4A4A',
   },
+  headerSubtitle: {
+    color: '#8A8A8A',
+    marginTop: 2,
+  },
   placeholder: {
     width: 60,
   },
@@ -470,6 +489,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 12,
   },
   sectionIcon: {
@@ -596,6 +616,10 @@ const styles = StyleSheet.create({
     color: '#8A7A5A',
     lineHeight: 20,
   },
+  noPillsText: {
+    fontStyle: 'italic',
+    marginBottom: 4,
+  },
   // Action Cards
   actionCard: {
     backgroundColor: '#FFFFFF',
@@ -672,6 +696,56 @@ const styles = StyleSheet.create({
   accountLabel: {
     fontWeight: '500',
     color: '#4A4A4A',
+  },
+  caregiverContactLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  caregiverAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E8DCC8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  caregiverAvatarText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#717644',
+  },
+  caregiverSubtitle: {
+    marginTop: 1,
+  },
+
+  // Order history
+  noHistoryText: {
+    padding: 16,
+    textAlign: 'center',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  historyDate: {
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  historyMeal: {
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  historyOrderId: {
+    marginTop: 2,
+  },
+  historyDeleteBtn: {
+    padding: 6,
+    marginLeft: 8,
+    marginTop: 2,
   },
 });
 

@@ -158,16 +158,99 @@ const TIME_RANGE_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string
   '5pm - 7pm': { Español: '5 p. m. - 7 p. m.', Français: '17 h - 19 h', 中文: '下午5点 - 晚上7点' },
 };
 
+// ── Dynamic translation cache ──────────────────────────────────────────────
+// Populated at runtime via translateMealNamesWithGemini / translateMealFieldsWithGemini
+// for API/kitchen meals not present in the static tables above.
+const DYNAMIC_NAME_CACHE: Record<string, Partial<Record<AppLanguage, string>>> = {};
+const DYNAMIC_DESCRIPTION_CACHE: Record<string, Partial<Record<AppLanguage, string>>> = {};
+const DYNAMIC_TAG_CACHE: Record<string, Partial<Record<AppLanguage, string>>> = {};
+
+/**
+ * Store Gemini-translated names into the in-memory cache.
+ * Call this after translateMealNamesWithGemini resolves.
+ */
+export function setCachedMealTranslations(
+  results: Record<string, { Español: string; Français: string; 中文: string }>,
+): void {
+  for (const [name, translations] of Object.entries(results)) {
+    DYNAMIC_NAME_CACHE[name] = {
+      Español: translations.Español,
+      Français: translations.Français,
+      中文: translations['中文'],
+    };
+  }
+}
+
+/**
+ * Store Gemini-translated descriptions. Same shape as setCachedMealTranslations
+ * but keyed by the original English description string.
+ */
+export function setCachedDescriptionTranslations(
+  results: Record<string, { Español: string; Français: string; 中文: string }>,
+): void {
+  for (const [desc, translations] of Object.entries(results)) {
+    DYNAMIC_DESCRIPTION_CACHE[desc] = {
+      Español: translations.Español,
+      Français: translations.Français,
+      中文: translations['中文'],
+    };
+  }
+}
+
+/** Same as above but for tag labels (e.g. "Gluten-Free", "Low Sodium"). */
+export function setCachedTagTranslations(
+  results: Record<string, { Español: string; Français: string; 中文: string }>,
+): void {
+  for (const [tag, translations] of Object.entries(results)) {
+    DYNAMIC_TAG_CACHE[tag] = {
+      Español: translations.Español,
+      Français: translations.Français,
+      中文: translations['中文'],
+    };
+  }
+}
+
+/**
+ * Returns true if this meal name already has a static translation entry
+ * (so we don't waste an API call on it).
+ */
+export function hasMealNameTranslation(name: string): boolean {
+  return name in MEAL_NAME_TRANSLATIONS || name in DYNAMIC_NAME_CACHE;
+}
+
+export function hasMealDescriptionTranslation(description: string): boolean {
+  return description in MEAL_DESCRIPTION_TRANSLATIONS || description in DYNAMIC_DESCRIPTION_CACHE;
+}
+
+export function hasTagTranslation(tag: string): boolean {
+  return tag in TAG_TRANSLATIONS || tag in DYNAMIC_TAG_CACHE;
+}
+
 export const translateMealName = (name: string, language: AppLanguage): string => {
-  return MEAL_NAME_TRANSLATIONS[name]?.[language] ?? name;
+  if (language === 'English') return name;
+  return (
+    MEAL_NAME_TRANSLATIONS[name]?.[language] ??
+    DYNAMIC_NAME_CACHE[name]?.[language] ??
+    name
+  );
 };
 
 export const translateMealDescription = (description: string, language: AppLanguage): string => {
-  return MEAL_DESCRIPTION_TRANSLATIONS[description]?.[language] ?? description;
+  if (language === 'English') return description;
+  return (
+    MEAL_DESCRIPTION_TRANSLATIONS[description]?.[language] ??
+    DYNAMIC_DESCRIPTION_CACHE[description]?.[language] ??
+    description
+  );
 };
 
 export const translateMealTag = (tag: string, language: AppLanguage): string => {
-  return TAG_TRANSLATIONS[tag]?.[language] ?? tag;
+  if (language === 'English') return tag;
+  return (
+    TAG_TRANSLATIONS[tag]?.[language] ??
+    DYNAMIC_TAG_CACHE[tag]?.[language] ??
+    tag
+  );
 };
 
 export const translateMealPeriod = (period: string, language: AppLanguage): string => {

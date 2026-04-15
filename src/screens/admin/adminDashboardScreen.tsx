@@ -16,8 +16,8 @@ import {
   SafeAreaView,
   StatusBar,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import Feather from "react-native-vector-icons/Feather";
+import { getUserEmail, setResidentCaregivers, getResidentCaregivers, setCaregiverResidentList, getCaregiverResidentList, StoredResident } from "../../services/storage";
 /**
  * FILE PATHS
  */
@@ -36,6 +36,8 @@ import {
   createCaregiver,
   createKitchenStaff,
   deleteEntity,
+  getChats,
+  getMe,
 } from "../../services/api";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
@@ -52,10 +54,39 @@ type DeleteKind = "resident" | "caregiver" | "kitchen";
 export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   // ---- Core Data State ----
   const [showMessagesModal, setShowMessagesModal] = useState(false);
+  const [msgUnread, setMsgUnread] = useState(0);
+
+  useEffect(() => {
+    const checkUnread = async () => {
+      try {
+        const chats = await getChats();
+        if (!Array.isArray(chats)) return;
+        const me = await getMe();
+        const myId = String(me.id);
+        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+        setMsgUnread(count);
+      } catch { /* ignore */ }
+    };
+    checkUnread();
+    const iv = setInterval(checkUnread, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [residents, setResidents] = useState<Resident[]>([]);
   const [kitchenStaff, setKitchenStaff] = useState<KitchenStaff[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ---- Multi-caregiver map: residentId -> caregiverId[] ----
+  const [residentCaregiversMap, setResidentCaregiversMap] = useState<Record<string, string[]>>({});
+
+  // ---- Assign-caregiver picker modal ----
+  const [assigningCaregiverToResidentId, setAssigningCaregiverToResidentId] = useState<string | null>(null);
+
+  const [adminEmail, setAdminEmail] = useState<string>('Admin');
+  useEffect(() => {
+    getUserEmail().then(e => { if (e) setAdminEmail(e); });
+  }, []);
 
   // ---- Add Caregiver Modal State ----
   const [showAddCaregiver, setShowAddCaregiver] = useState(false);
@@ -79,8 +110,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [editingResident, setEditingResident] = useState<Resident | null>(null);
   const [editName, setEditName] = useState("");
   const [editRoom, setEditRoom] = useState("");
-  const [editDietary, setEditDietary] = useState(""); 
-  const [editMedicalNeeds, setEditMedicalNeeds] = useState(""); 
+  const [editDietary, setEditDietary] = useState("");
+  const [editMedicalNeeds, setEditMedicalNeeds] = useState("");
 
   // ---- Confirm Delete Modal State ----
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -109,6 +140,51 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           setCaregivers(cg);
           setResidents(rs);
           setKitchenStaff(ks);
+
+          // Build multi-caregiver map: start with backend data, then merge
+          // EncryptedStorage so admin-assigned extras (backend only keeps one) survive reloads.
+          const map: Record<string, string[]> = {};
+          for (const r of rs) {
+            const rid = String(r.id);
+            const cid = r.caregiverId != null && String(r.caregiverId).trim() !== ""
+              ? String(r.caregiverId)
+              : null;
+            map[rid] = cid ? [cid] : [];
+          }
+          // Merge stored multi-caregiver arrays into the map
+          await Promise.all(Object.keys(map).map(async (rid) => {
+            const stored = await getResidentCaregivers(rid);
+            if (stored.length > 0) {
+              const merged = [...new Set([...map[rid], ...stored.map(c => c.caregiverId)])];
+              map[rid] = merged;
+            }
+          }));
+          setResidentCaregiversMap(map);
+
+          // Rebuild reverse map (caregiverId → residents) so caregiver dashboards stay current
+          const cgToResidents: Record<string, StoredResident[]> = {};
+          for (const r of rs) {
+            const rid = String(r.id);
+            const cgIds = map[rid] ?? [];
+            const stored: StoredResident = {
+              id: rid,
+              name: r.name,
+              room: r.room,
+              dietaryRestrictions: r.dietaryRestrictions ?? [],
+              foodAllergies: r.foodAllergies ?? [],
+            };
+            for (const cid of cgIds) {
+              if (!cgToResidents[cid]) cgToResidents[cid] = [];
+              cgToResidents[cid].push(stored);
+            }
+          }
+          await Promise.all(
+            Object.entries(cgToResidents).map(([cid, list]) => setCaregiverResidentList(cid, list))
+          );
+          // Clear caregivers with no residents
+          for (const c of cg) {
+            if (!cgToResidents[String(c.id)]) await setCaregiverResidentList(String(c.id), []);
+          }
         }
       } catch (e: any) {
         Alert.alert("Failed to load admin data", e.message);
@@ -131,6 +207,23 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     try {
       const rs = await getResidents();
       setResidents(rs);
+      // Re-sync map from backend, then merge storage so extras survive
+      const map: Record<string, string[]> = {};
+      for (const r of rs) {
+        const rid = String(r.id);
+        const cid = r.caregiverId != null && String(r.caregiverId).trim() !== ""
+          ? String(r.caregiverId)
+          : null;
+        map[rid] = cid ? [cid] : [];
+      }
+      await Promise.all(Object.keys(map).map(async (rid) => {
+        const stored = await getResidentCaregivers(rid);
+        if (stored.length > 0) {
+          const merged = [...new Set([...map[rid], ...stored.map(c => c.caregiverId)])];
+          map[rid] = merged;
+        }
+      }));
+      setResidentCaregiversMap(map);
     } catch (e: any) {
       Alert.alert("Failed to refresh residents", e.message);
     }
@@ -159,42 +252,134 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
    */
   const stats = useMemo(() => {
     const total = residents.length;
-    const assigned = residents.filter((r) => r.caregiverId).length;
-    return { 
-      total, 
-      assigned, 
-      unassigned: total - assigned 
+    const assigned = residents.filter(
+      (r) => (residentCaregiversMap[String(r.id)] ?? []).length > 0
+    ).length;
+    return {
+      total,
+      assigned,
+      unassigned: total - assigned
     };
-  }, [residents]);
+  }, [residents, residentCaregiversMap]);
 
   const caregiverPatientCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const c of caregivers) {
-      map[c.id] = 0;
+      map[String(c.id)] = 0;
     }
     for (const r of residents) {
-      if (r.caregiverId) {
-        map[r.caregiverId] = (map[r.caregiverId] ?? 0) + 1;
+      const cgIds = residentCaregiversMap[String(r.id)] ?? [];
+      for (const cid of cgIds) {
+        if (cid && cid !== "null" && cid !== "undefined") {
+          map[String(cid)] = (map[String(cid)] ?? 0) + 1;
+        }
       }
     }
     return map;
-  }, [caregivers, residents]);
+  }, [caregivers, residents, residentCaregiversMap]);
 
   /**
-   * Handlers
+   * Rebuilds the reverse map (caregiverId → residents[]) in storage for all
+   * caregivers affected by a change, so the caregiver dashboard stays in sync.
    */
-  const onAssign = async (residentId: string, caregiverId: string) => {
-    const nextCaregiverId = caregiverId === "none" ? null : caregiverId;
+  const rebuildCaregiverResidentLists = async (updatedMap: Record<string, string[]>) => {
+    // Build caregiverId → StoredResident[] from the full resident+caregiver lists
+    const cgToResidents: Record<string, StoredResident[]> = {};
+    for (const r of residents) {
+      const rid = String(r.id);
+      const cgIds = updatedMap[rid] ?? [];
+      const stored: StoredResident = {
+        id: rid,
+        name: r.name,
+        room: r.room,
+        dietaryRestrictions: r.dietaryRestrictions ?? [],
+        foodAllergies: r.foodAllergies ?? [],
+      };
+      for (const cid of cgIds) {
+        if (!cgToResidents[cid]) cgToResidents[cid] = [];
+        if (!cgToResidents[cid].some(x => x.id === rid)) {
+          cgToResidents[cid].push(stored);
+        }
+      }
+    }
+    // Persist each caregiver's resident list
+    await Promise.all(
+      Object.entries(cgToResidents).map(([cid, list]) => setCaregiverResidentList(cid, list))
+    );
+    // Clear out caregivers who now have no residents
+    for (const cg of caregivers) {
+      if (!cgToResidents[String(cg.id)]) {
+        await setCaregiverResidentList(String(cg.id), []);
+      }
+    }
+  };
+
+  /**
+   * Caregiver assignment handlers — multi-caregiver per resident
+   */
+  const onAssignCaregiver = async (residentId: string, caregiverId: string) => {
     try {
-      await assignResident(residentId, nextCaregiverId);
-      setResidents((prev) =>
-        prev.map((r) =>
-          r.id === residentId ? { ...r, caregiverId: nextCaregiverId } : r
-        )
+      await assignResident(residentId, caregiverId);
+      setResidentCaregiversMap(prev => {
+        const existing = prev[residentId] ?? [];
+        if (existing.includes(caregiverId)) return prev;
+        const next = [...existing, caregiverId];
+        const caregiversArray = next.map(id => {
+          const found = caregivers.find(c => String(c.id) === id);
+          return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+        }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+        setResidentCaregivers(residentId, caregiversArray);
+        const updated = { ...prev, [residentId]: next };
+        rebuildCaregiverResidentLists(updated);
+        return updated;
+      });
+      setResidents(prev =>
+        prev.map(r => r.id === residentId ? { ...r, caregiverId } : r)
       );
     } catch (e: any) {
       Alert.alert("Assignment failed", e.message);
     }
+  };
+
+  const onRemoveCaregiver = (residentId: string, caregiverId: string) => {
+    const cgName = caregivers.find(c => String(c.id) === caregiverId)?.name ?? "this caregiver";
+    const resName = residents.find(r => r.id === residentId)?.name ?? "this resident";
+    Alert.alert(
+      "Remove Caregiver",
+      `Are you sure you want to unassign ${cgName} from ${resName}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const current = residentCaregiversMap[residentId] ?? [];
+              const remaining = current.filter(id => id !== caregiverId);
+              await assignResident(residentId, remaining.length > 0 ? remaining[0] : null);
+              setResidentCaregiversMap(prev => {
+                const caregiversArray = remaining.map(id => {
+                  const found = caregivers.find(c => String(c.id) === id);
+                  return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+                }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+                setResidentCaregivers(residentId, caregiversArray);
+                const updated = { ...prev, [residentId]: remaining };
+                rebuildCaregiverResidentLists(updated);
+                return updated;
+              });
+              setResidents(prev =>
+                prev.map(r => r.id === residentId
+                  ? { ...r, caregiverId: remaining.length > 0 ? remaining[0] : null }
+                  : r
+                )
+              );
+            } catch (e: any) {
+              Alert.alert("Remove caregiver failed", e.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const askDeleteResident = (id: string) => {
@@ -224,6 +409,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       if (pendingDelete.kind === "resident") {
         await deleteEntity("resident", pendingDelete.id);
         setResidents((prev) => prev.filter((r) => r.id !== pendingDelete.id));
+        setResidentCaregiversMap(prev => {
+          const next = { ...prev };
+          delete next[pendingDelete.id];
+          return next;
+        });
       } else {
         await deleteEntity("user", pendingDelete.id);
         if (pendingDelete.kind === "caregiver") {
@@ -245,7 +435,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setEditName(r.name ?? "");
     setEditRoom(r.room ?? "");
     setEditDietary((r.dietaryRestrictions ?? []).join(", "));
-    setEditMedicalNeeds(""); 
+    setEditMedicalNeeds("");
     setShowEditResident(true);
   };
 
@@ -259,16 +449,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setResidents((prev) =>
       prev.map((r) =>
         r.id === editingResident.id
-          ? { 
-              ...r, 
-              name: editName.trim(), 
-              room: editRoom.trim(), 
-              dietaryRestrictions: nextDietary 
+          ? {
+              ...r,
+              name: editName.trim(),
+              room: editRoom.trim(),
+              dietaryRestrictions: nextDietary
             }
           : r
       )
     );
-    Alert.alert("Updated (UI only)", "Backend update endpoint isn’t ready yet.");
+    Alert.alert("Updated (UI only)", "Backend update endpoint isn't ready yet.");
     setShowEditResident(false);
     setEditingResident(null);
   };
@@ -280,14 +470,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
     try {
       setSavingCaregiver(true);
-      await createCaregiver({ 
-        name: cgName.trim(), 
-        email: cgEmail.trim(), 
-        password: cgPassword 
+      await createCaregiver({
+        name: cgName.trim(),
+        email: cgEmail.trim(),
+        password: cgPassword
       });
       await refreshCaregivers();
-      setCgName(""); 
-      setCgEmail(""); 
+      setCgName("");
+      setCgEmail("");
       setCgPassword("");
       setShowAddCaregiver(false);
     } catch (e: any) {
@@ -304,14 +494,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
     try {
       setSavingKitchen(true);
-      await createKitchenStaff({ 
-        name: ksName.trim(), 
-        email: ksEmail.trim(), 
-        password: ksPassword 
+      await createKitchenStaff({
+        name: ksName.trim(),
+        email: ksEmail.trim(),
+        password: ksPassword
       });
       await refreshKitchen();
-      setKsName(""); 
-      setKsEmail(""); 
+      setKsName("");
+      setKsEmail("");
       setKsPassword("");
       setShowAddKitchen(false);
     } catch (e: any) {
@@ -324,7 +514,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   return (
     <SafeAreaView style={styles.page}>
       <StatusBar barStyle="dark-content" />
-      
+
       {/* HEADER SECTION */}
       <View style={styles.topBar}>
         <View style={styles.brand}>
@@ -339,17 +529,20 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
         <View style={styles.topBarRight}>
-<Pressable
-  style={styles.logoutBtn}
-  onPress={() => {
-    console.log("messages pressed");
-    setShowMessagesModal(true);
-  }}
->
-  <Text style={styles.logoutText}>Messages</Text>
-</Pressable>
-
-
+          <Pressable
+            style={styles.chatIconBtn}
+            onPress={() => setShowMessagesModal(true)}
+          >
+            <Feather name="message-square" size={16} color="#6D6B3B" />
+            <Text style={styles.chatIconBtnText}>Messages</Text>
+            {msgUnread > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {msgUnread > 9 ? "9+" : msgUnread}
+                </Text>
+              </View>
+            )}
+          </Pressable>
           <Pressable
             style={styles.logoutBtn}
             onPress={() => navigation.replace("Login")}
@@ -373,26 +566,26 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
           {/* STATS ROW */}
           <View style={styles.statsRow}>
-            <StatCard 
-              icon="👥" 
-              label="Total Residents" 
-              value={stats.total} 
-              border="#D7D0A8" 
-              iconBg="#6D6B3B" 
+            <StatCard
+              icon="👥"
+              label="Total Residents"
+              value={stats.total}
+              border="#D7D0A8"
+              iconBg="#6D6B3B"
             />
-            <StatCard 
-              icon="✅" 
-              label="Assigned" 
-              value={stats.assigned} 
-              border="#B9E6C2" 
-              iconBg="#0A8F3E" 
+            <StatCard
+              icon="✅"
+              label="Assigned"
+              value={stats.assigned}
+              border="#B9E6C2"
+              iconBg="#0A8F3E"
             />
-            <StatCard 
-              icon="🧑‍🤝‍🧑" 
-              label="Unassigned" 
-              value={stats.unassigned} 
-              border="#F2D57E" 
-              iconBg="#D87000" 
+            <StatCard
+              icon="🧑‍🤝‍🧑"
+              label="Unassigned"
+              value={stats.unassigned}
+              border="#F2D57E"
+              iconBg="#D87000"
             />
           </View>
 
@@ -412,8 +605,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                 <Text style={styles.emptyText}>No caregivers found.</Text>
               )}
             </View>
-            <Pressable 
-              style={styles.outlineBtn} 
+            <Pressable
+              style={styles.outlineBtn}
               onPress={() => setShowAddCaregiver(true)}
             >
               <View style={styles.btnRow}>
@@ -428,81 +621,132 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             {!residents.length && (
               <Text style={styles.emptyText}>No residents found.</Text>
             )}
-            {residents.map((r, idx) => (
-              <View key={r.id || `res-${idx}`} style={styles.assignRow}>
-                {/* Top: Resident info + action icons */}
-                <View style={styles.assignTopRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.personName}>{r.name}</Text>
-                    <Text style={styles.personMeta}>Room {r.room}</Text>
-                    <View style={styles.chipRow}>
-                      {(r.dietaryRestrictions ?? []).length ? (
-                        r.dietaryRestrictions.map((tag, i) => (
-                          <View key={`${r.id}-tag-${i}`} style={styles.chip}>
-                            <Text style={styles.chipText}>{tag}</Text>
-                          </View>
-                        ))
-                      ) : (
-                        <Text style={styles.restrictionsMuted}>No restrictions</Text>
-                      )}
+            {residents.map((r, idx) => {
+              const rid = String(r.id);
+              const assignedCgIds = residentCaregiversMap[rid] ?? [];
+              const assignedCaregiverObjects = assignedCgIds
+                .map(id => caregivers.find(c => String(c.id) === id))
+                .filter(Boolean) as Caregiver[];
+              const allTags = [
+                ...(r.dietaryRestrictions ?? []),
+                ...(r.foodAllergies ?? []),
+                ...(r.medicalConditions ?? []),
+              ];
+              const isUnassigned = assignedCgIds.length === 0;
+
+              return (
+                <View key={r.id || `res-${idx}`} style={[styles.assignRow, isUnassigned && styles.assignRowWarning]}>
+
+                  {/* ── Top row: room pill · name · edit/delete ── */}
+                  <View style={styles.assignHeader}>
+                    <View style={styles.roomPill}>
+                      <Text style={styles.roomPillLabel}>ROOM <Text style={styles.roomPillNum}>{r.room || "—"}</Text></Text>
                     </View>
-                  </View>
-                  <View style={styles.actionIcons}>
-                    <Pressable
-                      style={styles.iconBtn}
-                      onPress={() => openEditResident(r)}
-                      hitSlop={10}
-                    >
+                    <Text style={[styles.personName, { flex: 1 }]} numberOfLines={1}>{r.name}</Text>
+                    <Pressable style={styles.editIconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
                       <Feather name="edit-2" size={18} color="#6D6B3B" />
                     </Pressable>
-                    <Pressable
-                      style={styles.iconBtn}
-                      onPress={() => askDeleteResident(r.id)}
-                      hitSlop={10}
-                    >
-                      <Feather name="trash-2" size={18} color="#6D6B3B" />
+                    <Pressable style={styles.deleteIconBtn} onPress={() => askDeleteResident(r.id)} hitSlop={10}>
+                      <Feather name="trash-2" size={18} color="#B91C1C" />
                     </Pressable>
                   </View>
-                </View>
 
-                {/* Bottom: Caregiver picker + Meals button */}
-                <View style={styles.assignBottomRow}>
-                  <View style={styles.pickerWrap}>
-                    <Picker
-                      selectedValue={r.caregiverId ?? "none"}
-                      onValueChange={(val) => onAssign(r.id, String(val))}
-                      style={styles.picker}
-                    >
-                      <Picker.Item label="Select caregiver" value="none" />
-                      {caregivers.map((c, cIdx) => (
-                        <Picker.Item
-                          key={c.id || c.email || `cg-opt-${cIdx}`}
-                          label={c.name}
-                          value={c.id}
-                        />
-                      ))}
-                    </Picker>
+                  {/* ── Restriction chips ── */}
+                  <View style={styles.chipRow}>
+                    {allTags.length > 0 ? (
+                      allTags.map((tag, i) => (
+                        <View key={`${r.id}-tag-${i}`} style={styles.chip}>
+                          <Text style={styles.chipText}>{tag}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.restrictionsMuted}>No dietary restrictions</Text>
+                    )}
                   </View>
+
+                  {/* ── Divider ── */}
+                  <View style={styles.assignDivider} />
+
+                  {/* ── Caregiver assignment ── */}
+                  <View style={styles.caregiverAssignArea}>
+                    <View style={styles.caregiverAssignLabelRow}>
+                      <Feather name="user" size={14} color="#6A6A6A" />
+                      <Text style={styles.caregiverAssignLabel}>Assigned Caregivers</Text>
+                    </View>
+
+                    <View style={styles.caregiverChipRow}>
+                      {isUnassigned ? (
+                        /* ── Unassigned warning badge ── */
+                        <View style={styles.noCaregiversBadge}>
+                          <Feather name="alert-triangle" size={11} color="#9A6700" />
+                          <Text style={styles.noCaregiversText}>Unassigned</Text>
+                        </View>
+                      ) : (
+                        /* ── All assigned caregiver chips with X to remove ── */
+                        assignedCaregiverObjects.map(cg => (
+                          <View key={String(cg.id)} style={styles.caregiverChip}>
+                            <View style={styles.cgAvatar}>
+                              <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
+                            </View>
+                            <Text style={styles.caregiverChipText}>{cg.name}</Text>
+                            <Pressable
+                              onPress={() => onRemoveCaregiver(rid, String(cg.id))}
+                              hitSlop={10}
+                              style={styles.caregiverChipX}
+                            >
+                              <Feather name="x" size={13} color="#B91C1C" />
+                            </Pressable>
+                          </View>
+                        ))
+                      )}
+
+                      {/* ── Add Caregiver button ── */}
+                      <Pressable
+                        style={styles.addCaregiverChip}
+                        onPress={() => setAssigningCaregiverToResidentId(rid)}
+                      >
+                        <Feather name="user-plus" size={12} color="#6D6B3B" />
+                        <Text style={styles.addCaregiverChipText}>Add Caregiver</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {/* ── Resident Dashboard button ── */}
                   <Pressable
-                    style={styles.cartBtn}
-                    onPress={() =>
-                      navigation.navigate("Home", {
+                    style={styles.selectResidentBtn}
+                    onPress={() => {
+                      const cgIds = residentCaregiversMap[rid] ?? [];
+                      const firstCgId = cgIds.length > 0 ? cgIds[0] : null;
+                      const firstCgName = firstCgId
+                        ? (caregivers.find(c => String(c.id) === firstCgId)?.name ?? null)
+                        : null;
+                      // Build full array and pass it directly as a param so the
+                      // browse screen has it immediately (storage write is async).
+                      const caregiversArray = cgIds.map(id => {
+                        const found = caregivers.find(c => String(c.id) === id);
+                        return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+                      }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+                      // Also persist to storage for future navigations
+                      setResidentCaregivers(String(r.id), caregiversArray);
+                      navigation.navigate("BrowseMealOptions", {
                         residentId: r.id,
                         residentName: r.name,
                         dietaryRestrictions: r.dietaryRestrictions ?? [],
-                      })
-                    }
-                    hitSlop={10}
+                        foodAllergies: r.foodAllergies ?? [],
+                        caregiverId: firstCgId,
+                        caregiverName: firstCgName,
+                        assignedCaregivers: caregiversArray,
+                      });
+                    }}
                   >
-                    <Feather name="shopping-cart" size={16} color="#717644" />
-                    <Text style={styles.cartBtnText}>Select Resident</Text>
+                    <Feather name="log-in" size={14} color="#FFFFFF" />
+                    <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>
                   </Pressable>
-
                 </View>
-              </View>
-            ))}
-            <Pressable 
-              style={styles.outlineBtn} 
+              );
+            })}
+            <Pressable
+              style={styles.outlineBtn}
               onPress={() => setShowAddResident(true)}
             >
               <View style={styles.btnRow}>
@@ -528,8 +772,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                 <Text style={styles.emptyText}>No kitchen staff found.</Text>
               )}
             </View>
-            <Pressable 
-              style={styles.outlineBtn} 
+            <Pressable
+              style={styles.outlineBtn}
               onPress={() => setShowAddKitchen(true)}
             >
               <View style={styles.btnRow}>
@@ -542,17 +786,17 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       )}
 
       {/* EXTERNAL MODALS */}
-      <AddResidentModal 
-        visible={showAddResident} 
-        onClose={() => setShowAddResident(false)} 
-        onSuccess={refreshResidents} 
+      <AddResidentModal
+        visible={showAddResident}
+        onClose={() => setShowAddResident(false)}
+        onSuccess={refreshResidents}
       />
-      <ConfirmDeleteModal 
-        visible={confirmDeleteOpen} 
-        kind={pendingDelete?.kind ?? null} 
-        loading={deleteLoading} 
-        onCancel={closeConfirmDelete} 
-        onConfirm={confirmDelete} 
+      <ConfirmDeleteModal
+        visible={confirmDeleteOpen}
+        kind={pendingDelete?.kind ?? null}
+        loading={deleteLoading}
+        onCancel={closeConfirmDelete}
+        onConfirm={confirmDelete}
       />
 
       {/* EDIT RESIDENT MODAL */}
@@ -565,38 +809,38 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                 <Feather name="x" size={22} color="#111827" />
               </Pressable>
             </View>
-            
+
             <Text style={styles.modalLabel}>Name</Text>
-            <TextInput 
-              value={editName} 
-              onChangeText={setEditName} 
-              style={styles.modalInput} 
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Room</Text>
-            <TextInput 
-              value={editRoom} 
-              onChangeText={setEditRoom} 
-              style={styles.modalInput} 
-              autoCapitalize="characters" 
+            <TextInput
+              value={editRoom}
+              onChangeText={setEditRoom}
+              style={styles.modalInput}
+              autoCapitalize="characters"
             />
-            
+
             <Text style={styles.modalLabel}>Dietary Restrictions</Text>
-            <TextInput 
-              value={editDietary} 
-              onChangeText={setEditDietary} 
-              style={styles.modalInput} 
+            <TextInput
+              value={editDietary}
+              onChangeText={setEditDietary}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Medical Needs</Text>
-            <TextInput 
-              value={editMedicalNeeds} 
-              onChangeText={setEditMedicalNeeds} 
-              style={styles.modalInput} 
+            <TextInput
+              value={editMedicalNeeds}
+              onChangeText={setEditMedicalNeeds}
+              style={styles.modalInput}
             />
-            
-            <Pressable 
-              style={styles.modalPrimaryBtn} 
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
               onPress={submitEditResidentUIOnly}
             >
               <Text style={styles.modalPrimaryText}>Update Resident</Text>
@@ -613,34 +857,34 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Add Caregiver</Text>
-            
+
             <Text style={styles.modalLabel}>Full name</Text>
-            <TextInput 
-              value={cgName} 
-              onChangeText={setCgName} 
-              style={styles.modalInput} 
+            <TextInput
+              value={cgName}
+              onChangeText={setCgName}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Email</Text>
-            <TextInput 
-              value={cgEmail} 
-              onChangeText={setCgEmail} 
-              keyboardType="email-address" 
-              autoCapitalize="none" 
-              style={styles.modalInput} 
+            <TextInput
+              value={cgEmail}
+              onChangeText={setCgEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Password</Text>
-            <TextInput 
-              value={cgPassword} 
-              onChangeText={setCgPassword} 
-              secureTextEntry 
-              style={styles.modalInput} 
+            <TextInput
+              value={cgPassword}
+              onChangeText={setCgPassword}
+              secureTextEntry
+              style={styles.modalInput}
             />
-            
-            <Pressable 
-              style={styles.modalPrimaryBtn} 
-              onPress={submitCaregiver} 
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitCaregiver}
               disabled={savingCaregiver}
             >
               <Text style={styles.modalPrimaryText}>
@@ -659,34 +903,34 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Add Kitchen Staff</Text>
-            
+
             <Text style={styles.modalLabel}>Full name</Text>
-            <TextInput 
-              value={ksName} 
-              onChangeText={setKsName} 
-              style={styles.modalInput} 
+            <TextInput
+              value={ksName}
+              onChangeText={setKsName}
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Email</Text>
-            <TextInput 
-              value={ksEmail} 
-              onChangeText={setKsEmail} 
-              keyboardType="email-address" 
-              autoCapitalize="none" 
-              style={styles.modalInput} 
+            <TextInput
+              value={ksEmail}
+              onChangeText={setKsEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.modalInput}
             />
-            
+
             <Text style={styles.modalLabel}>Password</Text>
-            <TextInput 
-              value={ksPassword} 
-              onChangeText={setKsPassword} 
-              secureTextEntry 
-              style={styles.modalInput} 
+            <TextInput
+              value={ksPassword}
+              onChangeText={setKsPassword}
+              secureTextEntry
+              style={styles.modalInput}
             />
-            
-            <Pressable 
-              style={styles.modalPrimaryBtn} 
-              onPress={submitKitchenStaff} 
+
+            <Pressable
+              style={styles.modalPrimaryBtn}
+              onPress={submitKitchenStaff}
               disabled={savingKitchen}
             >
               <Text style={styles.modalPrimaryText}>
@@ -700,10 +944,68 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         </View>
       </Modal>
 
+      {/* ASSIGN CAREGIVER PICKER MODAL */}
+      <Modal
+        visible={assigningCaregiverToResidentId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAssigningCaregiverToResidentId(null)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setAssigningCaregiverToResidentId(null)}
+        >
+          <View style={styles.dropdownCard}>
+            <Text style={styles.dropdownTitle}>Assign Caregiver</Text>
+            {assigningCaregiverToResidentId !== null && (() => {
+              const rid = assigningCaregiverToResidentId;
+              const assignedIds = new Set(residentCaregiversMap[rid] ?? []);
+              if (caregivers.length === 0) {
+                return <Text style={styles.dropdownEmpty}>No caregivers available.</Text>;
+              }
+              return caregivers.map((cg) => {
+                const isAssigned = assignedIds.has(String(cg.id));
+                return (
+                  <Pressable
+                    key={`dropdown-${cg.id}`}
+                    style={[styles.dropdownItem, isAssigned && styles.dropdownItemActive]}
+                    onPress={() => {
+                      if (!isAssigned) {
+                        onAssignCaregiver(rid, String(cg.id));
+                      }
+                      setAssigningCaregiverToResidentId(null);
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View style={[styles.cgAvatar, isAssigned && { backgroundColor: "#3A3820" }]}>
+                        <Text style={styles.cgAvatarText}>{cg.name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.dropdownItemName}>{cg.name}</Text>
+                        <Text style={styles.dropdownItemEmail}>{cg.email}</Text>
+                      </View>
+                    </View>
+                    {isAssigned && (
+                      <Text style={styles.dropdownItemCurrentLabel}>Assigned</Text>
+                    )}
+                  </Pressable>
+                );
+              });
+            })()}
+            <Pressable
+              style={styles.dropdownCancel}
+              onPress={() => setAssigningCaregiverToResidentId(null)}
+            >
+              <Text style={styles.dropdownCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* MESSAGES MODAL */}
       <MessagesModal
         visible={showMessagesModal}
-        onClose={() => setShowMessagesModal(false)}
+        onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
 
     </SafeAreaView>
@@ -759,9 +1061,9 @@ function MiniCard({ name, email, footer, onDelete }: { name: string; email: stri
  */
 
 const styles = StyleSheet.create({
-  page: { 
-    flex: 1, 
-    backgroundColor: "#DCD3B8" 
+  page: {
+    flex: 1,
+    backgroundColor: "#DCD3B8"
   },
   topBar: {
     height: 74,
@@ -773,30 +1075,63 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 10 
+  brand: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
   },
-  logo: { 
-    width: 34, 
-    height: 34, 
-    borderRadius: 6 
+  logo: {
+    width: 34,
+    height: 34,
+    borderRadius: 6
   },
-  brandTitle: { 
-    fontSize: 18, 
-    fontWeight: "900", 
-    color: "#1C1C1C" 
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1C1C1C"
   },
-  brandSub: { 
-    fontSize: 12, 
-    color: "#6F6F6F", 
-    marginTop: 1 
+  brandSub: {
+    fontSize: 12,
+    color: "#6F6F6F",
+    marginTop: 1
   },
   topBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  chatIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: '#F0EEE4',
+    borderWidth: 1.5,
+    borderColor: '#6D6B3B30',
+  },
+  chatIconBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6D6B3B',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  chatBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
   bellBtn: {
     width: 42,
@@ -833,56 +1168,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  logoutText: { 
-    fontWeight: "800", 
-    color: "#3C3C3C", 
-    fontSize: 14 
+  logoutText: {
+    fontWeight: "800",
+    color: "#3C3C3C",
+    fontSize: 14
   },
-  loadingWrap: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    padding: 24 
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24
   },
-  loadingText: { 
-    marginTop: 10, 
-    fontSize: 14, 
-    color: "#5A5A5A", 
-    fontWeight: "700" 
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#5A5A5A",
+    fontWeight: "700"
   },
-  container: { 
-    paddingHorizontal: 20, 
-    paddingTop: 18, 
-    paddingBottom: 40, 
-    width: "100%", 
-    maxWidth: 1100, 
-    alignSelf: "center" 
+  container: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
+    width: "100%",
+    maxWidth: 1400,
+    alignSelf: "center",
   },
-  h1: { 
-    fontSize: 34, 
-    fontWeight: "900", 
-    color: "#141414" 
+  h1: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#141414"
   },
-  subtitle: { 
-    marginTop: 8, 
-    fontSize: 14, 
-    color: "#5A5A5A" 
+  subtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#5A5A5A"
   },
-  statsRow: { 
-    flexDirection: "row", 
-    gap: 18, 
-    marginTop: 18, 
-    flexWrap: "wrap" 
+  statsRow: {
+    flexDirection: "row",
+    gap: 18,
+    marginTop: 18,
+    flexWrap: "wrap"
   },
-  statCard: { 
-    minWidth: 280, 
-    flex: 1, 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 16, 
-    padding: 18, 
-    borderWidth: 2, 
-    flexDirection: "row", 
-    alignItems: "center", 
+  statCard: {
+    minWidth: 280,
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 2,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     ...Platform.select({
       ios: {
@@ -896,32 +1231,32 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  statIcon: { 
-    width: 46, 
-    height: 46, 
-    borderRadius: 14, 
-    alignItems: "center", 
-    justifyContent: "center" 
+  statIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center"
   },
-  statIconText: { 
-    fontSize: 18, 
-    color: "#FFFFFF" 
+  statIconText: {
+    fontSize: 18,
+    color: "#FFFFFF"
   },
-  statLabel: { 
-    fontSize: 13, 
-    color: "#6A6A6A", 
-    fontWeight: "800" 
+  statLabel: {
+    fontSize: 13,
+    color: "#6A6A6A",
+    fontWeight: "800"
   },
-  statValue: { 
-    marginTop: 3, 
-    fontSize: 26, 
-    fontWeight: "900", 
-    color: "#121212" 
+  statValue: {
+    marginTop: 3,
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#121212"
   },
-  sectionCard: { 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 18, 
-    padding: 20, 
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
     marginTop: 18,
     ...Platform.select({
       ios: {
@@ -935,83 +1270,149 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  sectionTitle: { 
-    fontSize: 18, 
-    fontWeight: "900", 
-    color: "#1A1A1A" 
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1A1A1A"
   },
-  grid: { 
-    flexDirection: "row", 
-    flexWrap: "wrap", 
-    gap: 14 
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
   },
-  miniCard: { 
-    flexGrow: 1, 
-    flexBasis: 220, 
-    backgroundColor: "#F8F8F8", 
-    borderRadius: 14, 
-    padding: 14, 
-    position: "relative" 
+  miniCard: {
+    flexBasis: "23%",
+    minWidth: 220,
+    maxWidth: "23%",
+    backgroundColor: "#F8F8F8",
+    borderRadius: 16,
+    padding: 18,
+    position: "relative",
   },
-  cardTrash: { 
-    position: "absolute", 
-    top: 10, 
-    right: 10, 
-    width: 28, 
-    height: 28, 
-    borderRadius: 10, 
-    alignItems: "center", 
-    justifyContent: "center", 
-    zIndex: 10 
+  cardTrash: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
-  miniName: { 
-    fontSize: 14, 
-    fontWeight: "900", 
-    color: "#1A1A1A" 
+  miniName: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#1A1A1A",
   },
-  miniEmail: { 
-    marginTop: 4, 
-    fontSize: 12, 
-    color: "#6A6A6A" 
+  miniEmail: {
+    marginTop: 5,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#4A4A4A",
   },
-  miniFooter: { 
-    marginTop: 10, 
-    fontSize: 12, 
-    color: "#7A7A7A", 
-    fontWeight: "700" 
+  miniFooter: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#7A7A7A",
+    fontWeight: "700",
   },
-  outlineBtn: { 
-    marginTop: 14, 
-    alignSelf: "flex-start", 
-    borderWidth: 1, 
-    borderColor: "#B5AE8C", 
-    backgroundColor: "#FFFFFF", 
-    paddingHorizontal: 14, 
-    paddingVertical: 10, 
-    borderRadius: 10 
+  outlineBtn: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#B5AE8C",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10
   },
-  btnRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 8 
+  btnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
   },
-  outlineBtnText: { 
-    fontWeight: "900", 
-    color: "#4A4A4A" 
+  outlineBtnText: {
+    fontWeight: "900",
+    color: "#4A4A4A"
   },
-  emptyText: { 
-    fontSize: 13, 
-    color: "#6A6A6A", 
-    fontWeight: "700", 
-    marginTop: 6 
+  emptyText: {
+    fontSize: 13,
+    color: "#6A6A6A",
+    fontWeight: "700",
+    marginTop: 6
   },
   assignRow: {
-    backgroundColor: "#F8F8F8",
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
     flexDirection: "column",
     gap: 12,
-    marginBottom: 12
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E8E6DC",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  assignRowWarning: {
+    borderLeftWidth: 4,
+    borderLeftColor: "#E8A020",
+    borderColor: "#E8E6DC",
+  },
+  assignHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  assignHeaderRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  roomPill: {
+    backgroundColor: "#F0EEE4",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#D8D5C0",
+  },
+  roomPillLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6D6B3B",
+    letterSpacing: 0.3,
+  },
+  roomPillNum: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#3A3820",
+  },
+  assignDivider: {
+    height: 1,
+    backgroundColor: "#EEECE0",
+  },
+  caregiverAssignLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 8,
+  },
+  cgAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#6D6B3B",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cgAvatarText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   assignTopRow: {
     flexDirection: "row",
@@ -1028,48 +1429,117 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
   },
-  personName: { 
-    fontSize: 14, 
-    fontWeight: "900", 
-    color: "#1A1A1A" 
+  personName: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1A1A1A",
   },
-  personMeta: { 
-    marginTop: 4, 
-    fontSize: 12, 
-    color: "#6A6A6A" 
+  personMeta: {
+    marginTop: 4,
+    fontSize: 14,
+    color: "#6A6A6A",
   },
-  chipRow: { 
-    flexDirection: "row", 
-    flexWrap: "wrap", 
-    gap: 8, 
-    marginTop: 8 
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
   },
-  chip: { 
-    backgroundColor: "#F7E7B5", 
-    borderRadius: 8, 
-    paddingHorizontal: 10, 
-    paddingVertical: 6 
-  },
-  chipText: { 
-    fontSize: 12, 
-    fontWeight: "800", 
-    color: "#7A4B00" 
-  },
-  restrictionsMuted: { 
-    fontSize: 12, 
-    color: "#7A7A7A", 
-    fontWeight: "700" 
-  },
-  pickerWrap: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
+  chip: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "#E3E3E3",
+    borderColor: "#FECACA",
   },
-  picker: {
-    height: 52,
-    width: "100%",
+  chipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#B91C1C",
+  },
+  restrictionsMuted: {
+    fontSize: 12,
+    color: "#7A7A7A",
+    fontWeight: "700"
+  },
+  caregiverAssignArea: {
+    marginTop: 4,
+  },
+  caregiverAssignLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#5A5A5A",
+    marginBottom: 8,
+  },
+  noCaregiversBadge: {
+    backgroundColor: "#FBF4E4",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#DDB96A",
+  },
+  noCaregiversText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#9A6700",
+  },
+  caregiverChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+  caregiverChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0EEE4",
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#D8D5C0",
+  },
+  caregiverChipText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#3A3820",
+  },
+  caregiverChipX: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  caregiverChipXText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#6D6B3B",
+  },
+  addCaregiverChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FAFAF6",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "#C8C5A8",
+    borderStyle: "dashed",
+  },
+  addCaregiverChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6D6B3B",
   },
   iconBtn: {
     width: 34,
@@ -1077,6 +1547,26 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center"
+  },
+  editIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#F0EEE4",
+    borderWidth: 1,
+    borderColor: "#D8D5C0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cartBtn: {
     flexDirection: "row",
@@ -1095,6 +1585,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#FFFFFF",
+  },
+  selectResidentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#6D6B3B",
+    borderRadius: 10,
+    paddingVertical: 11,
+    marginTop: 4,
+  },
+  selectResidentBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.2,
   },
   msgKitchenBtn: {
     flexDirection: 'row',
@@ -1165,73 +1671,59 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   modalBackdrop: {
-    flex: 1, 
-    backgroundColor: "rgba(0,0,0,0.35)", 
-    justifyContent: "center", 
-    alignItems: "center", 
-    padding: 20 
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20
   },
-  modalCard: { 
-    width: "100%", 
-    maxWidth: 520, 
-    backgroundColor: "#fff", 
-    borderRadius: 16, 
-    padding: 18 
+  modalCard: {
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18
   },
-  modalHeaderRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "space-between", 
-    marginBottom: 6 
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6
   },
-  modalTitle: { 
-    fontSize: 18, 
-    fontWeight: "900", 
-    marginBottom: 10 
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 10
   },
-  modalLabel: { 
-    fontSize: 13, 
-    fontWeight: "800", 
-    marginTop: 10, 
-    marginBottom: 6 
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 10,
+    marginBottom: 6
   },
-  modalInput: { 
-    backgroundColor: "#F3F3F3", 
-    borderRadius: 12, 
-    paddingHorizontal: 14, 
-    paddingVertical: 12, 
-    fontSize: 15 
+  modalInput: {
+    backgroundColor: "#F3F3F3",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15
   },
-  modalPrimaryBtn: { 
-    marginTop: 16, 
-    backgroundColor: "#111827", 
-    borderRadius: 12, 
-    paddingVertical: 14, 
-    alignItems: "center" 
+  modalPrimaryBtn: {
+    marginTop: 16,
+    backgroundColor: "#111827",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center"
   },
-  modalPrimaryText: { 
-    color: "#fff", 
-    fontWeight: "900" 
+  modalPrimaryText: {
+    color: "#fff",
+    fontWeight: "900"
   },
   modalCancel: {
     marginTop: 12,
     textAlign: "center",
     fontWeight: "800",
     color: "#6B7280"
-  },
-  msgKitchenBtn: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    marginLeft: 8,
-  },
-  msgKitchenText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#D87000',
   },
   composeSheet: {
     backgroundColor: '#FFFFFF',
@@ -1257,5 +1749,82 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
     marginBottom: 4,
+  },
+  // Dropdown modal for adding caregivers
+  dropdownCard: {
+    width: "100%",
+    maxWidth: 400,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  dropdownTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1A1A1A",
+    marginBottom: 14,
+  },
+  dropdownEmpty: {
+    fontSize: 13,
+    color: "#7A7A7A",
+    fontWeight: "700",
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#F8F8F8",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dropdownItemActive: {
+    backgroundColor: "#F0EEE4",
+    borderColor: "#C8C5A8",
+  },
+  dropdownItemName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1A1A1A",
+  },
+  dropdownItemEmail: {
+    fontSize: 12,
+    color: "#6A6A6A",
+    marginTop: 2,
+  },
+  dropdownItemCurrentLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6D6B3B",
+    backgroundColor: "#E8E6D0",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  dropdownCancel: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  dropdownCancelText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#6B7280",
   },
 });
