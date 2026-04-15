@@ -355,16 +355,6 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
               />
             ) : null}
 
-            {/* ── Tag ── */}
-            <Text style={modal.label}>Additional Tag (optional)</Text>
-            <TextInput
-              style={modal.input}
-              value={tag}
-              onChangeText={setTag}
-              placeholder="e.g. Chef's Special, Limited Time"
-              placeholderTextColor="#ABABAB"
-            />
-
             <TouchableOpacity style={modal.addBtn} onPress={handleAdd}>
               <Feather name="plus-circle" size={18} color="#FFF" />
               <Text style={modal.addBtnText}>Add Meal to Menu</Text>
