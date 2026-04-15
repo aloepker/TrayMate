@@ -17,7 +17,7 @@ import {
   StatusBar,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
-import { getUserEmail, setResidentCaregivers } from "../../services/storage";
+import { getUserEmail, setResidentCaregivers, getResidentCaregivers } from "../../services/storage";
 /**
  * FILE PATHS
  */
@@ -141,7 +141,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           setResidents(rs);
           setKitchenStaff(ks);
 
-          // Build multi-caregiver map from backend data (wrap single backend caregiver in array)
+          // Build multi-caregiver map: start with backend data, then merge
+          // EncryptedStorage so admin-assigned extras (backend only keeps one) survive reloads.
           const map: Record<string, string[]> = {};
           for (const r of rs) {
             const rid = String(r.id);
@@ -150,6 +151,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               : null;
             map[rid] = cid ? [cid] : [];
           }
+          // Merge stored multi-caregiver arrays into the map
+          await Promise.all(Object.keys(map).map(async (rid) => {
+            const stored = await getResidentCaregivers(rid);
+            if (stored.length > 0) {
+              const merged = [...new Set([...map[rid], ...stored.map(c => c.caregiverId)])];
+              map[rid] = merged;
+            }
+          }));
           setResidentCaregiversMap(map);
         }
       } catch (e: any) {
@@ -173,7 +182,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     try {
       const rs = await getResidents();
       setResidents(rs);
-      // Re-sync map from backend (wrap single backend caregiver in array)
+      // Re-sync map from backend, then merge storage so extras survive
       const map: Record<string, string[]> = {};
       for (const r of rs) {
         const rid = String(r.id);
@@ -182,6 +191,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           : null;
         map[rid] = cid ? [cid] : [];
       }
+      await Promise.all(Object.keys(map).map(async (rid) => {
+        const stored = await getResidentCaregivers(rid);
+        if (stored.length > 0) {
+          const merged = [...new Set([...map[rid], ...stored.map(c => c.caregiverId)])];
+          map[rid] = merged;
+        }
+      }));
       setResidentCaregiversMap(map);
     } catch (e: any) {
       Alert.alert("Failed to refresh residents", e.message);

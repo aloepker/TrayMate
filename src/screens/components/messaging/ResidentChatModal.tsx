@@ -23,6 +23,7 @@ import {
   sendMessage,
   getMe,
 } from "../../../services/api";
+import { getResidentCaregivers } from "../../../services/storage";
 import { Message } from "./messagingTypes";
 
 type CaregiverEntry = { caregiverId: string; caregiverName: string };
@@ -30,7 +31,9 @@ type CaregiverEntry = { caregiverId: string; caregiverName: string };
 type Props = {
   visible: boolean;
   onClose: () => void;
-  /** Array of caregivers assigned to this resident */
+  /** Resident ID — used to re-read the latest caregiver list from storage on open */
+  residentId?: string | null;
+  /** Array of caregivers assigned to this resident (initial/cached value) */
   assignedCaregivers?: CaregiverEntry[];
   /** Backward-compat: single caregiver ID */
   assignedCaregiverId?: string | null;
@@ -44,21 +47,18 @@ const OLIVE_LIGHT = "#F0EEE4";
 export default function ResidentChatModal({
   visible,
   onClose,
+  residentId            = null,
   assignedCaregivers,
   assignedCaregiverId   = null,
   assignedCaregiverName = null,
 }: Props) {
-  // Derive the effective list of caregivers
-  const effectiveCaregivers: CaregiverEntry[] = assignedCaregivers && assignedCaregivers.length > 0
-    ? assignedCaregivers
-    : (assignedCaregiverId
-        ? [{ caregiverId: assignedCaregiverId, caregiverName: assignedCaregiverName ?? "Caregiver" }]
-        : []);
+  // Live caregiver list — refreshed from storage every time the modal opens
+  const [liveCaregivers, setLiveCaregivers] = useState<CaregiverEntry[]>([]);
 
   // Show the picker whenever there are 2+ caregivers
-  const isMulti = effectiveCaregivers.length > 1;
+  const isMulti = liveCaregivers.length > 1;
 
-  // Start with no selection — useEffect resolves the correct initial state after mount
+  // Start with no selection — resolved after storage read on open
   const [selectedCaregiver, setSelectedCaregiver] = useState<CaregiverEntry | null>(null);
 
   const [messages,    setMessages]    = useState<Message[]>([]);
@@ -69,17 +69,33 @@ export default function ResidentChatModal({
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // Re-derive selected caregiver when the modal opens
+  // Every time the modal opens, re-read from storage so removals by admin are reflected
   useEffect(() => {
-    if (!visible) return; // only act when opening
-    if (effectiveCaregivers.length === 0) {
-      setSelectedCaregiver(null);
-    } else if (effectiveCaregivers.length === 1) {
-      // Single caregiver — go straight to chat
-      setSelectedCaregiver(effectiveCaregivers[0]);
+    if (!visible) return;
+
+    const propList: CaregiverEntry[] =
+      assignedCaregivers && assignedCaregivers.length > 0
+        ? assignedCaregivers
+        : assignedCaregiverId
+        ? [{ caregiverId: assignedCaregiverId, caregiverName: assignedCaregiverName ?? "Caregiver" }]
+        : [];
+
+    const resolve = (list: CaregiverEntry[]) => {
+      setLiveCaregivers(list);
+      if (list.length === 1) {
+        setSelectedCaregiver(list[0]);   // single caregiver → go straight to chat
+      } else {
+        setSelectedCaregiver(null);      // 0 or 2+ → show picker / empty state
+      }
+    };
+
+    if (residentId) {
+      // Read fresh from storage (reflects any admin assign/remove since last nav)
+      getResidentCaregivers(residentId).then((stored) => {
+        resolve(stored.length > 0 ? stored : propList);
+      });
     } else {
-      // Multiple caregivers — always reset to picker so user chooses
-      setSelectedCaregiver(null);
+      resolve(propList);
     }
   }, [visible]);
 
@@ -196,7 +212,7 @@ export default function ResidentChatModal({
           </View>
 
           {/* ── Body ── */}
-          {effectiveCaregivers.length === 0 ? (
+          {liveCaregivers.length === 0 ? (
 
             /* No caregiver assigned yet */
             <View style={s.unassignedState}>
@@ -215,7 +231,7 @@ export default function ResidentChatModal({
             /* Caregiver selection list */
             <ScrollView style={s.pickerScroll} contentContainerStyle={s.pickerContent}>
               <Text style={s.pickerTitle}>Select a caregiver to message</Text>
-              {effectiveCaregivers.map((cg) => (
+              {liveCaregivers.map((cg) => (
                 <Pressable
                   key={cg.caregiverId}
                   style={s.pickerCard}
