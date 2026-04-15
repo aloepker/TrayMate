@@ -26,6 +26,7 @@ import { useKitchenMessages } from "../context/KitchenMessageContext";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { getChats, getMe } from "../../services/api";
 import InAppNotificationBanner from "../components/InAppNotificationBanner";
+import { getCaregiverResidentList } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -125,22 +126,46 @@ export default function CaregiverDashboardScreen({
       try {
         setLoading(true);
 
-        // Role-based caregiver endpoint:
-        // returns ONLY residents assigned to the logged-in caregiver
-        const residentData = await getCaregiverResidents();
+        // Get my ID so we can read the reverse-map from storage
+        const me = await getMe();
+        const myId = String(me.id);
 
-        // Notifications endpoint for caregiver dashboard
-        // If backend does not have this ready yet, the catch below prevents the whole page from failing
-        let notifData: KitchenNotification[] = [];
-        try {
-          notifData = await getCaregiverNotifications();
-        } catch {
-          notifData = [];
+        // Fetch from backend + storage in parallel
+        const [backendResidents, storedResidents, notifResult] = await Promise.allSettled([
+          getCaregiverResidents(),
+          getCaregiverResidentList(myId),
+          getCaregiverNotifications(),
+        ]);
+
+        const backendList: Resident[] =
+          backendResidents.status === "fulfilled" ? backendResidents.value ?? [] : [];
+
+        // Merge storage residents (assigned via admin multi-caregiver) with backend list
+        const storedList =
+          storedResidents.status === "fulfilled" ? storedResidents.value : [];
+        const mergedMap = new Map<string, Resident>();
+        for (const r of backendList) mergedMap.set(r.id, r);
+        for (const s of storedList) {
+          if (!mergedMap.has(s.id)) {
+            mergedMap.set(s.id, {
+              id: s.id,
+              name: s.name,
+              room: s.room,
+              dietaryRestrictions: s.dietaryRestrictions,
+              foodAllergies: s.foodAllergies,
+              medicalConditions: [],
+              medications: [],
+              caregiverId: myId,
+            });
+          }
         }
 
+        const notifData: KitchenNotification[] =
+          notifResult.status === "fulfilled" ? notifResult.value ?? [] : [];
+
         if (!cancelled) {
-          setResidents(residentData || []);
-          setNotifications(notifData || []);
+          setResidents([...mergedMap.values()]);
+          setNotifications(notifData);
         }
       } catch (e: any) {
         if (!cancelled) {

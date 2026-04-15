@@ -17,7 +17,7 @@ import {
   StatusBar,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
-import { getUserEmail, setResidentCaregivers, getResidentCaregivers } from "../../services/storage";
+import { getUserEmail, setResidentCaregivers, getResidentCaregivers, setCaregiverResidentList, getCaregiverResidentList, StoredResident } from "../../services/storage";
 /**
  * FILE PATHS
  */
@@ -160,6 +160,31 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             }
           }));
           setResidentCaregiversMap(map);
+
+          // Rebuild reverse map (caregiverId → residents) so caregiver dashboards stay current
+          const cgToResidents: Record<string, StoredResident[]> = {};
+          for (const r of rs) {
+            const rid = String(r.id);
+            const cgIds = map[rid] ?? [];
+            const stored: StoredResident = {
+              id: rid,
+              name: r.name,
+              room: r.room,
+              dietaryRestrictions: r.dietaryRestrictions ?? [],
+              foodAllergies: r.foodAllergies ?? [],
+            };
+            for (const cid of cgIds) {
+              if (!cgToResidents[cid]) cgToResidents[cid] = [];
+              cgToResidents[cid].push(stored);
+            }
+          }
+          await Promise.all(
+            Object.entries(cgToResidents).map(([cid, list]) => setCaregiverResidentList(cid, list))
+          );
+          // Clear caregivers with no residents
+          for (const c of cg) {
+            if (!cgToResidents[String(c.id)]) await setCaregiverResidentList(String(c.id), []);
+          }
         }
       } catch (e: any) {
         Alert.alert("Failed to load admin data", e.message);
@@ -254,6 +279,42 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   }, [caregivers, residents, residentCaregiversMap]);
 
   /**
+   * Rebuilds the reverse map (caregiverId → residents[]) in storage for all
+   * caregivers affected by a change, so the caregiver dashboard stays in sync.
+   */
+  const rebuildCaregiverResidentLists = async (updatedMap: Record<string, string[]>) => {
+    // Build caregiverId → StoredResident[] from the full resident+caregiver lists
+    const cgToResidents: Record<string, StoredResident[]> = {};
+    for (const r of residents) {
+      const rid = String(r.id);
+      const cgIds = updatedMap[rid] ?? [];
+      const stored: StoredResident = {
+        id: rid,
+        name: r.name,
+        room: r.room,
+        dietaryRestrictions: r.dietaryRestrictions ?? [],
+        foodAllergies: r.foodAllergies ?? [],
+      };
+      for (const cid of cgIds) {
+        if (!cgToResidents[cid]) cgToResidents[cid] = [];
+        if (!cgToResidents[cid].some(x => x.id === rid)) {
+          cgToResidents[cid].push(stored);
+        }
+      }
+    }
+    // Persist each caregiver's resident list
+    await Promise.all(
+      Object.entries(cgToResidents).map(([cid, list]) => setCaregiverResidentList(cid, list))
+    );
+    // Clear out caregivers who now have no residents
+    for (const cg of caregivers) {
+      if (!cgToResidents[String(cg.id)]) {
+        await setCaregiverResidentList(String(cg.id), []);
+      }
+    }
+  };
+
+  /**
    * Caregiver assignment handlers — multi-caregiver per resident
    */
   const onAssignCaregiver = async (residentId: string, caregiverId: string) => {
@@ -263,16 +324,14 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         const existing = prev[residentId] ?? [];
         if (existing.includes(caregiverId)) return prev;
         const next = [...existing, caregiverId];
-        // Persist full array to storage
-        const cg = caregivers.find(c => String(c.id) === caregiverId);
-        if (cg) {
-          const caregiversArray = next.map(id => {
-            const found = caregivers.find(c => String(c.id) === id);
-            return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
-          }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
-          setResidentCaregivers(residentId, caregiversArray);
-        }
-        return { ...prev, [residentId]: next };
+        const caregiversArray = next.map(id => {
+          const found = caregivers.find(c => String(c.id) === id);
+          return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+        }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+        setResidentCaregivers(residentId, caregiversArray);
+        const updated = { ...prev, [residentId]: next };
+        rebuildCaregiverResidentLists(updated);
+        return updated;
       });
       setResidents(prev =>
         prev.map(r => r.id === residentId ? { ...r, caregiverId } : r)
@@ -286,7 +345,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     try {
       const current = residentCaregiversMap[residentId] ?? [];
       const remaining = current.filter(id => id !== caregiverId);
-      // Call backend with null if no caregivers remain, or with the first remaining one
       await assignResident(residentId, remaining.length > 0 ? remaining[0] : null);
       setResidentCaregiversMap(prev => {
         const caregiversArray = remaining.map(id => {
@@ -294,7 +352,9 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
         }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
         setResidentCaregivers(residentId, caregiversArray);
-        return { ...prev, [residentId]: remaining };
+        const updated = { ...prev, [residentId]: remaining };
+        rebuildCaregiverResidentLists(updated);
+        return updated;
       });
       setResidents(prev =>
         prev.map(r => r.id === residentId

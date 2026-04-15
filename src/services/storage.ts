@@ -98,6 +98,43 @@ export async function getResidentCaregivers(
   }
 }
 
+// ── Reverse map: caregiverId → residents[] ───────────────────────────────────
+// Lets the caregiver dashboard find ALL assigned residents even when the
+// backend only stores one caregiverId per resident.
+
+export type StoredResident = {
+  id: string;
+  name: string;
+  room: string;
+  dietaryRestrictions: string[];
+  foodAllergies: string[];
+};
+
+const CG_RESIDENTS_KEY_PREFIX = 'caregiver_residents_';
+
+export async function setCaregiverResidentList(
+  caregiverId: string,
+  residents: StoredResident[]
+): Promise<void> {
+  try {
+    await EncryptedStorage.setItem(
+      `${CG_RESIDENTS_KEY_PREFIX}${caregiverId}`,
+      JSON.stringify(residents)
+    );
+  } catch {}
+}
+
+export async function getCaregiverResidentList(
+  caregiverId: string
+): Promise<StoredResident[]> {
+  try {
+    const raw = await EncryptedStorage.getItem(`${CG_RESIDENTS_KEY_PREFIX}${caregiverId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 /*import { Platform } from "react-native";
 import EncryptedStorage from "react-native-encrypted-storage";
 
