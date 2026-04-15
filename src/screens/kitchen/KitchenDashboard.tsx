@@ -1680,15 +1680,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                     key={key}
                     style={[
                       manageMenu.tab,
-                      { borderColor: color + "40" },
-                      active && { backgroundColor: color + "18", borderColor: color, borderWidth: 2 },
+                      { borderColor: color + "60", backgroundColor: color + "08" },
+                      active && { backgroundColor: color + "20", borderColor: color, borderWidth: 2 },
                     ]}
                     onPress={() => setMenuFilter(key)}
                   >
-                    <Feather name={icon} size={14} color={active ? color : color + "90"} />
-                    <Text style={[manageMenu.tabText, { color: active ? color : color + "90" }, active && { fontWeight: "800" }]}>{label}</Text>
-                    <View style={[manageMenu.tabCount, { backgroundColor: color + "12" }, active && { backgroundColor: color + "25" }]}>
-                      <Text style={[manageMenu.tabCountText, { color: active ? color : color + "90" }]}>{count}</Text>
+                    <Feather name={icon} size={14} color={active ? color : color} />
+                    <Text style={[manageMenu.tabText, { color }, active && { fontWeight: "800" }]}>{label}</Text>
+                    <View style={[manageMenu.tabCount, { backgroundColor: color + "18" }, active && { backgroundColor: color + "30" }]}>
+                      <Text style={[manageMenu.tabCountText, { color }]}>{count}</Text>
                     </View>
                   </TouchableOpacity>
                 );
