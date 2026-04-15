@@ -60,7 +60,6 @@ import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage } from '../services/api';
-import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -805,7 +804,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName as string | null ?? null);
   const [assignedCaregivers, setAssignedCaregivers] = useState<Array<{ caregiverId: string; caregiverName: string }>>([]);
   const [sendingCgMsg, setSendingCgMsg] = useState(false);
-  const [showMessagesModal, setShowMessagesModal] = useState(false);
 
   // Persist caregiver info to storage when provided via params; load from storage as fallback
   useEffect(() => {
@@ -852,51 +850,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       });
     }
   }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName, route?.params?.assignedCaregivers]);
-
-  const contactCaregiver = useCallback(() => {
-    if (!caregiverId) return;
-    const cg = caregiverName ?? 'Caregiver';
-    Alert.alert(
-      `Message ${cg}`,
-      `Send a message about ${residentName}'s meal.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'I need assistance',
-          onPress: async () => {
-            setSendingCgMsg(true);
-            try {
-              await sendApiMessage(caregiverId, `Hi, ${residentName} needs assistance with their meal. Please check in when possible.`);
-              Alert.alert('Sent ✓', `${cg} has been notified.`);
-            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
-            finally { setSendingCgMsg(false); }
-          },
-        },
-        {
-          text: 'Question about my meal',
-          onPress: async () => {
-            setSendingCgMsg(true);
-            try {
-              await sendApiMessage(caregiverId, `Hi, ${residentName} has a question about their meal. Please follow up when available.`);
-              Alert.alert('Sent ✓', `${cg} has been notified.`);
-            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
-            finally { setSendingCgMsg(false); }
-          },
-        },
-        {
-          text: 'Dietary concern',
-          onPress: async () => {
-            setSendingCgMsg(true);
-            try {
-              await sendApiMessage(caregiverId, `Hi, ${residentName} has a dietary concern about their current meal selection. Please review when available.`);
-              Alert.alert('Sent ✓', `${cg} has been notified.`);
-            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
-            finally { setSendingCgMsg(false); }
-          },
-        },
-      ]
-    );
-  }, [caregiverId, caregiverName, residentName]);
 
   // Navigate to settings with resident context
   const goToSettings = () => {
@@ -1457,15 +1410,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
           </TouchableOpacity>
-          {/* Caregiver contact button — labelled pill for elderly readability */}
-          <TouchableOpacity
-            style={[styles.caregiverPillBtn, { backgroundColor: pt.tabActiveBg }]}
-            onPress={() => setShowMessagesModal(true)}
-            activeOpacity={0.85}
-          >
-            <Feather name="message-circle" size={17} color="#FFFFFF" />
-            <Text style={styles.caregiverPillText}>Caregiver</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
@@ -1975,15 +1919,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         </View>
       </Modal>
 
-      {/* Caregiver-only chat modal — scoped to assigned caregivers */}
-      <ResidentChatModal
-        visible={showMessagesModal}
-        onClose={() => setShowMessagesModal(false)}
-        residentId={residentId ?? null}
-        assignedCaregivers={assignedCaregivers}
-        assignedCaregiverId={caregiverId}
-        assignedCaregiverName={caregiverName}
-      />
     </SafeAreaView>
   );
 };
@@ -2075,20 +2010,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  caregiverPillBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: 13,
-  },
-  caregiverPillText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
   },
   headerActionBtn: {
     width: 44,

@@ -13,9 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
-import { sendMessage } from '../services/api';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
-import ResidentChatModal from './components/messaging/ResidentChatModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -118,55 +116,6 @@ function SettingsScreen({ navigation, route }: any) {
       });
     }
   }, [residentId, route?.params?.caregiverId, route?.params?.caregiverName, route?.params?.assignedCaregivers]);
-
-  const [sendingMsg, setSendingMsg] = useState(false);
-  const [showMessagesModal, setShowMessagesModal] = useState(false);
-
-  const contactCaregiver = useCallback(() => {
-    if (!caregiverId) return;
-    const name = residentName || 'a resident';
-    const cg   = caregiverName ?? 'Caregiver';
-    Alert.alert(
-      `Message ${cg}`,
-      `Send a message about ${name}'s care.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'I need assistance',
-          onPress: async () => {
-            setSendingMsg(true);
-            try {
-              await sendMessage(caregiverId, `Hi, ${name} needs assistance. Please check in when possible.`);
-              Alert.alert('Sent ✓', `${cg} has been notified.`);
-            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
-            finally { setSendingMsg(false); }
-          },
-        },
-        {
-          text: 'Question about my meal',
-          onPress: async () => {
-            setSendingMsg(true);
-            try {
-              await sendMessage(caregiverId, `Hi, ${name} has a question about their meal. Please follow up when available.`);
-              Alert.alert('Sent ✓', `${cg} has been notified.`);
-            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
-            finally { setSendingMsg(false); }
-          },
-        },
-        {
-          text: 'Dietary concern',
-          onPress: async () => {
-            setSendingMsg(true);
-            try {
-              await sendMessage(caregiverId, `Hi, ${name} has a dietary concern about their current meal selection. Please review when available.`);
-              Alert.alert('Sent ✓', `${cg} has been notified.`);
-            } catch { Alert.alert('Failed to send', 'Please ask staff directly.'); }
-            finally { setSendingMsg(false); }
-          },
-        },
-      ]
-    );
-  }, [caregiverId, caregiverName, residentName]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -385,29 +334,6 @@ function SettingsScreen({ navigation, route }: any) {
           <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
 
-            {/* Contact Caregiver — always visible */}
-            <TouchableOpacity
-              style={[styles.accountRow, { minHeight: touchTarget }]}
-              onPress={() => setShowMessagesModal(true)}
-              accessibilityRole="button"
-            >
-              <View style={styles.caregiverContactLeft}>
-                <View style={[styles.caregiverAvatar, { backgroundColor: '#717644' }]}>
-                  <Feather name="message-square" size={16} color="#FFFFFF" />
-                </View>
-                <View>
-                  <Text style={[styles.accountLabel, { fontSize: scaled(15), color: theme.textPrimary }]}>
-                    {caregiverName ? `Contact ${caregiverName}` : 'Contact Caregiver'}
-                  </Text>
-                  <Text style={[styles.caregiverSubtitle, { fontSize: scaled(12), color: theme.textSecondary }]}>
-                    {caregiverName ? 'Send a message to your caregiver' : 'Message your care team'}
-                  </Text>
-                </View>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-            </TouchableOpacity>
-            <View style={styles.divider} />
-
             <TouchableOpacity
               style={[styles.accountRow, { minHeight: touchTarget }]}
               onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
@@ -419,14 +345,6 @@ function SettingsScreen({ navigation, route }: any) {
         </View>
       </ScrollView>
 
-      <ResidentChatModal
-        visible={showMessagesModal}
-        onClose={() => setShowMessagesModal(false)}
-        residentId={residentId ?? null}
-        assignedCaregivers={assignedCaregivers}
-        assignedCaregiverId={caregiverId}
-        assignedCaregiverName={caregiverName}
-      />
     </View>
   );
 }
