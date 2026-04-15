@@ -13,8 +13,11 @@ import {
   Alert,
   Image,
   Switch,
+  Platform,
+  PermissionsAndroid,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
+import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
@@ -138,6 +141,39 @@ function getPeriodColor(period: string): string {
     Sides: "#15803d", Drinks: "#0e7490", "All Day": "#6D6B3B",
   };
   return map[norm] || C.textMuted;
+}
+
+/** Pick an image from gallery — handles permissions on both iOS & Android */
+async function pickImage(onPicked: (uri: string) => void) {
+  // Android 13+ needs READ_MEDIA_IMAGES, older needs READ_EXTERNAL_STORAGE
+  if (Platform.OS === "android") {
+    try {
+      const permission =
+        Platform.Version >= 33
+          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
+          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      const granted = await PermissionsAndroid.request(permission, {
+        title: "Photo Access",
+        message: "TrayMate needs access to your photos to add meal images.",
+        buttonPositive: "Allow",
+      });
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert("Permission Denied", "Allow photo access in Settings to upload meal images.");
+        return;
+      }
+    } catch {
+      // Some Android versions don't need explicit permission — proceed anyway
+    }
+  }
+
+  launchImageLibrary(
+    { mediaType: "photo", quality: 0.7, includeBase64: false, maxWidth: 800, maxHeight: 600 },
+    (res) => {
+      if (res.didCancel || res.errorCode) return;
+      const asset = res.assets?.[0];
+      if (asset?.uri) onPicked(asset.uri);
+    },
+  );
 }
 
 /** Normalize raw DB mealperiod strings to match app's period categories */
@@ -366,25 +402,31 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
               })}
             </View>
 
-            {/* ── Photo URL ── */}
+            {/* ── Photo ── */}
             <Text style={modal.sectionLabel}>PHOTO</Text>
-            <Text style={modal.label}>Image URL (optional)</Text>
-            <TextInput
-              style={modal.input}
-              value={photoUrl}
-              onChangeText={setPhotoUrl}
-              placeholder="https://example.com/meal.jpg"
-              placeholderTextColor="#ABABAB"
-              autoCapitalize="none"
-              keyboardType="url"
-            />
             {photoUrl.trim() ? (
-              <Image
-                source={{ uri: photoUrl.trim() }}
-                style={modal.photoPreview}
-                resizeMode="cover"
-              />
-            ) : null}
+              <View style={{ marginBottom: 14 }}>
+                <Image source={{ uri: photoUrl.trim() }} style={modal.photoPreview} resizeMode="cover" />
+                <TouchableOpacity
+                  style={{ position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 14, width: 28, height: 28, alignItems: "center", justifyContent: "center" }}
+                  onPress={() => setPhotoUrl("")}
+                >
+                  <Feather name="x" size={16} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={modal.photoPickerBtn}
+                activeOpacity={0.7}
+                onPress={() => pickImage((uri) => setPhotoUrl(uri))}
+              >
+                <View style={modal.photoPickerIcon}>
+                  <Feather name="camera" size={26} color={C.primary} />
+                </View>
+                <Text style={modal.photoPickerTitle}>Tap to add a photo</Text>
+                <Text style={modal.photoPickerSub}>Choose from your gallery</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={modal.addBtn} onPress={handleAdd}>
               <Feather name="plus-circle" size={18} color="#FFF" />
@@ -508,68 +550,57 @@ interface SeasonalEntry {
 }
 
 
-// ─── Support Modal ─────────────────────────────────────────────────────────────
-const SUPPORT_TEMPLATES = [
+// ─── Tutorial / Guide Modal ────────────────────────────────────────────────────
+const TUTORIAL_STEPS = [
   {
-    id: "equipment",
-    icon: "tool",
-    title: "Equipment Issue",
-    description: "Report a broken or malfunctioning piece of kitchen equipment.",
-    template: "🔧 Equipment Issue\n\nEquipment: \nLocation: \nIssue Description: \nUrgency: [ ] Low  [ ] Medium  [ ] High",
+    id: "orders",
+    icon: "clipboard",
+    color: "#6B8E23",
+    title: "Orders & Status",
+    bullets: [
+      "Summary cards at top show today's totals. Tap **Preparing**, **Ready**, or **Delivered** on each order to update it.",
+    ],
   },
   {
-    id: "supply",
-    icon: "package",
-    title: "Supply Request",
-    description: "Request ingredients, supplies, or restock items.",
-    template: "📦 Supply Request\n\nItem(s) Needed: \nQuantity: \nNeeded By: \nNotes: ",
+    id: "menu",
+    icon: "edit-3",
+    color: "#2E86AB",
+    title: "Add & Edit Meals",
+    bullets: [
+      "**Add Meal** creates a new item. **Manage Menu** lets you edit or delete existing ones. Toggle **Seasonal** for limited-time items.",
+    ],
   },
   {
-    id: "allergy",
-    icon: "alert-triangle",
-    title: "Allergy Concern",
-    description: "Report an allergy concern or cross-contamination risk.",
-    template: "⚠️ Allergy Concern\n\nResident Name: \nAllergen: \nDescription: \nAction Taken: ",
-  },
-  {
-    id: "special",
-    icon: "star",
-    title: "Special Diet Request",
-    description: "Submit a special dietary modification for a resident.",
-    template: "🍽️ Special Diet Request\n\nResident Name: \nRoom #: \nDietary Need: \nMeal Affected: \nNotes: ",
-  },
-  {
-    id: "feedback",
-    icon: "message-square",
-    title: "General Feedback",
-    description: "Share feedback or a suggestion with the kitchen team.",
-    template: "💬 General Feedback\n\nSubject: \nDetails: \nSubmitted by: ",
+    id: "messages",
+    icon: "message-circle",
+    color: "#7B68EE",
+    title: "Messages",
+    bullets: [
+      "**Messages** opens resident conversations. A **red dot** means unread. You can also reply directly from any order card.",
+    ],
   },
 ];
 
+const renderBoldText = (text: string, baseColor: string) => {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <Text style={{ fontSize: 16, color: baseColor, lineHeight: 23, flex: 1 }}>
+      {parts.map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <Text key={i} style={{ fontWeight: "800", color: C.text }}>{part.slice(2, -2)}</Text>
+        ) : (
+          <Text key={i}>{part}</Text>
+        )
+      )}
+    </Text>
+  );
+};
+
 const SupportModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ visible, onClose }) => {
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+  const [expandedStep, setExpandedStep] = useState<string | null>(null);
 
-  const template = SUPPORT_TEMPLATES.find((t) => t.id === selectedTemplate);
-
-  const handleSelectTemplate = (id: string) => {
-    const tmpl = SUPPORT_TEMPLATES.find((t) => t.id === id)!;
-    setSelectedTemplate(id);
-    setMessage(tmpl.template);
-  };
-
-  const handleSend = () => {
-    Alert.alert("Submitted", "Your support request has been sent to the admin team.");
-    setSelectedTemplate(null);
-    setMessage("");
-    onClose();
-  };
-
-  const handleClose = () => {
-    setSelectedTemplate(null);
-    setMessage("");
-    onClose();
+  const toggleStep = (id: string) => {
+    setExpandedStep(expandedStep === id ? null : id);
   };
 
   return (
@@ -579,63 +610,49 @@ const SupportModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ vis
           <View style={support.sheet}>
             <View style={support.header}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Feather name="help-circle" size={20} color={C.primary} />
-                <Text style={support.title}>
-                  {selectedTemplate ? template?.title : "Support Center"}
-                </Text>
+                <Feather name="book-open" size={20} color={C.primary} />
+                <Text style={support.title}>Kitchen Guide</Text>
               </View>
-              <TouchableOpacity onPress={handleClose} style={support.closeBtn}>
+              <TouchableOpacity onPress={onClose} style={support.closeBtn}>
                 <Feather name="x" size={22} color={C.textMuted} />
               </TouchableOpacity>
             </View>
 
-            {!selectedTemplate ? (
-              <>
-                <Text style={support.subtitle}>
-                  Select a request type to get started:
-                </Text>
-                {SUPPORT_TEMPLATES.map((tmpl) => (
-                  <TouchableOpacity
-                    key={tmpl.id}
-                    style={support.templateCard}
-                    onPress={() => handleSelectTemplate(tmpl.id)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={support.templateIcon}>
-                      <Feather name={tmpl.icon as any} size={20} color={C.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={support.templateTitle}>{tmpl.title}</Text>
-                      <Text style={support.templateDesc}>{tmpl.description}</Text>
-                    </View>
-                    <Feather name="chevron-right" size={18} color={C.textMuted} />
-                  </TouchableOpacity>
-                ))}
-              </>
-            ) : (
-              <>
+            <Text style={support.subtitle}>
+              Learn how to use the kitchen dashboard:
+            </Text>
+
+            {TUTORIAL_STEPS.map((step) => {
+              const isOpen = expandedStep === step.id;
+              return (
                 <TouchableOpacity
-                  style={support.backRow}
-                  onPress={() => { setSelectedTemplate(null); setMessage(""); }}
+                  key={step.id}
+                  style={[support.templateCard, isOpen && { borderColor: step.color, borderWidth: 2 }]}
+                  onPress={() => toggleStep(step.id)}
+                  activeOpacity={0.75}
                 >
-                  <Feather name="chevron-left" size={16} color={C.primary} />
-                  <Text style={support.backText}>All Templates</Text>
+                  <View style={[support.templateIcon, { backgroundColor: step.color + "20" }]}>
+                    <Feather name={step.icon as any} size={22} color={step.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <Text style={support.templateTitle}>{step.title}</Text>
+                      <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={18} color={C.textMuted} />
+                    </View>
+                    {isOpen && (
+                      <View style={{ marginTop: 12 }}>
+                        {step.bullets.map((b, i) => (
+                          <View key={i} style={{ flexDirection: "row", marginBottom: 10, paddingRight: 8 }}>
+                            <Text style={{ fontSize: 16, color: step.color, marginRight: 8, marginTop: 2 }}>{"\u2022"}</Text>
+                            {renderBoldText(b, C.text)}
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
-                <Text style={support.templateDescLarge}>{template?.description}</Text>
-                <Text style={support.label}>Message</Text>
-                <TextInput
-                  style={support.messageInput}
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                  placeholderTextColor="#ABABAB"
-                />
-                <TouchableOpacity style={support.sendBtn} onPress={handleSend}>
-                  <Feather name="send" size={17} color="#FFF" />
-                  <Text style={support.sendBtnText}>Submit Request</Text>
-                </TouchableOpacity>
-              </>
-            )}
+              );
+            })}
           </View>
         </ScrollView>
       </View>
@@ -659,8 +676,8 @@ const support = StyleSheet.create({
     alignItems: "center",
     marginBottom: 18,
   },
-  title: { fontSize: 19, fontWeight: "800", color: C.text },
-  subtitle: { fontSize: 14, color: C.textMuted, marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: "800", color: C.text },
+  subtitle: { fontSize: 16, color: C.textMuted, marginBottom: 16 },
   closeBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: C.inputBg, alignItems: "center", justifyContent: "center",
@@ -680,35 +697,8 @@ const support = StyleSheet.create({
     width: 42, height: 42, borderRadius: 12,
     backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center",
   },
-  templateTitle: { fontSize: 15, fontWeight: "700", color: C.text, marginBottom: 2 },
-  templateDesc: { fontSize: 12, color: C.textMuted, lineHeight: 17 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 12 },
-  backText: { fontSize: 14, color: C.primary, fontWeight: "600" },
-  templateDescLarge: { fontSize: 14, color: C.textMuted, marginBottom: 16, lineHeight: 20 },
-  label: { fontSize: 13, fontWeight: "700", color: C.text, marginBottom: 8 },
-  messageInput: {
-    backgroundColor: C.inputBg,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 14,
-    fontSize: 14,
-    color: C.text,
-    minHeight: 180,
-    textAlignVertical: "top",
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  sendBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 15,
-  },
-  sendBtnText: { fontSize: 15, fontWeight: "700", color: "#FFF" },
+  templateTitle: { fontSize: 18, fontWeight: "700", color: C.text, marginBottom: 2 },
+  templateDesc: { fontSize: 14, color: C.textMuted, lineHeight: 19 },
 });
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
@@ -1168,8 +1158,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </TouchableOpacity>
 
           <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#FFF3E0", borderColor: "#FFB74D" }]} onPress={() => setShowSupport(true)}>
-            <Feather name="help-circle" size={18} color="#E65100" />
-            <Text style={[s.headerLabelBtnText, { color: "#E65100" }]}>Help</Text>
+            <Feather name="book-open" size={18} color="#E65100" />
+            <Text style={[s.headerLabelBtnText, { color: "#E65100" }]}>Guide</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
@@ -1747,8 +1737,27 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               <Text style={manageMenu.label}>Tags</Text>
               <TextInput style={manageMenu.input} value={editTags} onChangeText={setEditTags} placeholder="e.g. Vegetarian, Low Sodium" placeholderTextColor="#ABABAB" />
 
-              <Text style={manageMenu.label}>Image URL</Text>
-              <TextInput style={manageMenu.input} value={editImageUrl} onChangeText={setEditImageUrl} placeholder="https://example.com/photo.jpg" placeholderTextColor="#ABABAB" autoCapitalize="none" keyboardType="url" />
+              <Text style={manageMenu.label}>Photo</Text>
+              {editImageUrl.trim() ? (
+                <View style={{ marginBottom: 14 }}>
+                  <Image source={{ uri: editImageUrl.trim() }} style={{ width: "100%", height: 160, borderRadius: 14, backgroundColor: C.inputBg }} resizeMode="cover" />
+                  <TouchableOpacity
+                    style={{ position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 14, width: 28, height: 28, alignItems: "center", justifyContent: "center" }}
+                    onPress={() => setEditImageUrl("")}
+                  >
+                    <Feather name="x" size={16} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={{ borderWidth: 2, borderColor: C.border, borderStyle: "dashed", borderRadius: 14, paddingVertical: 24, alignItems: "center", marginBottom: 14, backgroundColor: C.inputBg }}
+                  activeOpacity={0.7}
+                  onPress={() => pickImage((uri) => setEditImageUrl(uri))}
+                >
+                  <Feather name="camera" size={24} color={C.primary} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: C.text, marginTop: 6 }}>Tap to add photo</Text>
+                </TouchableOpacity>
+              )}
 
               <View style={manageMenu.toggleRow}>
                 <View style={{ flex: 1 }}>
@@ -2691,11 +2700,38 @@ const modal = StyleSheet.create({
   },
   photoPreview: {
     width: "100%",
-    height: 140,
-    borderRadius: 12,
-    marginTop: 10,
-    marginBottom: 4,
+    height: 180,
+    borderRadius: 14,
     backgroundColor: C.inputBg,
+  },
+  photoPickerBtn: {
+    borderWidth: 2,
+    borderColor: C.border,
+    borderStyle: "dashed",
+    borderRadius: 14,
+    paddingVertical: 28,
+    alignItems: "center",
+    marginBottom: 14,
+    backgroundColor: C.inputBg,
+  },
+  photoPickerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  photoPickerTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: C.text,
+    marginBottom: 3,
+  },
+  photoPickerSub: {
+    fontSize: 13,
+    color: C.textMuted,
   },
 });
 
