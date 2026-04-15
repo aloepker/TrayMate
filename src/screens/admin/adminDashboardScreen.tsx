@@ -341,30 +341,45 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }
   };
 
-  const onRemoveCaregiver = async (residentId: string, caregiverId: string) => {
-    try {
-      const current = residentCaregiversMap[residentId] ?? [];
-      const remaining = current.filter(id => id !== caregiverId);
-      await assignResident(residentId, remaining.length > 0 ? remaining[0] : null);
-      setResidentCaregiversMap(prev => {
-        const caregiversArray = remaining.map(id => {
-          const found = caregivers.find(c => String(c.id) === id);
-          return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
-        }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
-        setResidentCaregivers(residentId, caregiversArray);
-        const updated = { ...prev, [residentId]: remaining };
-        rebuildCaregiverResidentLists(updated);
-        return updated;
-      });
-      setResidents(prev =>
-        prev.map(r => r.id === residentId
-          ? { ...r, caregiverId: remaining.length > 0 ? remaining[0] : null }
-          : r
-        )
-      );
-    } catch (e: any) {
-      Alert.alert("Remove caregiver failed", e.message);
-    }
+  const onRemoveCaregiver = (residentId: string, caregiverId: string) => {
+    const cgName = caregivers.find(c => String(c.id) === caregiverId)?.name ?? "this caregiver";
+    const resName = residents.find(r => r.id === residentId)?.name ?? "this resident";
+    Alert.alert(
+      "Remove Caregiver",
+      `Are you sure you want to unassign ${cgName} from ${resName}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const current = residentCaregiversMap[residentId] ?? [];
+              const remaining = current.filter(id => id !== caregiverId);
+              await assignResident(residentId, remaining.length > 0 ? remaining[0] : null);
+              setResidentCaregiversMap(prev => {
+                const caregiversArray = remaining.map(id => {
+                  const found = caregivers.find(c => String(c.id) === id);
+                  return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+                }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
+                setResidentCaregivers(residentId, caregiversArray);
+                const updated = { ...prev, [residentId]: remaining };
+                rebuildCaregiverResidentLists(updated);
+                return updated;
+              });
+              setResidents(prev =>
+                prev.map(r => r.id === residentId
+                  ? { ...r, caregiverId: remaining.length > 0 ? remaining[0] : null }
+                  : r
+                )
+              );
+            } catch (e: any) {
+              Alert.alert("Remove caregiver failed", e.message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const askDeleteResident = (id: string) => {
@@ -628,11 +643,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       <Text style={styles.roomPillLabel}>ROOM <Text style={styles.roomPillNum}>{r.room || "—"}</Text></Text>
                     </View>
                     <Text style={[styles.personName, { flex: 1 }]} numberOfLines={1}>{r.name}</Text>
-                    <Pressable style={styles.iconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
-                      <Feather name="edit-2" size={15} color="#6D6B3B" />
+                    <Pressable style={styles.editIconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
+                      <Feather name="edit-2" size={18} color="#6D6B3B" />
                     </Pressable>
-                    <Pressable style={styles.iconBtn} onPress={() => askDeleteResident(r.id)} hitSlop={10}>
-                      <Feather name="trash-2" size={15} color="#B91C1C" />
+                    <Pressable style={styles.deleteIconBtn} onPress={() => askDeleteResident(r.id)} hitSlop={10}>
+                      <Feather name="trash-2" size={18} color="#B91C1C" />
                     </Pressable>
                   </View>
 
@@ -655,7 +670,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   {/* ── Caregiver assignment ── */}
                   <View style={styles.caregiverAssignArea}>
                     <View style={styles.caregiverAssignLabelRow}>
-                      <Feather name="user" size={12} color="#6A6A6A" />
+                      <Feather name="user" size={14} color="#6A6A6A" />
                       <Text style={styles.caregiverAssignLabel}>Assigned Caregivers</Text>
                     </View>
 
@@ -679,7 +694,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                               hitSlop={10}
                               style={styles.caregiverChipX}
                             >
-                              <Feather name="x" size={10} color="#6D6B3B" />
+                              <Feather name="x" size={13} color="#B91C1C" />
                             </Pressable>
                           </View>
                         ))
@@ -1387,15 +1402,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cgAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#6D6B3B",
     alignItems: "center",
     justifyContent: "center",
   },
   cgAvatarText: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: "900",
     color: "#FFFFFF",
   },
@@ -1451,9 +1466,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   caregiverAssignLabel: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
-    color: "#6A6A6A",
+    color: "#5A5A5A",
     marginBottom: 8,
   },
   noCaregiversBadge: {
@@ -1482,25 +1497,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F0EEE4",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 6,
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 8,
     borderWidth: 1,
     borderColor: "#D8D5C0",
   },
   caregiverChipText: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "700",
     color: "#3A3820",
   },
   caregiverChipX: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#D8D5C0",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FEE2E2",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
   caregiverChipXText: {
     fontSize: 10,
@@ -1530,6 +1547,26 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center"
+  },
+  editIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#F0EEE4",
+    borderWidth: 1,
+    borderColor: "#D8D5C0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cartBtn: {
     flexDirection: "row",
