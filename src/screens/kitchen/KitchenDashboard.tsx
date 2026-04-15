@@ -132,11 +132,24 @@ const PERIOD_OPTIONS: {
 ];
 
 function getPeriodColor(period: string): string {
+  const norm = normalizePeriod(period);
   const map: Record<string, string> = {
     Breakfast: "#b45309", Lunch: "#1d4ed8", Dinner: "#7c3aed",
-    Sides: "#15803d", Drinks: "#0e7490",
+    Sides: "#15803d", Drinks: "#0e7490", "All Day": "#6D6B3B",
   };
-  return map[period] || C.textMuted;
+  return map[norm] || C.textMuted;
+}
+
+/** Normalize raw DB mealperiod strings to match app's period categories */
+function normalizePeriod(raw: string | null | undefined): string {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v.includes("drink") || v.includes("beverage")) return "Drinks";
+  if (v.includes("side")) return "Sides";
+  if (v.includes("breakfast")) return "Breakfast";
+  // "Lunch, Dinner" → "Lunch" (matches resident browse behavior)
+  if (v.includes("lunch")) return "Lunch";
+  if (v.includes("dinner")) return "Dinner";
+  return "All Day";
 }
 
 // ─── Seasonal Meal Modal (expanded with nutrition + dietary fields) ────────────
@@ -1022,7 +1035,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     setEditingMeal(meal);
     setEditName(meal.name || "");
     setEditDesc(meal.description || "");
-    setEditPeriod((meal.mealperiod || meal.mealPeriod || "Breakfast") as MealPeriod);
+    const normalized = normalizePeriod(meal.mealperiod || meal.mealPeriod);
+    const validPeriods: MealPeriod[] = ["Breakfast", "Lunch", "Dinner", "Sides", "Drinks"];
+    setEditPeriod(validPeriods.includes(normalized as MealPeriod) ? normalized as MealPeriod : "Breakfast");
     setEditCalories(meal.calories ? String(meal.calories) : "");
     setEditSodium(meal.sodium ? String(meal.sodium) : "");
     setEditProtein(meal.protein ? String(meal.protein) : "");
@@ -1063,7 +1078,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   const filteredMenuMeals = menuFilter === "All"
     ? menuMeals
-    : menuMeals.filter((m) => (m.mealperiod || m.mealPeriod || "") === menuFilter);
+    : menuMeals.filter((m) => normalizePeriod(m.mealperiod || m.mealPeriod) === menuFilter);
 
   // ── send message to resident (per-order) ──
   const handleSendReply = (orderId: number) => {
@@ -1659,7 +1674,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 ...PERIOD_OPTIONS.map(o => ({ key: o.value, label: o.label, icon: o.icon, color: o.color })),
               ].map(({ key, label, icon, color }) => {
                 const active = menuFilter === key;
-                const count = key === "All" ? menuMeals.length : menuMeals.filter(m => (m.mealperiod || m.mealPeriod) === key).length;
+                const count = key === "All" ? menuMeals.length : menuMeals.filter(m => normalizePeriod(m.mealperiod || m.mealPeriod) === key).length;
                 return (
                   <TouchableOpacity
                     key={key}
@@ -1763,7 +1778,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
               {filteredMenuMeals.map((meal) => {
-                const period = meal.mealperiod || meal.mealPeriod || "";
+                const rawPeriod = meal.mealperiod || meal.mealPeriod || "";
+                const period = normalizePeriod(rawPeriod);
                 const pColor = getPeriodColor(period);
                 const localImg = getMealImage(meal.name);
                 const imgUrl = meal.imageUrl?.trim();
@@ -1786,7 +1802,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       <Text style={manageMenu.mealName}>{meal.name}</Text>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
                         <View style={[manageMenu.periodPill, { backgroundColor: pColor + "20", borderColor: pColor + "40" }]}>
-                          <Text style={[manageMenu.periodPillText, { color: pColor }]}>{period || "—"}</Text>
+                          <Text style={[manageMenu.periodPillText, { color: pColor }]}>{period}</Text>
                         </View>
                         {(meal.seasonal || meal.isSeasonal) && (
                           <View style={manageMenu.seasonalBadge}>
