@@ -1132,22 +1132,19 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </Text>
         </View>
         <View style={s.headerRight}>
-          {/* Add Meal */}
-          <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSeasonalModal(true)}>
-            <Feather name="plus-circle" size={18} color={C.primary} />
-            <Text style={s.headerLabelBtnText}>Add Meal</Text>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E8F5E9", borderColor: "#81C784" }]} onPress={() => setShowSeasonalModal(true)}>
+            <Feather name="plus-circle" size={18} color="#2E7D32" />
+            <Text style={[s.headerLabelBtnText, { color: "#2E7D32" }]}>Add Meal</Text>
           </TouchableOpacity>
 
-          {/* Manage Menu */}
-          <TouchableOpacity style={s.headerLabelBtn} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: C.primaryLight, borderColor: "#B5AE8C" }]} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
             <Feather name="book-open" size={18} color={C.primary} />
             <Text style={s.headerLabelBtnText}>Menu</Text>
           </TouchableOpacity>
 
-          {/* Messages */}
-          <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowMessagesModal(true)}>
-            <Feather name="message-square" size={18} color={C.primary} />
-            <Text style={s.headerLabelBtnText}>Messages</Text>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E3F2FD", borderColor: "#90CAF9" }]} onPress={() => setShowMessagesModal(true)}>
+            <Feather name="message-square" size={18} color="#1565C0" />
+            <Text style={[s.headerLabelBtnText, { color: "#1565C0" }]}>Messages</Text>
             {msgUnread > 0 && (
               <View style={s.bellBadge}>
                 <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
@@ -1155,13 +1152,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             )}
           </TouchableOpacity>
 
-          {/* Support */}
-          <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSupport(true)}>
-            <Feather name="help-circle" size={18} color={C.primary} />
-            <Text style={s.headerLabelBtnText}>Help</Text>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#FFF3E0", borderColor: "#FFB74D" }]} onPress={() => setShowSupport(true)}>
+            <Feather name="help-circle" size={18} color="#E65100" />
+            <Text style={[s.headerLabelBtnText, { color: "#E65100" }]}>Help</Text>
           </TouchableOpacity>
 
-          {/* Logout */}
           <TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
             <Feather name="log-out" size={18} color={C.danger} />
             <Text style={[s.headerLabelBtnText, { color: C.danger }]}>Logout</Text>
@@ -1657,28 +1652,30 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </View>
 
           {/* Period filter tabs */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={manageMenu.tabScroll} contentContainerStyle={{ paddingHorizontal: 20 }}>
-            {[
-              { key: "All", label: "All", icon: "grid" as const, color: C.primary },
-              ...PERIOD_OPTIONS.map(o => ({ key: o.value, label: o.label, icon: o.icon, color: o.color })),
-            ].map(({ key, label, icon, color }) => {
-              const active = menuFilter === key;
-              const count = key === "All" ? menuMeals.length : menuMeals.filter(m => (m.mealperiod || m.mealPeriod) === key).length;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[manageMenu.tab, active && { backgroundColor: color + "18", borderColor: color }]}
-                  onPress={() => setMenuFilter(key)}
-                >
-                  <Feather name={icon} size={14} color={active ? color : C.textMuted} />
-                  <Text style={[manageMenu.tabText, active && { color, fontWeight: "800" }]}>{label}</Text>
-                  <View style={[manageMenu.tabCount, active && { backgroundColor: color + "22" }]}>
-                    <Text style={[manageMenu.tabCountText, active && { color }]}>{count}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <View style={manageMenu.tabBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, alignItems: "center" }}>
+              {[
+                { key: "All", label: "All", icon: "grid" as const, color: C.primary },
+                ...PERIOD_OPTIONS.map(o => ({ key: o.value, label: o.label, icon: o.icon, color: o.color })),
+              ].map(({ key, label, icon, color }) => {
+                const active = menuFilter === key;
+                const count = key === "All" ? menuMeals.length : menuMeals.filter(m => (m.mealperiod || m.mealPeriod) === key).length;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[manageMenu.tab, active && { backgroundColor: color + "18", borderColor: color }]}
+                    onPress={() => setMenuFilter(key)}
+                  >
+                    <Feather name={icon} size={14} color={active ? color : C.textMuted} />
+                    <Text style={[manageMenu.tabText, active && { color, fontWeight: "800" }]}>{label}</Text>
+                    <View style={[manageMenu.tabCount, active && { backgroundColor: color + "22" }]}>
+                      <Text style={[manageMenu.tabCountText, active && { color }]}>{count}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {/* Meal list or Edit form */}
           {editingMeal ? (
@@ -2845,9 +2842,9 @@ const manageMenu = StyleSheet.create({
     justifyContent: "center",
   },
   // Tabs
-  tabScroll: {
+  tabBar: {
     backgroundColor: C.surface,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
@@ -2855,8 +2852,8 @@ const manageMenu = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    height: 38,
     paddingHorizontal: 14,
-    paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: C.border,
