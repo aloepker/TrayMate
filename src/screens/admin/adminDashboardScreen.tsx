@@ -1266,8 +1266,9 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   miniCard: {
-    flexGrow: 1,
-    flexBasis: 280,
+    flexBasis: "23%",
+    minWidth: 220,
+    maxWidth: "23%",
     backgroundColor: "#F8F8F8",
     borderRadius: 16,
     padding: 18,
@@ -1292,7 +1293,8 @@ const styles = StyleSheet.create({
   miniEmail: {
     marginTop: 5,
     fontSize: 14,
-    color: "#6A6A6A",
+    fontWeight: "700",
+    color: "#4A4A4A",
   },
   miniFooter: {
     marginTop: 12,
