@@ -89,6 +89,7 @@ function unwrapList<T>(data: any): T[] {
 
   return (
     data.caregivers ??
+    data.residents ??
     data.kitchenStaff ??
     data.kitchen ??
     data.staff ??
