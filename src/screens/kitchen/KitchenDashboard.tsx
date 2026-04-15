@@ -17,7 +17,7 @@ import {
 import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
-import { getMealPlaceholder } from "../../services/mealDisplayService";
+import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
 import { getResidents, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
@@ -1762,52 +1762,72 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             </View>
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-              {filteredMenuMeals.map((meal) => (
-                <TouchableOpacity key={meal.id} style={manageMenu.mealRow} onPress={() => openEditMeal(meal)} activeOpacity={0.7}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {filteredMenuMeals.map((meal) => {
+                const period = meal.mealperiod || meal.mealPeriod || "";
+                const pColor = getPeriodColor(period);
+                const localImg = getMealImage(meal.name);
+                const imgUrl = meal.imageUrl?.trim();
+                const placeholder = getMealPlaceholder(meal.name);
+                return (
+                  <TouchableOpacity key={meal.id} style={manageMenu.mealRow} onPress={() => openEditMeal(meal)} activeOpacity={0.7}>
+                    {/* Image */}
+                    {localImg ? (
+                      <Image source={localImg} style={manageMenu.mealImg} resizeMode="cover" />
+                    ) : imgUrl ? (
+                      <Image source={{ uri: imgUrl }} style={manageMenu.mealImg} resizeMode="cover" />
+                    ) : (
+                      <View style={[manageMenu.mealImgPlaceholder, { backgroundColor: placeholder.bg }]}>
+                        <Text style={{ fontSize: 28 }}>{placeholder.emoji}</Text>
+                      </View>
+                    )}
+
+                    {/* Info */}
+                    <View style={{ flex: 1 }}>
                       <Text style={manageMenu.mealName}>{meal.name}</Text>
-                      <View style={[manageMenu.periodPill, { backgroundColor: getPeriodColor(meal.mealperiod || meal.mealPeriod) + "18" }]}>
-                        <Text style={[manageMenu.periodPillText, { color: getPeriodColor(meal.mealperiod || meal.mealPeriod) }]}>
-                          {meal.mealperiod || meal.mealPeriod || "—"}
-                        </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                        <View style={[manageMenu.periodPill, { backgroundColor: pColor + "20", borderColor: pColor + "40" }]}>
+                          <Text style={[manageMenu.periodPillText, { color: pColor }]}>{period || "—"}</Text>
+                        </View>
+                        {(meal.seasonal || meal.isSeasonal) && (
+                          <View style={manageMenu.seasonalBadge}>
+                            <Feather name="star" size={10} color="#c2410c" />
+                            <Text style={manageMenu.seasonalBadgeText}>Seasonal</Text>
+                          </View>
+                        )}
+                        {meal.available === false && (
+                          <View style={manageMenu.unavailBadge}>
+                            <Text style={manageMenu.unavailBadgeText}>Hidden</Text>
+                          </View>
+                        )}
                       </View>
-                      {(meal.seasonal || meal.isSeasonal) && (
-                        <View style={manageMenu.seasonalBadge}>
-                          <Feather name="star" size={10} color="#c2410c" />
-                          <Text style={manageMenu.seasonalBadgeText}>Seasonal</Text>
-                        </View>
-                      )}
-                      {meal.available === false && (
-                        <View style={manageMenu.unavailBadge}>
-                          <Text style={manageMenu.unavailBadgeText}>Unavailable</Text>
-                        </View>
-                      )}
-                    </View>
-                    {meal.description ? (
-                      <Text style={manageMenu.mealDesc} numberOfLines={2}>{meal.description}</Text>
-                    ) : null}
-                    <View style={{ flexDirection: "row", gap: 12, marginTop: 4, alignItems: "center" }}>
-                      {(meal.calories != null && meal.calories > 0) && (
-                        <Text style={manageMenu.mealStat}>{meal.calories} cal</Text>
-                      )}
-                      {meal.tags ? (
-                        <Text style={manageMenu.mealStat} numberOfLines={1}>{typeof meal.tags === "string" ? meal.tags : ""}</Text>
+                      {meal.description ? (
+                        <Text style={manageMenu.mealDesc} numberOfLines={2}>{meal.description}</Text>
                       ) : null}
-                      <View style={{ marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4 }}>
-                        <Feather name="edit-2" size={13} color={C.textMuted} />
-                        <Text style={{ fontSize: 12, color: C.textMuted, fontWeight: "600" }}>Edit</Text>
+                      <View style={{ flexDirection: "row", gap: 10, marginTop: 6, alignItems: "center" }}>
+                        {(meal.calories != null && meal.calories > 0) && (
+                          <View style={manageMenu.calBadge}>
+                            <Feather name="zap" size={11} color="#b45309" />
+                            <Text style={manageMenu.calBadgeText}>{meal.calories} cal</Text>
+                          </View>
+                        )}
+                        {meal.tags ? (
+                          <Text style={manageMenu.mealStat} numberOfLines={1}>{typeof meal.tags === "string" ? meal.tags : ""}</Text>
+                        ) : null}
                       </View>
                     </View>
-                  </View>
-                  <TouchableOpacity
-                    style={manageMenu.deleteBtn}
-                    onPress={() => handleDeleteMeal(meal)}
-                  >
-                    <Feather name="trash-2" size={18} color={C.danger} />
+
+                    {/* Action buttons */}
+                    <View style={{ alignItems: "center", gap: 8 }}>
+                      <TouchableOpacity style={manageMenu.editBtn} onPress={() => openEditMeal(meal)}>
+                        <Feather name="edit-2" size={16} color={C.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={manageMenu.deleteBtn} onPress={() => handleDeleteMeal(meal)}>
+                        <Feather name="trash-2" size={16} color={C.danger} />
+                      </TouchableOpacity>
+                    </View>
                   </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
+                );
+              })}
             </ScrollView>
           )}
         </SafeAreaView>
@@ -2852,9 +2872,9 @@ const manageMenu = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    height: 38,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    height: 40,
+    paddingHorizontal: 16,
+    borderRadius: 22,
     borderWidth: 1.5,
     borderColor: C.border,
     backgroundColor: C.surface,
@@ -2877,6 +2897,20 @@ const manageMenu = StyleSheet.create({
     color: C.textMuted,
   },
   // Meal list
+  mealImg: {
+    width: 80,
+    height: 80,
+    borderRadius: 14,
+    marginRight: 14,
+  },
+  mealImgPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 14,
+    marginRight: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   empty: {
     alignItems: "center",
     paddingVertical: 60,
@@ -2913,13 +2947,28 @@ const manageMenu = StyleSheet.create({
     fontWeight: "600",
   },
   periodPill: {
-    borderRadius: 10,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
   },
   periodPillText: {
     fontSize: 12,
+    fontWeight: "800",
+  },
+  calBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FFF8E1",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  calBadgeText: {
+    fontSize: 12,
     fontWeight: "700",
+    color: "#b45309",
   },
   seasonalBadge: {
     flexDirection: "row",
@@ -2946,14 +2995,23 @@ const manageMenu = StyleSheet.create({
     fontWeight: "700",
     color: C.danger,
   },
+  editBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#D8D5C0",
+  },
   deleteBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     backgroundColor: C.dangerBg,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 12,
     borderWidth: 1,
     borderColor: "#FECACA",
   },
