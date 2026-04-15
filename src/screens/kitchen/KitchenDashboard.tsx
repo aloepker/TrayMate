@@ -12,6 +12,7 @@ import {
   FlatList,
   Alert,
   Image,
+  Switch,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
@@ -51,7 +52,7 @@ const C = {
   warningBg:    "#fef3c7",
 };
 
-type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks" | "Seasonal";
+type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
 type Status = "pending" | "preparing" | "ready" | "served" | "cancelled" | "substitution_requested";
 
 // ─── Base URL + API helpers ────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ const PERIOD_ACCENT: Record<string, { color: string; light: string; icon: string
 const PERIOD_OPTIONS: {
   value: MealPeriod;
   label: string;
-  icon: "sun" | "coffee" | "moon" | "layers" | "droplet" | "star";
+  icon: "sun" | "coffee" | "moon" | "layers" | "droplet";
   color: string;
 }[] = [
   { value: "Breakfast", label: "Breakfast", icon: "sun",      color: "#b45309" },
@@ -128,7 +129,6 @@ const PERIOD_OPTIONS: {
   { value: "Dinner",    label: "Dinner",    icon: "moon",     color: "#7c3aed" },
   { value: "Sides",     label: "Side Dish", icon: "layers",   color: "#15803d" },
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
-  { value: "Seasonal",  label: "Seasonal",  icon: "star",     color: "#c2410c" },
 ];
 
 // ─── Seasonal Meal Modal (expanded with nutrition + dietary fields) ────────────
@@ -157,19 +157,24 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
   const [dietary, setDietary]     = useState<string[]>([]);
   // Photo URL
   const [photoUrl, setPhotoUrl]   = useState("");
+  // Seasonal toggle
+  const [isSeasonal, setIsSeasonal] = useState(false);
 
   const toggleDietary = (item: string) =>
     setDietary((prev) => prev.includes(item) ? prev.filter((d) => d !== item) : [...prev, item]);
 
   const handleAdd = () => {
     if (!name.trim()) { Alert.alert("Required", "Please enter a meal name."); return; }
-    // Build tag from explicit tag + dietary selections
-    const allTags = [tag.trim(), ...dietary].filter(Boolean).join(", ");
+    // Build tag from explicit tag + dietary selections + seasonal
+    const parts = [tag.trim(), ...dietary];
+    if (isSeasonal) parts.unshift("Seasonal");
+    const allTags = parts.filter(Boolean).join(", ");
     onAdd({ name: name.trim(), description: description.trim(), period, tag: allTags });
     // Reset all fields
     setName(""); setDescription(""); setPeriod("Breakfast"); setTag("");
     setCalories(""); setSodium(""); setProtein("");
     setDietary([]); setPhotoUrl(""); setDropdownOpen(false);
+    setIsSeasonal(false);
     onClose();
   };
 
@@ -254,6 +259,25 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
                 ))}
               </View>
             )}
+
+            {/* ── Seasonal toggle ── */}
+            <View style={modal.seasonalToggleRow}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                <View style={[modal.dropdownDot, { backgroundColor: "#c2410c22" }]}>
+                  <Feather name="star" size={15} color="#c2410c" />
+                </View>
+                <View>
+                  <Text style={modal.seasonalToggleLabel}>Seasonal Meal</Text>
+                  <Text style={modal.seasonalToggleSub}>Mark as a limited-time seasonal special</Text>
+                </View>
+              </View>
+              <Switch
+                value={isSeasonal}
+                onValueChange={setIsSeasonal}
+                trackColor={{ false: C.border, true: "#c2410c88" }}
+                thumbColor={isSeasonal ? "#c2410c" : "#FFFFFF"}
+              />
+            </View>
 
             {/* ── Nutrition ── */}
             <Text style={modal.sectionLabel}>NUTRITION</Text>
@@ -2277,6 +2301,28 @@ const modal = StyleSheet.create({
   chipTextActive: {
     color: "#FFF",
     fontWeight: "700",
+  },
+  seasonalToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.inputBg,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  seasonalToggleLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: C.text,
+  },
+  seasonalToggleSub: {
+    fontSize: 12,
+    color: C.textMuted,
+    marginTop: 1,
   },
   photoPreview: {
     width: "100%",
