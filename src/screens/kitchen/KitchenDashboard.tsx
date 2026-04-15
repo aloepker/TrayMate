@@ -51,7 +51,7 @@ const C = {
   warningBg:    "#fef3c7",
 };
 
-type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
+type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks" | "Seasonal";
 type Status = "pending" | "preparing" | "ready" | "served" | "cancelled" | "substitution_requested";
 
 // ─── Base URL + API helpers ────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ const PERIOD_ACCENT: Record<string, { color: string; light: string; icon: string
 const PERIOD_OPTIONS: {
   value: MealPeriod;
   label: string;
-  icon: "sun" | "coffee" | "moon" | "layers" | "droplet";
+  icon: "sun" | "coffee" | "moon" | "layers" | "droplet" | "star";
   color: string;
 }[] = [
   { value: "Breakfast", label: "Breakfast", icon: "sun",      color: "#b45309" },
@@ -128,6 +128,7 @@ const PERIOD_OPTIONS: {
   { value: "Dinner",    label: "Dinner",    icon: "moon",     color: "#7c3aed" },
   { value: "Sides",     label: "Side Dish", icon: "layers",   color: "#15803d" },
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
+  { value: "Seasonal",  label: "Seasonal",  icon: "star",     color: "#c2410c" },
 ];
 
 // ─── Seasonal Meal Modal (expanded with nutrition + dietary fields) ────────────
@@ -969,14 +970,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </Text>
         </View>
         <View style={s.headerRight}>
-          {/* Seasonal meal button */}
-          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowSeasonalModal(true)}>
-            <Feather name="plus-circle" size={20} color={C.primary} />
+          {/* Add Meal */}
+          <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSeasonalModal(true)}>
+            <Feather name="plus-circle" size={18} color={C.primary} />
+            <Text style={s.headerLabelBtnText}>Add Meal</Text>
           </TouchableOpacity>
 
           {/* Messages */}
-          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowMessagesModal(true)}>
-            <Feather name="message-square" size={20} color={C.primary} />
+          <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowMessagesModal(true)}>
+            <Feather name="message-square" size={18} color={C.primary} />
+            <Text style={s.headerLabelBtnText}>Messages</Text>
             {msgUnread > 0 && (
               <View style={s.bellBadge}>
                 <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
@@ -985,13 +988,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </TouchableOpacity>
 
           {/* Support */}
-          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowSupport(true)}>
-            <Feather name="help-circle" size={20} color={C.primary} />
+          <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSupport(true)}>
+            <Feather name="help-circle" size={18} color={C.primary} />
+            <Text style={s.headerLabelBtnText}>Help</Text>
           </TouchableOpacity>
 
           {/* Logout */}
-          <TouchableOpacity style={[s.headerIconBtn, s.logoutBtn]} onPress={handleLogout}>
-            <Feather name="log-out" size={20} color={C.danger} />
+          <TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
+            <Feather name="log-out" size={18} color={C.danger} />
+            <Text style={[s.headerLabelBtnText, { color: C.danger }]}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1491,14 +1496,37 @@ const s = StyleSheet.create({
     letterSpacing: -0.5,
   },
   headerSub: {
-    fontSize: 13,
+    fontSize: 15,
     color: C.textMuted,
-    marginTop: 2,
+    marginTop: 3,
+    fontWeight: "500",
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
+  },
+  headerLabelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    height: 46,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "rgba(113,118,68,0.22)",
+    shadowColor: "#717644",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+    position: "relative" as const,
+  },
+  headerLabelBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: C.primary,
   },
   headerIconBtn: {
     width: 48,
@@ -1517,19 +1545,21 @@ const s = StyleSheet.create({
   },
   bellBadge: {
     position: "absolute",
-    top: 7,
-    right: 7,
+    top: -4,
+    right: -4,
     backgroundColor: C.danger,
-    borderRadius: 7,
-    minWidth: 14,
-    height: 14,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
   bellBadgeText: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     color: "#FFF",
   },
   logoutBtn: {
@@ -1579,35 +1609,35 @@ const s = StyleSheet.create({
     flex: 1,
     backgroundColor: C.surface,
     borderRadius: 14,
-    paddingVertical: 14,
+    paddingVertical: 16,
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     borderWidth: 1,
     borderColor: C.border,
   },
   summaryValue: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "800",
   },
   summaryLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: C.textMuted,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
   // Section title
   sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
+    gap: 8,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "800",
     color: C.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
 
   // Seasonal section
@@ -2107,28 +2137,33 @@ const modal = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "800",
     color: C.text,
   },
   closeBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.inputBg,
+    alignItems: "center",
+    justifyContent: "center",
   },
   label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: C.textMuted,
-    marginBottom: 6,
-    marginTop: 14,
+    fontSize: 15,
+    fontWeight: "700",
+    color: C.text,
+    marginBottom: 8,
+    marginTop: 16,
   },
   input: {
     backgroundColor: C.inputBg,
     borderWidth: 1,
     borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
     color: C.text,
   },
   dropdown: {
@@ -2143,9 +2178,9 @@ const modal = StyleSheet.create({
     paddingVertical: 13,
   },
   dropdownValue: {
-    fontSize: 15,
+    fontSize: 16,
     color: C.text,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   dropdownDot: {
     width: 30,
@@ -2178,7 +2213,7 @@ const modal = StyleSheet.create({
     borderBottomColor: C.border,
   },
   dropdownItemText: {
-    fontSize: 14,
+    fontSize: 15,
     color: C.textMuted,
     fontWeight: "500",
   },
@@ -2186,25 +2221,30 @@ const modal = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 10,
     backgroundColor: C.primary,
-    paddingVertical: 15,
-    borderRadius: 14,
-    marginTop: 22,
+    paddingVertical: 17,
+    borderRadius: 16,
+    marginTop: 26,
+    shadowColor: C.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   addBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
     color: "#FFF",
   },
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: C.textMuted,
+    fontSize: 13,
+    fontWeight: "800",
+    color: C.primary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginTop: 18,
-    marginBottom: 8,
+    letterSpacing: 1,
+    marginTop: 22,
+    marginBottom: 10,
   },
   nutritionRow: {
     flexDirection: "row",
@@ -2219,22 +2259,22 @@ const modal = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    borderRadius: 20,
-    borderWidth: 1,
+    gap: 5,
+    borderRadius: 22,
+    borderWidth: 1.5,
     borderColor: C.border,
     backgroundColor: C.inputBg,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   chipActive: {
     backgroundColor: C.primary,
     borderColor: C.primary,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 14,
     color: C.textMuted,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   chipTextActive: {
     color: "#FFF",
