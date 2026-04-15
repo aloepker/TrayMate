@@ -1678,13 +1678,17 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 return (
                   <TouchableOpacity
                     key={key}
-                    style={[manageMenu.tab, active && { backgroundColor: color + "18", borderColor: color }]}
+                    style={[
+                      manageMenu.tab,
+                      { borderColor: color + "40" },
+                      active && { backgroundColor: color + "18", borderColor: color, borderWidth: 2 },
+                    ]}
                     onPress={() => setMenuFilter(key)}
                   >
-                    <Feather name={icon} size={14} color={active ? color : C.textMuted} />
-                    <Text style={[manageMenu.tabText, active && { color, fontWeight: "800" }]}>{label}</Text>
-                    <View style={[manageMenu.tabCount, active && { backgroundColor: color + "22" }]}>
-                      <Text style={[manageMenu.tabCountText, active && { color }]}>{count}</Text>
+                    <Feather name={icon} size={14} color={active ? color : color + "90"} />
+                    <Text style={[manageMenu.tabText, { color: active ? color : color + "90" }, active && { fontWeight: "800" }]}>{label}</Text>
+                    <View style={[manageMenu.tabCount, { backgroundColor: color + "12" }, active && { backgroundColor: color + "25" }]}>
+                      <Text style={[manageMenu.tabCountText, { color: active ? color : color + "90" }]}>{count}</Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -1695,13 +1699,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           {/* Meal list or Edit form */}
           {editingMeal ? (
             /* ── Edit Meal Form ── */
+            <>
+            <View style={manageMenu.editHeader}>
+              <TouchableOpacity onPress={() => setEditingMeal(null)} style={manageMenu.backBtn}>
+                <Feather name="arrow-left" size={20} color={C.primary} />
+              </TouchableOpacity>
+              <Text style={manageMenu.editTitle}>Edit Meal</Text>
+            </View>
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                <TouchableOpacity onPress={() => setEditingMeal(null)} style={manageMenu.backBtn}>
-                  <Feather name="arrow-left" size={20} color={C.primary} />
-                </TouchableOpacity>
-                <Text style={manageMenu.editTitle}>Edit Meal</Text>
-              </View>
 
               <Text style={manageMenu.label}>Meal Name *</Text>
               <TextInput style={manageMenu.input} value={editName} onChangeText={setEditName} placeholder="Meal name" placeholderTextColor="#ABABAB" />
@@ -1766,6 +1771,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 <Text style={manageMenu.saveBtnText}>Save Changes</Text>
               </TouchableOpacity>
             </ScrollView>
+            </>
           ) : menuLoading ? (
             <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 60 }} />
           ) : filteredMenuMeals.length === 0 ? (
@@ -3033,6 +3039,16 @@ const manageMenu = StyleSheet.create({
     borderColor: "#FECACA",
   },
   // Edit form
+  editHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: C.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
   backBtn: {
     width: 40,
     height: 40,
