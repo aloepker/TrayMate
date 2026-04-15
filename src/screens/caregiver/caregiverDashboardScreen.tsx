@@ -24,7 +24,7 @@ import {
 } from "../../services/api";
 import { useKitchenMessages } from "../context/KitchenMessageContext";
 import MessagesModal from "../components/messaging/MessagesModal";
-import { getChats, getMe } from "../../services/api";
+import { getChats, getMe, sendMessage, searchOrdersApi, deleteOrderApi } from "../../services/api";
 import InAppNotificationBanner from "../components/InAppNotificationBanner";
 import { getCaregiverResidentList } from "../../services/storage";
 
@@ -74,14 +74,47 @@ export default function CaregiverDashboardScreen({
 
         // Show banner if unread count has increased since last poll
         if (lastUnreadRef.current !== null && count > lastUnreadRef.current) {
-          // Pick the most recent unread message as banner content
           const newest = unreadChats.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )[0];
           if (newest) {
-            setBannerSender(newest.senderName || "A resident");
-            setBannerPreview(newest.content   || "Sent you a message");
-            setBannerVisible(true);
+            const content = newest.content || "";
+            const isAutoOrder = content.includes("Auto-order placed") || content.includes("placed an order");
+
+            if (isAutoOrder) {
+              // Show accept/deny alert for auto-placed orders
+              Alert.alert(
+                "New Order",
+                `${newest.senderName || "A resident"}: ${content}`,
+                [
+                  {
+                    text: "Deny",
+                    style: "destructive",
+                    onPress: async () => {
+                      try {
+                        // Reply to resident that order was denied
+                        await sendMessage(newest.senderId, "Your auto-placed order has been reviewed and cancelled by your caregiver. Please place a new order manually.");
+                        Alert.alert("Order Denied", "The resident has been notified.");
+                      } catch { /* ignore */ }
+                    },
+                  },
+                  {
+                    text: "Accept",
+                    style: "default",
+                    onPress: async () => {
+                      try {
+                        await sendMessage(newest.senderId, "Your order has been confirmed by your caregiver!");
+                        Alert.alert("Order Accepted", "The resident has been notified.");
+                      } catch { /* ignore */ }
+                    },
+                  },
+                ]
+              );
+            } else {
+              setBannerSender(newest.senderName || "A resident");
+              setBannerPreview(content || "Sent you a message");
+              setBannerVisible(true);
+            }
           }
         }
 

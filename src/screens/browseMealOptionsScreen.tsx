@@ -723,14 +723,22 @@ function getCurrentMealPeriod(now: Date = new Date()): string | null {
   return found ? found.label : null;
 }
 
-/** Returns the next upcoming meal period and how many minutes until it starts */
-function getNextMealPeriod(now: Date = new Date()): { period: typeof MEAL_SCHEDULE[0]; minsUntil: number } | null {
+/**
+ * Returns the current-or-next meal period and how many minutes until it starts/ends.
+ * If we're inside a meal period, returns that period with minsRemaining.
+ * Otherwise returns the next upcoming one with minsUntil.
+ */
+function getNextMealPeriod(now: Date = new Date()): { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean } | null {
   const mins = now.getHours() * 60 + now.getMinutes();
+  // Check if we're currently inside a meal period
+  const current = MEAL_SCHEDULE.find((s) => mins >= s.start && mins < s.end);
+  if (current) return { period: current, minsUntil: current.end - mins, isNow: true };
+  // Otherwise next upcoming
   const next = MEAL_SCHEDULE.find((s) => s.start > mins);
-  if (next) return { period: next, minsUntil: next.start - mins };
+  if (next) return { period: next, minsUntil: next.start - mins, isNow: false };
   // After dinner — wrap to tomorrow's breakfast
   const breakfast = MEAL_SCHEDULE[0];
-  return { period: breakfast, minsUntil: 24 * 60 - mins + breakfast.start };
+  return { period: breakfast, minsUntil: 24 * 60 - mins + breakfast.start, isNow: false };
 }
 
 function formatMinsUntil(mins: number): string {
@@ -746,7 +754,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const touchTarget = getTouchTargetSize();
   // --- all hooks at the top, unconditionally, in fixed order ---
   const { currentTime } = useClock();
-  const { addToCart, getCartCount, orders, getOrdersForResident, fetchOrderHistory } = useCart();
+  const { addToCart, clearCart, getCartCount, orders, getOrdersForResident, fetchOrderHistory, placeOrder } = useCart();
 
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -766,8 +774,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
-  const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
+  const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; isNow: boolean; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
+  const [autoPlaced, setAutoPlaced] = useState(false);            // whether we already auto-placed for this period
+  const autoPlaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // derived (not hooks)
   const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
@@ -1094,12 +1104,30 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       );
     };
 
-    // Pick main meal from past orders or fall back to first safe available
-    const pastMeal = allPastItems.find((i) => i.meal_period === upcoming.label);
+    // Helper: count frequency of each item name in history for a given period
+    const getFrequencyRanked = (period: string): Map<string, number> => {
+      const freq = new Map<string, number>();
+      for (const item of allPastItems) {
+        if (item.meal_period === period) {
+          const key = item.name.toLowerCase();
+          freq.set(key, (freq.get(key) ?? 0) + 1);
+        }
+      }
+      return freq;
+    };
+
+    // Pick main meal — most frequently ordered for this period, then fallback
+    const mealFreq = getFrequencyRanked(upcoming.label);
     let mainMeal: Meal | null = null;
-    if (pastMeal) {
-      const candidate = meals.find((m) => String(m.id) === String(pastMeal.id) || m.name === pastMeal.name);
-      if (candidate && isSafeForResident(candidate)) mainMeal = candidate;
+    if (mealFreq.size > 0) {
+      // Sort by frequency descending, try each until we find a safe available match
+      const ranked = [...mealFreq.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [name] of ranked) {
+        const candidate = meals.find(
+          (m) => m.meal_period === upcoming.label && m.name.toLowerCase() === name && isSafeForResident(m)
+        );
+        if (candidate) { mainMeal = candidate; break; }
+      }
     }
     if (!mainMeal) {
       const periodMeals = meals.filter((m) => m.meal_period === upcoming.label && isSafeForResident(m));
@@ -1107,28 +1135,108 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
     if (!mainMeal) return;
 
-    // Pick drink from past orders or fall back to first safe available drink
+    // Pick drink — most frequently ordered, then fallback
     const safeDrinks = availableDrinks.filter(isSafeForResident);
-    const pastDrink = allPastItems.find((i) => i.meal_period === 'Drinks');
+    const drinkFreq = getFrequencyRanked('Drinks');
     let suggestDrink: Meal | undefined;
-    if (pastDrink) {
-      const candidate = safeDrinks.find((d) => String(d.id) === String(pastDrink.id) || d.name === pastDrink.name);
-      suggestDrink = candidate ?? safeDrinks[0];
+    if (drinkFreq.size > 0) {
+      const ranked = [...drinkFreq.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [name] of ranked) {
+        const candidate = safeDrinks.find((d) => d.name.toLowerCase() === name);
+        if (candidate) { suggestDrink = candidate; break; }
+      }
     }
     if (!suggestDrink) suggestDrink = safeDrinks[0];
 
-    // Pick dessert/side from past orders or fall back to first safe available side
+    // Pick side — most frequently ordered, then fallback
     const safeSides = availableSides.filter(isSafeForResident);
-    const pastDessert = allPastItems.find((i) => i.meal_period === 'Sides');
+    const sideFreq = getFrequencyRanked('Sides');
     let suggestDessert: Meal | undefined;
-    if (pastDessert) {
-      const candidate = safeSides.find((s) => String(s.id) === String(pastDessert.id) || s.name === pastDessert.name);
-      suggestDessert = candidate ?? safeSides[0];
+    if (sideFreq.size > 0) {
+      const ranked = [...sideFreq.entries()].sort((a, b) => b[1] - a[1]);
+      for (const [name] of ranked) {
+        const candidate = safeSides.find((s) => s.name.toLowerCase() === name);
+        if (candidate) { suggestDessert = candidate; break; }
+      }
     }
     if (!suggestDessert) suggestDessert = safeSides[0];
 
-    setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
+    setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, isNow: next.isNow, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
   }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime]);
+
+  // Auto-place the suggested meal when the meal period starts and resident hasn't ordered.
+  // When isNow is true (we're inside the period) and 15 min have passed without a manual order,
+  // auto-place the suggestion and notify the assigned caregiver.
+  useEffect(() => {
+    if (!autoSuggest || !autoSuggest.isNow || autoPlaced || !residentId) return;
+
+    // Check if resident already ordered for this period
+    const resOrders = getOrdersForResident(residentId);
+    const hasOrder = resOrders.some((o) =>
+      o.items.some((i) => i.meal_period === autoSuggest.period)
+    );
+    if (hasOrder) return;
+
+    // Wait 15 minutes into the meal period before auto-placing
+    // MEAL_SCHEDULE[period].end - minsUntil = current time within period
+    // We wait until 15 min after period start
+    const periodSched = MEAL_SCHEDULE.find(s => s.label === autoSuggest.period);
+    if (!periodSched) return;
+    const now = currentTime.getHours() * 60 + currentTime.getMinutes();
+    const minsSinceStart = now - periodSched.start;
+    const AUTO_PLACE_DELAY = 15; // minutes after period starts
+
+    if (minsSinceStart >= AUTO_PLACE_DELAY) {
+      // Auto-place now
+      const doAutoPlace = async () => {
+        try {
+          // Add items to cart then place order
+          const itemsToOrder = [autoSuggest.meal, autoSuggest.drink, autoSuggest.dessert].filter(Boolean) as Meal[];
+          clearCart();
+          for (const item of itemsToOrder) {
+            addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
+          }
+          // Small delay to let state update
+          await new Promise<void>(r => setTimeout(r, 100));
+          const result = await placeOrder(residentId, autoSuggest.period);
+          if (result.order) {
+            setAutoPlaced(true);
+            setAutoSuggestDismissed(true);
+            setAutoSuggest(null);
+
+            // Notify assigned caregiver(s) via messaging
+            const rName = residentName || 'A resident';
+            const rRoom = route?.params?.roomNumber || '';
+            const itemNames = itemsToOrder.map(i => i.name).join(', ');
+            const msgBody = `Auto-order placed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${autoSuggest.period}: ${itemNames}. Please review and accept or cancel if needed.`;
+
+            for (const cg of assignedCaregivers) {
+              try {
+                await sendApiMessage(cg.caregiverId, msgBody);
+              } catch { /* non-blocking */ }
+            }
+
+            Alert.alert(
+              'Order Auto-Placed',
+              `Your ${autoSuggest.period} has been placed automatically based on your favorites: ${itemNames}.\n\nYour caregiver has been notified.`,
+              [{ text: 'OK' }]
+            );
+          }
+        } catch (e) {
+          console.warn('[AutoPlace] Failed:', e);
+        }
+      };
+      doAutoPlace();
+    }
+  }, [autoSuggest, autoPlaced, residentId, currentTime]);
+
+  // Reset auto-placed flag when the meal period changes
+  useEffect(() => {
+    const next = getNextMealPeriod(currentTime);
+    if (next && !next.isNow) {
+      setAutoPlaced(false);
+    }
+  }, [currentTime]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -1477,7 +1585,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.bottomCardSuggestHeader}>
               <Feather name="clock" size={13} color="#4A5C2A" />
               <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(12) }]}>
-                {autoSuggest.period} in {formatMinsUntil(autoSuggest.minsUntil)} — from past orders
+                {autoSuggest.isNow
+                  ? `Current meal: ${autoSuggest.period} — ${formatMinsUntil(autoSuggest.minsUntil)} left`
+                  : `Next meal: ${autoSuggest.period} in ${formatMinsUntil(autoSuggest.minsUntil)}`}
+                {' — based on your favorites'}
               </Text>
               <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
                 <Feather name="x" size={14} color="#9CA3AF" />
@@ -1535,6 +1646,40 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 </TouchableOpacity>
               </View>
             )}
+            {/* Place All button */}
+            <TouchableOpacity
+              style={styles.bottomCardPlaceAllBtn}
+              onPress={async () => {
+                if (!autoSuggest || !residentId) return;
+                const items = [autoSuggest.meal, autoSuggest.drink, autoSuggest.dessert].filter(Boolean) as Meal[];
+                clearCart();
+                for (const item of items) {
+                  addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
+                }
+                await new Promise<void>(r => setTimeout(r, 100));
+                const result = await placeOrder(residentId, autoSuggest.period);
+                if (result.order) {
+                  setAutoPlaced(true);
+                  setAutoSuggestDismissed(true);
+                  setAutoSuggest(null);
+                  // Notify caregiver
+                  const rName = residentName || 'A resident';
+                  const rRoom = route?.params?.roomNumber || '';
+                  const itemNames = items.map(i => i.name).join(', ');
+                  for (const cg of assignedCaregivers) {
+                    try {
+                      await sendApiMessage(cg.caregiverId,
+                        `${rName}${rRoom ? ` (Room ${rRoom})` : ''} placed an order — ${autoSuggest.period}: ${itemNames}.`
+                      );
+                    } catch {}
+                  }
+                  Alert.alert('Order Placed', `Your ${autoSuggest.period} order has been placed: ${itemNames}`);
+                }
+              }}
+            >
+              <Feather name="check-circle" size={14} color="#FFF" />
+              <Text style={styles.bottomCardPlaceAllText}>Place Order</Text>
+            </TouchableOpacity>
             {/* Dismiss all */}
             <TouchableOpacity
               style={styles.bottomCardSuggestDismiss}
@@ -2359,9 +2504,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
+  bottomCardPlaceAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#4A5C2A',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 6,
+  },
+  bottomCardPlaceAllText: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 13,
+  },
   bottomCardSuggestDismiss: {
-    alignSelf: 'flex-start',
-    paddingVertical: 2,
+    alignSelf: 'center',
+    paddingVertical: 4,
+    marginTop: 2,
   },
   bottomCardSuggestDismissText: {
     color: '#9CA3AF',
