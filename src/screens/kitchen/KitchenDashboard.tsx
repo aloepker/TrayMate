@@ -18,7 +18,7 @@ import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
-import { getResidents, Resident as ApiResident, getChats } from "../../services/api";
+import { getResidents, Resident as ApiResident, getChats, createMeal, deleteMeal, getAllMenuMeals } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -131,11 +131,23 @@ const PERIOD_OPTIONS: {
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
 ];
 
+function getPeriodColor(period: string): string {
+  const map: Record<string, string> = {
+    Breakfast: "#b45309", Lunch: "#1d4ed8", Dinner: "#7c3aed",
+    Sides: "#15803d", Drinks: "#0e7490",
+  };
+  return map[period] || C.textMuted;
+}
+
 // ─── Seasonal Meal Modal (expanded with nutrition + dietary fields) ────────────
 interface SeasonalModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (meal: { name: string; description: string; period: MealPeriod; tag: string }) => void;
+  onAdd: (meal: {
+    name: string; description: string; period: MealPeriod; tag: string;
+    calories?: number; sodium?: number; protein?: number;
+    imageUrl?: string; seasonal: boolean;
+  }) => void;
 }
 
 const DIETARY_OPTIONS = [
@@ -147,7 +159,6 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
   const [name, setName]               = useState("");
   const [description, setDescription] = useState("");
   const [period, setPeriod]           = useState<MealPeriod>("Breakfast");
-  const [tag, setTag]                 = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   // Nutrition
   const [calories, setCalories]   = useState("");
@@ -165,13 +176,20 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
 
   const handleAdd = () => {
     if (!name.trim()) { Alert.alert("Required", "Please enter a meal name."); return; }
-    // Build tag from explicit tag + dietary selections + seasonal
-    const parts = [tag.trim(), ...dietary];
+    // Build tag from dietary selections + seasonal
+    const parts = [...dietary];
     if (isSeasonal) parts.unshift("Seasonal");
     const allTags = parts.filter(Boolean).join(", ");
-    onAdd({ name: name.trim(), description: description.trim(), period, tag: allTags });
+    onAdd({
+      name: name.trim(), description: description.trim(), period, tag: allTags,
+      calories: calories ? Number(calories) : undefined,
+      sodium: sodium ? Number(sodium) : undefined,
+      protein: protein ? Number(protein) : undefined,
+      imageUrl: photoUrl.trim() || undefined,
+      seasonal: isSeasonal,
+    });
     // Reset all fields
-    setName(""); setDescription(""); setPeriod("Breakfast"); setTag("");
+    setName(""); setDescription(""); setPeriod("Breakfast");
     setCalories(""); setSodium(""); setProtein("");
     setDietary([]); setPhotoUrl(""); setDropdownOpen(false);
     setIsSeasonal(false);
@@ -694,6 +712,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
   const [showMessages, setShowMessages] = useState(false);    // kept for per-order inbox modal
   const [showSupport, setShowSupport] = useState(false);
+  // Manage menu state
+  const [showManageMenu, setShowManageMenu] = useState(false);
+  const [menuMeals, setMenuMeals] = useState<any[]>([]);
+  const [menuLoading, setMenuLoading] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
 
@@ -877,15 +899,45 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     served:    orders.filter((o) => o.order.status === "served").length,
   };
 
-  const addSeasonalMeal = (meal: Omit<SeasonalEntry, "id">) => {
-    setSeasonalMeals((prev) => [
-      ...prev,
-      { ...meal, id: `seasonal_${Date.now()}` },
-    ]);
+  const addSeasonalMeal = async (meal: Omit<SeasonalEntry, "id"> & {
+    calories?: number; sodium?: number; protein?: number;
+    imageUrl?: string; seasonal: boolean;
+  }) => {
+    // Determine mealtype from period
+    const mealTypeMap: Record<string, string> = {
+      Breakfast: "B", Lunch: "L", Dinner: "D", Sides: "Side", Drinks: "Beverage",
+    };
+    const timeRangeMap: Record<string, string> = {
+      Breakfast: "7am - 10am", Lunch: "11am - 2pm", Dinner: "4pm - 7pm",
+      Sides: "All Day", Drinks: "All Day",
+    };
 
-    // Fire-and-forget: translate the new meal's name + description into
-    // Spanish/French/Chinese and store in the shared localization cache so
-    // residents viewing the app in another language see it localised.
+    try {
+      const result = await createMeal({
+        name: meal.name,
+        description: meal.description,
+        mealperiod: meal.period,
+        mealtype: mealTypeMap[meal.period] || "L",
+        calories: meal.calories,
+        sodium: meal.sodium,
+        protein: meal.protein,
+        tags: meal.tag,
+        available: true,
+        seasonal: meal.seasonal,
+        imageUrl: meal.imageUrl,
+      });
+
+      // Add to local state with backend ID
+      const newId = result?.id ? String(result.id) : `meal_${Date.now()}`;
+      setSeasonalMeals((prev) => [...prev, { ...meal, id: newId }]);
+      Alert.alert("Meal Added", `"${meal.name}" has been added to the menu.`);
+    } catch (e: any) {
+      // Still add locally even if backend fails
+      setSeasonalMeals((prev) => [...prev, { ...meal, id: `local_${Date.now()}` }]);
+      Alert.alert("Added Locally", `"${meal.name}" was added locally but may not have saved to the database: ${e.message}`);
+    }
+
+    // Fire-and-forget: translate
     (async () => {
       try {
         const toTranslateNames: string[] = [];
@@ -916,6 +968,42 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   // Show all seasonal meals (no longer filtered by tab)
   const tabSeasonalMeals = seasonalMeals;
+
+  // ── Manage Menu (load all meals from DB) ──
+  const loadMenuMeals = async () => {
+    setMenuLoading(true);
+    try {
+      const meals = await getAllMenuMeals();
+      setMenuMeals(meals);
+    } catch (e: any) {
+      Alert.alert("Error", "Could not load menu: " + e.message);
+    } finally {
+      setMenuLoading(false);
+    }
+  };
+
+  const handleDeleteMeal = (meal: any) => {
+    Alert.alert(
+      "Remove Meal",
+      `Are you sure you want to remove "${meal.name}" from the menu?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteMeal(Number(meal.id));
+              setMenuMeals((prev) => prev.filter((m) => m.id !== meal.id));
+              Alert.alert("Removed", `"${meal.name}" has been removed from the menu.`);
+            } catch (e: any) {
+              Alert.alert("Error", "Could not remove meal: " + e.message);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // ── send message to resident (per-order) ──
   const handleSendReply = (orderId: number) => {
@@ -988,6 +1076,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSeasonalModal(true)}>
             <Feather name="plus-circle" size={18} color={C.primary} />
             <Text style={s.headerLabelBtnText}>Add Meal</Text>
+          </TouchableOpacity>
+
+          {/* Manage Menu */}
+          <TouchableOpacity style={s.headerLabelBtn} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
+            <Feather name="book-open" size={18} color={C.primary} />
+            <Text style={s.headerLabelBtnText}>Menu</Text>
           </TouchableOpacity>
 
           {/* Messages */}
@@ -1479,6 +1573,80 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         visible={showMessagesModal}
         onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
+
+      {/* ── Manage Menu Modal ── */}
+      <Modal visible={showManageMenu} transparent animationType="slide">
+        <View style={manageMenu.overlay}>
+          <View style={manageMenu.sheet}>
+            <View style={manageMenu.header}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Feather name="book-open" size={20} color={C.primary} />
+                <Text style={manageMenu.title}>Current Menu</Text>
+                <View style={manageMenu.countBadge}>
+                  <Text style={manageMenu.countBadgeText}>{menuMeals.length}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <TouchableOpacity onPress={loadMenuMeals} style={manageMenu.refreshBtn}>
+                  <Feather name="refresh-cw" size={16} color={C.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowManageMenu(false)} style={manageMenu.closeBtn}>
+                  <Feather name="x" size={22} color={C.textMuted} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {menuLoading ? (
+              <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40, marginBottom: 40 }} />
+            ) : menuMeals.length === 0 ? (
+              <View style={manageMenu.empty}>
+                <Feather name="inbox" size={36} color={C.border} />
+                <Text style={manageMenu.emptyText}>No meals in the database</Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: "80%" }}>
+                {menuMeals.map((meal) => (
+                  <View key={meal.id} style={manageMenu.mealRow}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <Text style={manageMenu.mealName}>{meal.name}</Text>
+                        <View style={[manageMenu.periodPill, { backgroundColor: getPeriodColor(meal.mealperiod || meal.mealPeriod) + "18" }]}>
+                          <Text style={[manageMenu.periodPillText, { color: getPeriodColor(meal.mealperiod || meal.mealPeriod) }]}>
+                            {meal.mealperiod || meal.mealPeriod || "—"}
+                          </Text>
+                        </View>
+                        {(meal.seasonal || meal.isSeasonal) && (
+                          <View style={manageMenu.seasonalBadge}>
+                            <Feather name="star" size={10} color="#c2410c" />
+                            <Text style={manageMenu.seasonalBadgeText}>Seasonal</Text>
+                          </View>
+                        )}
+                      </View>
+                      {meal.description ? (
+                        <Text style={manageMenu.mealDesc} numberOfLines={2}>{meal.description}</Text>
+                      ) : null}
+                      <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+                        {(meal.calories != null && meal.calories > 0) && (
+                          <Text style={manageMenu.mealStat}>{meal.calories} cal</Text>
+                        )}
+                        {meal.tags ? (
+                          <Text style={manageMenu.mealStat} numberOfLines={1}>{typeof meal.tags === "string" ? meal.tags : ""}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={manageMenu.deleteBtn}
+                      onPress={() => handleDeleteMeal(meal)}
+                    >
+                      <Feather name="trash-2" size={18} color={C.danger} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -2456,6 +2624,130 @@ const msgPanel = StyleSheet.create({
     fontSize: 12,
     color: C.textMuted,
     fontStyle: "italic",
+  },
+});
+
+// ─── Manage Menu Modal Styles ─────────────────────────────────────────────────
+const manageMenu = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+    maxHeight: "85%",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: C.text,
+  },
+  countBadge: {
+    backgroundColor: C.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  countBadgeText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: C.primary,
+  },
+  refreshBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.inputBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  empty: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: C.textMuted,
+    fontWeight: "600",
+  },
+  mealRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.inputBg,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  mealName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: C.text,
+  },
+  mealDesc: {
+    fontSize: 13,
+    color: C.textMuted,
+    marginTop: 3,
+  },
+  mealStat: {
+    fontSize: 12,
+    color: C.textMuted,
+    fontWeight: "600",
+  },
+  periodPill: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  periodPillText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  seasonalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#c2410c15",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  seasonalBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#c2410c",
+  },
+  deleteBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: C.dangerBg,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
 });
 

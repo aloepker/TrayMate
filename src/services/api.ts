@@ -776,3 +776,37 @@ export async function getMe(): Promise<{ id: string; fullName: string; role: str
     role: String(raw.role ?? ""),
   };
 }
+
+// ─── Menu management (kitchen/admin) ──────────────────────────────────────────
+
+export interface CreateMealPayload {
+  name: string;
+  description?: string;
+  mealperiod: string;
+  mealtype?: string;
+  calories?: number;
+  sodium?: number;
+  protein?: number;
+  tags?: string;
+  allergenInfo?: string;
+  ingredients?: string;
+  available?: boolean;
+  seasonal?: boolean;
+  imageUrl?: string;
+}
+
+export async function createMeal(payload: CreateMealPayload): Promise<any> {
+  return request<any>("/admin/menu", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMeal(mealId: number): Promise<void> {
+  return request<void>(`/admin/menu/${mealId}`, { method: "DELETE" });
+}
+
+export async function getAllMenuMeals(): Promise<any[]> {
+  const data = await request<any>("/menu");
+  return Array.isArray(data) ? data : [];
+}
