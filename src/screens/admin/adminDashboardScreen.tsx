@@ -1171,12 +1171,12 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   container: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
+    paddingHorizontal: 24,
+    paddingTop: 20,
     paddingBottom: 40,
     width: "100%",
-    maxWidth: 1100,
-    alignSelf: "center"
+    maxWidth: 1400,
+    alignSelf: "center",
   },
   h1: {
     fontSize: 34,
@@ -1263,43 +1263,42 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 14
+    gap: 14,
   },
   miniCard: {
-    flexGrow: 0,
-    flexBasis: 220,
-    maxWidth: 280,
+    flexGrow: 1,
+    flexBasis: 280,
     backgroundColor: "#F8F8F8",
-    borderRadius: 14,
-    padding: 14,
-    position: "relative"
+    borderRadius: 16,
+    padding: 18,
+    position: "relative",
   },
   cardTrash: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 10
+    zIndex: 10,
   },
   miniName: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "900",
-    color: "#1A1A1A"
+    color: "#1A1A1A",
   },
   miniEmail: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#6A6A6A"
+    marginTop: 5,
+    fontSize: 14,
+    color: "#6A6A6A",
   },
   miniFooter: {
-    marginTop: 10,
-    fontSize: 12,
+    marginTop: 12,
+    fontSize: 14,
     color: "#7A7A7A",
-    fontWeight: "700"
+    fontWeight: "700",
   },
   outlineBtn: {
     marginTop: 14,
@@ -1328,18 +1327,18 @@ const styles = StyleSheet.create({
   },
   assignRow: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    padding: 20,
     flexDirection: "column",
-    gap: 10,
-    marginBottom: 14,
+    gap: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E8E6DC",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   assignRowWarning: {
     borderLeftWidth: 4,
@@ -1414,14 +1413,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   personName: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: "900",
-    color: "#1A1A1A"
+    color: "#1A1A1A",
   },
   personMeta: {
     marginTop: 4,
-    fontSize: 12,
-    color: "#6A6A6A"
+    fontSize: 14,
+    color: "#6A6A6A",
   },
   chipRow: {
     flexDirection: "row",
@@ -1429,17 +1428,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   chip: {
-    backgroundColor: "#F0EEE4",
-    borderRadius: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: "#D8D5C0",
+    borderColor: "#FECACA",
   },
   chipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#5A5830",
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#B91C1C",
   },
   restrictionsMuted: {
     fontSize: 12,
