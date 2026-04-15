@@ -1007,23 +1007,21 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         showsVerticalScrollIndicator={false}
       >
         {/* ── Summary Cards ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {[
-              { label: "Total",     value: counts.total,     icon: "layers"        as const, color: C.primary  },
-              { label: "Pending",   value: counts.pending,   icon: "clock"         as const, color: C.warning  },
-              { label: "Preparing", value: counts.preparing, icon: "loader"        as const, color: C.danger   },
-              { label: "Ready",     value: counts.ready,     icon: "check-circle"  as const, color: C.success  },
-              { label: "Served",    value: counts.served,    icon: "check-square"  as const, color: "#0369A1"  },
-            ].map(({ label, value, icon, color }) => (
-              <View key={label} style={[s.summaryCard, { minWidth: 72 }]}>
-                <Feather name={icon} size={18} color={color} />
-                <Text style={[s.summaryValue, { color }]}>{value}</Text>
-                <Text style={s.summaryLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+        <View style={s.summaryRow}>
+          {[
+            { label: "Total",     value: counts.total,     icon: "layers"        as const, color: C.primary  },
+            { label: "Pending",   value: counts.pending,   icon: "clock"         as const, color: C.warning  },
+            { label: "Preparing", value: counts.preparing, icon: "loader"        as const, color: C.danger   },
+            { label: "Ready",     value: counts.ready,     icon: "check-circle"  as const, color: C.success  },
+            { label: "Served",    value: counts.served,    icon: "check-square"  as const, color: "#0369A1"  },
+          ].map(({ label, value, icon, color }) => (
+            <View key={label} style={s.summaryCard}>
+              <Feather name={icon} size={20} color={color} />
+              <Text style={[s.summaryValue, { color }]}>{value}</Text>
+              <Text style={s.summaryLabel}>{label}</Text>
+            </View>
+          ))}
+        </View>
 
         {/* ── Seasonal Meals ── */}
         {tabSeasonalMeals.length > 0 && (
@@ -1602,7 +1600,7 @@ const s = StyleSheet.create({
   // Summary
   summaryRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     marginBottom: 20,
   },
   summaryCard: {
