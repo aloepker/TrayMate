@@ -802,6 +802,13 @@ export async function createMeal(payload: CreateMealPayload): Promise<any> {
   });
 }
 
+export async function updateMeal(mealId: number, payload: Partial<CreateMealPayload>): Promise<any> {
+  return request<any>(`/admin/menu/${mealId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteMeal(mealId: number): Promise<void> {
   return request<void>(`/admin/menu/${mealId}`, { method: "DELETE" });
 }

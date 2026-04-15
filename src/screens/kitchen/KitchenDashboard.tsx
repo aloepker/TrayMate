@@ -18,7 +18,7 @@ import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
-import { getResidents, Resident as ApiResident, getChats, createMeal, deleteMeal, getAllMenuMeals } from "../../services/api";
+import { getResidents, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -716,6 +716,19 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [showManageMenu, setShowManageMenu] = useState(false);
   const [menuMeals, setMenuMeals] = useState<any[]>([]);
   const [menuLoading, setMenuLoading] = useState(false);
+  const [menuFilter, setMenuFilter] = useState<string>("All");
+  // Edit meal state
+  const [editingMeal, setEditingMeal] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editPeriod, setEditPeriod] = useState<MealPeriod>("Breakfast");
+  const [editCalories, setEditCalories] = useState("");
+  const [editSodium, setEditSodium] = useState("");
+  const [editProtein, setEditProtein] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [editSeasonal, setEditSeasonal] = useState(false);
+  const [editImageUrl, setEditImageUrl] = useState("");
+  const [editAvailable, setEditAvailable] = useState(true);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
 
@@ -1004,6 +1017,53 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       ]
     );
   };
+
+  const openEditMeal = (meal: any) => {
+    setEditingMeal(meal);
+    setEditName(meal.name || "");
+    setEditDesc(meal.description || "");
+    setEditPeriod((meal.mealperiod || meal.mealPeriod || "Breakfast") as MealPeriod);
+    setEditCalories(meal.calories ? String(meal.calories) : "");
+    setEditSodium(meal.sodium ? String(meal.sodium) : "");
+    setEditProtein(meal.protein ? String(meal.protein) : "");
+    setEditTags(typeof meal.tags === "string" ? meal.tags : "");
+    setEditSeasonal(Boolean(meal.seasonal || meal.isSeasonal));
+    setEditImageUrl(meal.imageUrl || "");
+    setEditAvailable(meal.available !== false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMeal) return;
+    if (!editName.trim()) { Alert.alert("Required", "Meal name is required."); return; }
+    try {
+      await updateMeal(Number(editingMeal.id), {
+        name: editName.trim(),
+        description: editDesc.trim(),
+        mealperiod: editPeriod,
+        calories: editCalories ? Number(editCalories) : undefined,
+        sodium: editSodium ? Number(editSodium) : undefined,
+        protein: editProtein ? Number(editProtein) : undefined,
+        tags: editTags.trim(),
+        seasonal: editSeasonal,
+        available: editAvailable,
+        imageUrl: editImageUrl.trim(),
+      });
+      // Update local state
+      setMenuMeals((prev) => prev.map((m) =>
+        m.id === editingMeal.id
+          ? { ...m, name: editName.trim(), description: editDesc.trim(), mealperiod: editPeriod, calories: editCalories ? Number(editCalories) : m.calories, sodium: editSodium ? Number(editSodium) : m.sodium, protein: editProtein ? Number(editProtein) : m.protein, tags: editTags.trim(), seasonal: editSeasonal, available: editAvailable, imageUrl: editImageUrl.trim() }
+          : m
+      ));
+      setEditingMeal(null);
+      Alert.alert("Saved", `"${editName.trim()}" has been updated.`);
+    } catch (e: any) {
+      Alert.alert("Error", "Could not update meal: " + e.message);
+    }
+  };
+
+  const filteredMenuMeals = menuFilter === "All"
+    ? menuMeals
+    : menuMeals.filter((m) => (m.mealperiod || m.mealPeriod || "") === menuFilter);
 
   // ── send message to resident (per-order) ──
   const handleSendReply = (orderId: number) => {
@@ -1574,78 +1634,186 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
       />
 
-      {/* ── Manage Menu Modal ── */}
-      <Modal visible={showManageMenu} transparent animationType="slide">
-        <View style={manageMenu.overlay}>
-          <View style={manageMenu.sheet}>
-            <View style={manageMenu.header}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Feather name="book-open" size={20} color={C.primary} />
-                <Text style={manageMenu.title}>Current Menu</Text>
-                <View style={manageMenu.countBadge}>
-                  <Text style={manageMenu.countBadgeText}>{menuMeals.length}</Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <TouchableOpacity onPress={loadMenuMeals} style={manageMenu.refreshBtn}>
-                  <Feather name="refresh-cw" size={16} color={C.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowManageMenu(false)} style={manageMenu.closeBtn}>
-                  <Feather name="x" size={22} color={C.textMuted} />
-                </TouchableOpacity>
+      {/* ── Manage Menu (Full-screen) ── */}
+      <Modal visible={showManageMenu} animationType="slide">
+        <SafeAreaView style={manageMenu.page}>
+          {/* Header */}
+          <View style={manageMenu.header}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Feather name="book-open" size={22} color={C.primary} />
+              <Text style={manageMenu.title}>Menu</Text>
+              <View style={manageMenu.countBadge}>
+                <Text style={manageMenu.countBadgeText}>{filteredMenuMeals.length}</Text>
               </View>
             </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <TouchableOpacity onPress={loadMenuMeals} style={manageMenu.refreshBtn}>
+                <Feather name="refresh-cw" size={16} color={C.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowManageMenu(false); setEditingMeal(null); }} style={manageMenu.closeBtn}>
+                <Feather name="x" size={22} color={C.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
 
-            {menuLoading ? (
-              <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40, marginBottom: 40 }} />
-            ) : menuMeals.length === 0 ? (
-              <View style={manageMenu.empty}>
-                <Feather name="inbox" size={36} color={C.border} />
-                <Text style={manageMenu.emptyText}>No meals in the database</Text>
+          {/* Period filter tabs */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={manageMenu.tabScroll} contentContainerStyle={{ paddingHorizontal: 20 }}>
+            {[
+              { key: "All", label: "All", icon: "grid" as const, color: C.primary },
+              ...PERIOD_OPTIONS.map(o => ({ key: o.value, label: o.label, icon: o.icon, color: o.color })),
+            ].map(({ key, label, icon, color }) => {
+              const active = menuFilter === key;
+              const count = key === "All" ? menuMeals.length : menuMeals.filter(m => (m.mealperiod || m.mealPeriod) === key).length;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[manageMenu.tab, active && { backgroundColor: color + "18", borderColor: color }]}
+                  onPress={() => setMenuFilter(key)}
+                >
+                  <Feather name={icon} size={14} color={active ? color : C.textMuted} />
+                  <Text style={[manageMenu.tabText, active && { color, fontWeight: "800" }]}>{label}</Text>
+                  <View style={[manageMenu.tabCount, active && { backgroundColor: color + "22" }]}>
+                    <Text style={[manageMenu.tabCountText, active && { color }]}>{count}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Meal list or Edit form */}
+          {editingMeal ? (
+            /* ── Edit Meal Form ── */
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <TouchableOpacity onPress={() => setEditingMeal(null)} style={manageMenu.backBtn}>
+                  <Feather name="arrow-left" size={20} color={C.primary} />
+                </TouchableOpacity>
+                <Text style={manageMenu.editTitle}>Edit Meal</Text>
               </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: "80%" }}>
-                {menuMeals.map((meal) => (
-                  <View key={meal.id} style={manageMenu.mealRow}>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <Text style={manageMenu.mealName}>{meal.name}</Text>
-                        <View style={[manageMenu.periodPill, { backgroundColor: getPeriodColor(meal.mealperiod || meal.mealPeriod) + "18" }]}>
-                          <Text style={[manageMenu.periodPillText, { color: getPeriodColor(meal.mealperiod || meal.mealPeriod) }]}>
-                            {meal.mealperiod || meal.mealPeriod || "—"}
-                          </Text>
-                        </View>
-                        {(meal.seasonal || meal.isSeasonal) && (
-                          <View style={manageMenu.seasonalBadge}>
-                            <Feather name="star" size={10} color="#c2410c" />
-                            <Text style={manageMenu.seasonalBadgeText}>Seasonal</Text>
-                          </View>
-                        )}
+
+              <Text style={manageMenu.label}>Meal Name *</Text>
+              <TextInput style={manageMenu.input} value={editName} onChangeText={setEditName} placeholder="Meal name" placeholderTextColor="#ABABAB" />
+
+              <Text style={manageMenu.label}>Description</Text>
+              <TextInput style={[manageMenu.input, { height: 80, textAlignVertical: "top" }]} value={editDesc} onChangeText={setEditDesc} placeholder="Description" placeholderTextColor="#ABABAB" multiline />
+
+              <Text style={manageMenu.label}>Meal Period</Text>
+              <View style={manageMenu.periodRow}>
+                {PERIOD_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[manageMenu.periodChip, editPeriod === opt.value && { backgroundColor: opt.color + "20", borderColor: opt.color }]}
+                    onPress={() => setEditPeriod(opt.value)}
+                  >
+                    <Feather name={opt.icon} size={13} color={editPeriod === opt.value ? opt.color : C.textMuted} />
+                    <Text style={[manageMenu.periodChipText, editPeriod === opt.value && { color: opt.color, fontWeight: "700" }]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={manageMenu.sectionLabel}>NUTRITION</Text>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={manageMenu.label}>Calories</Text>
+                  <TextInput style={manageMenu.input} value={editCalories} onChangeText={setEditCalories} placeholder="e.g. 320" placeholderTextColor="#ABABAB" keyboardType="numeric" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={manageMenu.label}>Sodium (mg)</Text>
+                  <TextInput style={manageMenu.input} value={editSodium} onChangeText={setEditSodium} placeholder="e.g. 540" placeholderTextColor="#ABABAB" keyboardType="numeric" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={manageMenu.label}>Protein (g)</Text>
+                  <TextInput style={manageMenu.input} value={editProtein} onChangeText={setEditProtein} placeholder="e.g. 22" placeholderTextColor="#ABABAB" keyboardType="numeric" />
+                </View>
+              </View>
+
+              <Text style={manageMenu.label}>Tags</Text>
+              <TextInput style={manageMenu.input} value={editTags} onChangeText={setEditTags} placeholder="e.g. Vegetarian, Low Sodium" placeholderTextColor="#ABABAB" />
+
+              <Text style={manageMenu.label}>Image URL</Text>
+              <TextInput style={manageMenu.input} value={editImageUrl} onChangeText={setEditImageUrl} placeholder="https://example.com/photo.jpg" placeholderTextColor="#ABABAB" autoCapitalize="none" keyboardType="url" />
+
+              <View style={manageMenu.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={manageMenu.toggleLabel}>Seasonal</Text>
+                  <Text style={manageMenu.toggleSub}>Limited-time special</Text>
+                </View>
+                <Switch value={editSeasonal} onValueChange={setEditSeasonal} trackColor={{ false: C.border, true: "#c2410c88" }} thumbColor={editSeasonal ? "#c2410c" : "#FFF"} />
+              </View>
+
+              <View style={manageMenu.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={manageMenu.toggleLabel}>Available</Text>
+                  <Text style={manageMenu.toggleSub}>Show on resident menu</Text>
+                </View>
+                <Switch value={editAvailable} onValueChange={setEditAvailable} trackColor={{ false: C.border, true: C.primary + "88" }} thumbColor={editAvailable ? C.primary : "#FFF"} />
+              </View>
+
+              <TouchableOpacity style={manageMenu.saveBtn} onPress={handleSaveEdit}>
+                <Feather name="check" size={18} color="#FFF" />
+                <Text style={manageMenu.saveBtnText}>Save Changes</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : menuLoading ? (
+            <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 60 }} />
+          ) : filteredMenuMeals.length === 0 ? (
+            <View style={manageMenu.empty}>
+              <Feather name="inbox" size={40} color={C.border} />
+              <Text style={manageMenu.emptyText}>
+                {menuFilter === "All" ? "No meals in the database" : `No ${menuFilter} meals`}
+              </Text>
+            </View>
+          ) : (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+              {filteredMenuMeals.map((meal) => (
+                <TouchableOpacity key={meal.id} style={manageMenu.mealRow} onPress={() => openEditMeal(meal)} activeOpacity={0.7}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <Text style={manageMenu.mealName}>{meal.name}</Text>
+                      <View style={[manageMenu.periodPill, { backgroundColor: getPeriodColor(meal.mealperiod || meal.mealPeriod) + "18" }]}>
+                        <Text style={[manageMenu.periodPillText, { color: getPeriodColor(meal.mealperiod || meal.mealPeriod) }]}>
+                          {meal.mealperiod || meal.mealPeriod || "—"}
+                        </Text>
                       </View>
-                      {meal.description ? (
-                        <Text style={manageMenu.mealDesc} numberOfLines={2}>{meal.description}</Text>
+                      {(meal.seasonal || meal.isSeasonal) && (
+                        <View style={manageMenu.seasonalBadge}>
+                          <Feather name="star" size={10} color="#c2410c" />
+                          <Text style={manageMenu.seasonalBadgeText}>Seasonal</Text>
+                        </View>
+                      )}
+                      {meal.available === false && (
+                        <View style={manageMenu.unavailBadge}>
+                          <Text style={manageMenu.unavailBadgeText}>Unavailable</Text>
+                        </View>
+                      )}
+                    </View>
+                    {meal.description ? (
+                      <Text style={manageMenu.mealDesc} numberOfLines={2}>{meal.description}</Text>
+                    ) : null}
+                    <View style={{ flexDirection: "row", gap: 12, marginTop: 4, alignItems: "center" }}>
+                      {(meal.calories != null && meal.calories > 0) && (
+                        <Text style={manageMenu.mealStat}>{meal.calories} cal</Text>
+                      )}
+                      {meal.tags ? (
+                        <Text style={manageMenu.mealStat} numberOfLines={1}>{typeof meal.tags === "string" ? meal.tags : ""}</Text>
                       ) : null}
-                      <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-                        {(meal.calories != null && meal.calories > 0) && (
-                          <Text style={manageMenu.mealStat}>{meal.calories} cal</Text>
-                        )}
-                        {meal.tags ? (
-                          <Text style={manageMenu.mealStat} numberOfLines={1}>{typeof meal.tags === "string" ? meal.tags : ""}</Text>
-                        ) : null}
+                      <View style={{ marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Feather name="edit-2" size={13} color={C.textMuted} />
+                        <Text style={{ fontSize: 12, color: C.textMuted, fontWeight: "600" }}>Edit</Text>
                       </View>
                     </View>
-                    <TouchableOpacity
-                      style={manageMenu.deleteBtn}
-                      onPress={() => handleDeleteMeal(meal)}
-                    >
-                      <Feather name="trash-2" size={18} color={C.danger} />
-                    </TouchableOpacity>
                   </View>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
+                  <TouchableOpacity
+                    style={manageMenu.deleteBtn}
+                    onPress={() => handleDeleteMeal(meal)}
+                  >
+                    <Feather name="trash-2" size={18} color={C.danger} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </SafeAreaView>
       </Modal>
 
     </SafeAreaView>
@@ -2627,29 +2795,25 @@ const msgPanel = StyleSheet.create({
   },
 });
 
-// ─── Manage Menu Modal Styles ─────────────────────────────────────────────────
+// ─── Manage Menu Styles ───────────────────────────────────────────────────────
 const manageMenu = StyleSheet.create({
-  overlay: {
+  page: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
-    maxHeight: "85%",
+    backgroundColor: C.background,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: C.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
   },
   title: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "800",
     color: C.text,
   },
@@ -2660,65 +2824,101 @@ const manageMenu = StyleSheet.create({
     paddingVertical: 3,
   },
   countBadgeText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: C.primary,
   },
   refreshBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: C.primaryLight,
     alignItems: "center",
     justifyContent: "center",
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: C.inputBg,
     alignItems: "center",
     justifyContent: "center",
   },
+  // Tabs
+  tabScroll: {
+    backgroundColor: C.surface,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    marginRight: 8,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: C.textMuted,
+  },
+  tabCount: {
+    backgroundColor: C.inputBg,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+  },
+  tabCountText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: C.textMuted,
+  },
+  // Meal list
   empty: {
     alignItems: "center",
-    paddingVertical: 40,
-    gap: 10,
+    paddingVertical: 60,
+    gap: 12,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 16,
     color: C.textMuted,
     fontWeight: "600",
   },
   mealRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.inputBg,
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 18,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: C.border,
   },
   mealName: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
     color: C.text,
   },
   mealDesc: {
-    fontSize: 13,
+    fontSize: 14,
     color: C.textMuted,
-    marginTop: 3,
+    marginTop: 4,
   },
   mealStat: {
-    fontSize: 12,
+    fontSize: 13,
     color: C.textMuted,
     fontWeight: "600",
   },
   periodPill: {
     borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   periodPillText: {
     fontSize: 12,
@@ -2730,17 +2930,28 @@ const manageMenu = StyleSheet.create({
     gap: 3,
     backgroundColor: "#c2410c15",
     borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   seasonalBadgeText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#c2410c",
   },
+  unavailBadge: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  unavailBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: C.danger,
+  },
   deleteBtn: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: C.dangerBg,
     alignItems: "center",
@@ -2748,6 +2959,108 @@ const manageMenu = StyleSheet.create({
     marginLeft: 12,
     borderWidth: 1,
     borderColor: "#FECACA",
+  },
+  // Edit form
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: C.text,
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: C.text,
+    marginBottom: 6,
+    marginTop: 14,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: C.primary,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginTop: 22,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: C.inputBg,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: C.text,
+  },
+  periodRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  periodChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  periodChipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: C.textMuted,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.inputBg,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 14,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: C.text,
+  },
+  toggleSub: {
+    fontSize: 12,
+    color: C.textMuted,
+    marginTop: 1,
+  },
+  saveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: C.primary,
+    paddingVertical: 17,
+    borderRadius: 16,
+    marginTop: 26,
+    shadowColor: C.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  saveBtnText: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#FFF",
   },
 });
 
