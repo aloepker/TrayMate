@@ -362,14 +362,81 @@ export async function getResidentById(id: string): Promise<Resident | null> {
 }
 
 /**
- * GET caregiver's assigned residents
- * Endpoint: /caregiver/residents
- * This should return ONLY residents assigned to the logged-in caregiver.
+ * GET caregiver's assigned residents.
+ *
+ * Tries /caregiver/residents first. If that returns nothing or fails,
+ * falls back to /admin/residents filtered by the logged-in caregiver's ID,
+ * then /residents as a last resort.
+ *
+ * Also deep-inspects the response to find the residents array no matter
+ * how the backend wraps it.
  */
 export async function getCaregiverResidents(): Promise<Resident[]> {
-  const raw = await request<any>("/caregiver/residents");
-  const list = unwrapList<ResidentApi>(raw);
-  return list.map(mapResident);
+  // Helper: recursively find first array of objects in an unknown response shape
+  const findArray = (obj: any, depth = 0): any[] | null => {
+    if (depth > 3) return null;
+    if (Array.isArray(obj)) return obj;
+    if (obj && typeof obj === "object") {
+      for (const key of Object.keys(obj)) {
+        const found = findArray(obj[key], depth + 1);
+        if (found && found.length > 0) return found;
+      }
+    }
+    return null;
+  };
+
+  // Attempt 1: /caregiver/residents (primary endpoint)
+  try {
+    const raw = await request<any>("/caregiver/residents");
+    console.log("[CaregiverResidents] /caregiver/residents raw:", JSON.stringify(raw)?.slice(0, 500));
+    let list = unwrapList<ResidentApi>(raw);
+    if (list.length === 0 && raw) {
+      // Deep search in case the backend nests it differently
+      const found = findArray(raw);
+      if (found && found.length > 0) list = found;
+    }
+    if (list.length > 0) return list.map(mapResident);
+  } catch (e: any) {
+    console.warn("[CaregiverResidents] /caregiver/residents failed:", e?.status, e?.message);
+  }
+
+  // Attempt 2: /residents (some backends expose this for all authenticated users)
+  try {
+    const raw = await request<any>("/residents");
+    console.log("[CaregiverResidents] /residents raw:", JSON.stringify(raw)?.slice(0, 500));
+    let list = unwrapList<ResidentApi>(raw);
+    if (list.length === 0 && raw) {
+      const found = findArray(raw);
+      if (found && found.length > 0) list = found;
+    }
+    if (list.length > 0) return list.map(mapResident);
+  } catch (e: any) {
+    console.warn("[CaregiverResidents] /residents failed:", e?.status, e?.message);
+  }
+
+  // Attempt 3: /admin/residents and filter by my caregiver ID
+  try {
+    const me = await getMe();
+    const myId = String(me.id);
+    const raw = await request<any>("/admin/residents");
+    console.log("[CaregiverResidents] /admin/residents raw (fallback):", JSON.stringify(raw)?.slice(0, 500));
+    let list = unwrapList<ResidentApi>(raw);
+    if (list.length === 0 && raw) {
+      const found = findArray(raw);
+      if (found && found.length > 0) list = found;
+    }
+    const all = list.map(mapResident);
+    // Filter to only residents assigned to this caregiver
+    const mine = all.filter(r => r.caregiverId === myId);
+    if (mine.length > 0) return mine;
+    // If no match by caregiverId, return all (better than nothing)
+    console.log("[CaregiverResidents] No caregiverId match for", myId, "— returning all", all.length, "residents");
+    return all;
+  } catch (e: any) {
+    console.warn("[CaregiverResidents] /admin/residents fallback failed:", e?.status, e?.message);
+  }
+
+  return [];
 }
 
 

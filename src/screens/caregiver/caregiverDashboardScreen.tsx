@@ -126,23 +126,30 @@ export default function CaregiverDashboardScreen({
       try {
         setLoading(true);
 
-        // Get my ID so we can read the reverse-map from storage
-        const me = await getMe();
-        const myId = String(me.id);
+        // Get my ID for storage lookups
+        let myId: string | null = null;
+        try {
+          const me = await getMe();
+          myId = String(me.id);
+        } catch (e) {
+          console.warn("[CaregiverDashboard] getMe failed:", e);
+        }
 
-        // Fetch from backend + storage in parallel
-        const [backendResidents, storedResidents, notifResult] = await Promise.allSettled([
+        // Fetch from all sources in parallel
+        const [backendResult, storedResult, notifResult] = await Promise.allSettled([
           getCaregiverResidents(),
-          getCaregiverResidentList(myId),
+          myId ? getCaregiverResidentList(myId) : Promise.resolve([]),
           getCaregiverNotifications(),
         ]);
 
         const backendList: Resident[] =
-          backendResidents.status === "fulfilled" ? backendResidents.value ?? [] : [];
+          backendResult.status === "fulfilled" ? backendResult.value ?? [] : [];
 
-        // Merge storage residents (assigned via admin multi-caregiver) with backend list
+        console.log("[CaregiverDashboard] Backend returned", backendList.length, "residents");
+
+        // Merge storage residents with backend list (dedup by id)
         const storedList =
-          storedResidents.status === "fulfilled" ? storedResidents.value : [];
+          storedResult.status === "fulfilled" ? storedResult.value : [];
         const mergedMap = new Map<string, Resident>();
         for (const r of backendList) mergedMap.set(r.id, r);
         for (const s of storedList) {
@@ -168,6 +175,7 @@ export default function CaregiverDashboardScreen({
           setNotifications(notifData);
         }
       } catch (e: any) {
+        console.warn("[CaregiverDashboard] loadDashboard error:", e);
         if (!cancelled) {
           Alert.alert(
             "Failed to load caregiver dashboard",
