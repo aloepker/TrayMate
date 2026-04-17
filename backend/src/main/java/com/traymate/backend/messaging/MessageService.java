@@ -70,36 +70,6 @@ public class MessageService {
         return messages;
     }
 
-//     public List<ChatResponse> getChats(Long userId){
-
-//         List<Message> allMessages =
-//                 repository.findBySenderIdOrReceiverIdOrderByCreatedAtDesc(userId, userId);
-
-//         Map<Long, Message> latestChats = new HashMap<>();
-
-//         for (Message msg : allMessages) {
-
-//             Long otherUserId = msg.getSenderId().equals(userId)
-//                     ? msg.getReceiverId()
-//                     : msg.getSenderId();
-
-//             //keep only latest message per user
-//             if (!latestChats.containsKey(otherUserId)) {
-//                 latestChats.put(otherUserId, msg);
-//             }
-//         }
-
-//         //convert to DTO
-//         return latestChats.values().stream()
-//                 .map(msg -> ChatResponse.builder()
-//                         .id(msg.getId())
-//                         .content(msg.getContent())
-//                         .createdAt(msg.getCreatedAt())
-//                         .isRead(msg.getIsRead())
-//                         .build())
-//                 .toList();
-//     }
-
         //new chat function
         public List<ChatResponse> getChats(Long userId) {
 
@@ -147,6 +117,19 @@ public class MessageService {
                                         .build();
                         })
                         .toList();
+        }
+
+        //delete a single message
+        public void deleteMessage(Long messageId){
+                repository.deleteById(messageId);
+        }
+
+        //delete chat (full conversation)
+        public void deleteChat(Long userId, Long otherUserId){
+                repository.deleteBySenderIdAndReceiverIdOrReceiverIdAndSenderId(
+                        userId, otherUserId,
+                        otherUserId, userId
+                );
         }
     
 }
