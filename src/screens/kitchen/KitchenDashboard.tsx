@@ -21,7 +21,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
-import { getResidents, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, removeOrderApi } from "../../services/api";
+import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, removeOrderApi, setMealAvailability } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -798,22 +798,53 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     return () => clearInterval(iv);
   }, []);
 
-  // ── match a userId to a resident ──
+  // ── STRICT resident lookup ──
+  // Only match by backend user id. Previously we fell back to name / room,
+  // which caused orders to show the WRONG resident's room number (false
+  // positives where userId "20" matched a resident whose room was "20").
+  // The backend is the source of truth — if the id isn't in the cache we
+  // hydrate it on-demand below, and never guess.
   const findResident = useCallback((userId: string): ApiResident | undefined => {
     if (!userId) return undefined;
     const uid = String(userId).trim();
-    // exact id match (string comparison)
-    const exact = backendResidents.find((r) => String(r.id).trim() === uid);
-    if (exact) return exact;
-    // by name (exact)
-    const byName = backendResidents.find((r) => r.name.toLowerCase() === uid.toLowerCase());
-    if (byName) return byName;
-    // by name (partial)
-    const partial = backendResidents.find((r) => r.name.toLowerCase().includes(uid.toLowerCase()));
-    if (partial) return partial;
-    // by room number
-    return backendResidents.find((r) => String(r.room).trim() === uid);
+    return backendResidents.find((r) => String(r.id).trim() === uid);
   }, [backendResidents]);
+
+  // ── on-demand hydration: fetch any resident referenced by an order
+  // that isn't in the cache yet. Runs whenever orders or the cache changes.
+  // Prevents "Resident unknown" flashes after a new resident is added in
+  // admin but before the full list refresh runs.
+  const hydratingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const known = new Set(backendResidents.map((r) => String(r.id).trim()));
+    const missing = Array.from(
+      new Set(
+        orders
+          .map((o) => String(o.order.userId ?? "").trim())
+          .filter((uid) => uid && !known.has(uid) && !hydratingRef.current.has(uid)),
+      ),
+    );
+    if (missing.length === 0) return;
+
+    missing.forEach((uid) => hydratingRef.current.add(uid));
+    (async () => {
+      const fetched: ApiResident[] = [];
+      for (const uid of missing) {
+        try {
+          const r = await getResidentById(uid);
+          if (r) fetched.push(r);
+        } catch { /* silently skip — will retry next orders refresh */ }
+        hydratingRef.current.delete(uid);
+      }
+      if (fetched.length > 0) {
+        setBackendResidents((prev) => {
+          const byId = new Map(prev.map((r) => [String(r.id), r] as const));
+          fetched.forEach((r) => byId.set(String(r.id), r));
+          return Array.from(byId.values());
+        });
+      }
+    })();
+  }, [orders, backendResidents]);
 
   // ── logout ──
   const handleLogout = () => {
@@ -1099,6 +1130,40 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     }
   };
 
+  // Inline quick-toggle for a meal's `available` flag. Optimistically flips
+  // local state so the UI feels instant, then persists to the backend via
+  // PUT /admin/menu/:id. Because residents' browseMealOptionsScreen filters
+  // meals with `isAvailable !== false`, a successful persist here will hide
+  // the meal on every resident's menu on their next fetch.
+  const [togglingMealIds, setTogglingMealIds] = useState<Set<string | number>>(new Set());
+  const handleToggleMealAvailability = async (meal: any) => {
+    const id = meal.id;
+    if (togglingMealIds.has(id)) return;
+    const nextAvailable = meal.available === false; // flip
+    // Optimistic update
+    setMenuMeals((prev) => prev.map((m) => (m.id === id ? { ...m, available: nextAvailable } : m)));
+    setTogglingMealIds((prev) => {
+      const n = new Set(prev);
+      n.add(id);
+      return n;
+    });
+    try {
+      // Use the kitchen-scoped endpoint so ROLE_KITCHEN_STAFF doesn't 403
+      // on the admin-only /admin/menu/:id PUT route.
+      await setMealAvailability(Number(id), nextAvailable);
+    } catch (e: any) {
+      // Revert on failure
+      setMenuMeals((prev) => prev.map((m) => (m.id === id ? { ...m, available: !nextAvailable } : m)));
+      Alert.alert("Error", "Could not update availability: " + (e?.message ?? "unknown"));
+    } finally {
+      setTogglingMealIds((prev) => {
+        const n = new Set(prev);
+        n.delete(id);
+        return n;
+      });
+    }
+  };
+
   const filteredMenuMeals = menuFilter === "All"
     ? menuMeals
     : menuMeals.filter((m) => normalizePeriod(m.mealperiod || m.mealPeriod) === menuFilter);
@@ -1112,6 +1177,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     const roomStr = resident?.room ? ` (Room ${resident.room})` : "";
     // Prefer the resident record ID so caregiver filtering matches reliably.
     const ridForMsg = String(resident?.id ?? item.order.userId);
+    // Safe display name — never leak raw userId into user-facing strings.
+    const safeName = resident?.name?.trim() || "Resident";
+    const safeRoom = resident?.room?.trim() || "—";
     const trimmed = replyText.trim();
     const isSubstitution = /^substitution/i.test(trimmed);
     const kitchenName = loggedInEmail ?? "Kitchen Staff";
@@ -1119,7 +1187,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     // Primary message to resident (also visible to caregiver via shared context)
     sendMessage({
       residentId: ridForMsg,
-      residentName: resident?.name ?? item.order.userId,
+      residentName: safeName,
       residentRoom: resident?.room ?? "",
       orderId,
       fromRole: "kitchen",
@@ -1133,17 +1201,17 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     if (isSubstitution) {
       sendMessage({
         residentId: ridForMsg,
-        residentName: resident?.name ?? item.order.userId,
+        residentName: safeName,
         residentRoom: resident?.room ?? "",
         orderId,
         fromRole: "kitchen",
         fromName: `Kitchen · ${kitchenName}`,
-        text: `[Caregiver Alert] Substitution requested for Order #${orderId} (${resident?.name ?? 'resident'}, Room ${resident?.room ?? '—'}) at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${trimmed.replace(/^substitution[:\s]*/i, '').trim()}`,
+        text: `[Caregiver Alert] Substitution requested for Order #${orderId} (${safeName}, Room ${safeRoom}) at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${trimmed.replace(/^substitution[:\s]*/i, '').trim()}`,
         channel: 'order',
       });
     }
 
-    Alert.alert("Sent", `Message sent for ${resident?.name ?? item.order.userId}${roomStr}'s order #${orderId}.`);
+    Alert.alert("Sent", `Message sent for ${safeName}${roomStr} · Order #${orderId}.`);
     setReplyText("");
     setReplyingTo(null);
   };
@@ -1305,7 +1373,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const allergies = resident?.foodAllergies ?? [];
             const dietary   = resident?.dietaryRestrictions ?? [];
             const medical   = resident?.medicalConditions ?? [];
-            const initials  = (resident?.name ?? item.order.userId).slice(0, 2).toUpperCase();
+            const residentDisplayName = resident?.name?.trim() || "";
+            const roomDisplay = resident?.room?.trim() || "—";
+            const initials  = (resident?.name ?? "?").slice(0, 2).toUpperCase();
             const orderPeriod = item.order.mealOfDay || "Breakfast";
             const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
             const orderNote = item.order.note || item.order.specialInstructions || "";
@@ -1327,24 +1397,34 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
                 {/* ── Top row: room + resident + period + status ── */}
                 <View style={s.cardTop}>
-                  {/* Room number avatar (prominent) */}
-                  <View style={[s.residentAvatar, { backgroundColor: pa.light }]}>
-                    <Feather name="home" size={12} color={pa.color} />
-                    <Text style={[s.residentInitials, { color: pa.color, fontSize: 13 }]}>
-                      {resident?.room ?? "—"}
+                  {/* Prominent ROOM badge — source of truth is backend admin
+                      roster, never the raw order userId. */}
+                  <View style={[s.roomBadge, { backgroundColor: pa.light, borderColor: pa.color }]}>
+                    <Text style={[s.roomBadgeLabel, { color: pa.color }]}>ROOM</Text>
+                    <Text
+                      style={[
+                        s.roomBadgeNumber,
+                        { color: pa.color },
+                        roomDisplay === "—" && s.roomBadgeNumberPending,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {roomDisplay}
                     </Text>
                   </View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    {/* Resident name + room label */}
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Text style={s.residentName}>{resident?.name ?? item.order.userId}</Text>
-                      {resident?.room ? (
-                        <Text style={s.roomLabel}>Room {resident.room}</Text>
-                      ) : null}
-                    </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    {/* Resident name — only rendered once hydrated */}
+                    {residentDisplayName ? (
+                      <Text style={s.residentName} numberOfLines={1}>
+                        {residentDisplayName}
+                      </Text>
+                    ) : null}
                     {/* Order # + period pill */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <Text style={s.orderId}>Order #{item.order.id}</Text>
+                      <View style={s.orderIdPill}>
+                        <Feather name="hash" size={10} color={C.textMuted} />
+                        <Text style={s.orderIdPillText}>Order {item.order.id}</Text>
+                      </View>
                       <View style={[s.periodPill, { backgroundColor: pa.light, borderColor: pa.color }]}>
                         <Feather name={pa.icon as any} size={9} color={pa.color} />
                         <Text style={[s.periodPillText, { color: pa.color }]}>{orderPeriod}</Text>
@@ -1500,7 +1580,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                               // 1) Notify resident (shown on their upcoming-meals screen)
                               sendMessage({
                                 residentId: ridForMsg,
-                                residentName: resident?.name ?? item.order.userId,
+                                residentName: resident?.name?.trim() || 'Resident',
                                 residentRoom: resident?.room ?? '',
                                 orderId: item.order.id,
                                 fromRole: 'kitchen',
@@ -1515,12 +1595,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                               // prominently on their bell icon.
                               sendMessage({
                                 residentId: ridForMsg,
-                                residentName: resident?.name ?? item.order.userId,
+                                residentName: resident?.name?.trim() || 'Resident',
                                 residentRoom: resident?.room ?? '',
                                 orderId: item.order.id,
                                 fromRole: 'kitchen',
                                 fromName: `Kitchen · ${kitchenName}`,
-                                text: `[Caregiver Alert] Order #${item.order.id} for ${resident?.name ?? 'resident'} (Room ${resident?.room ?? '—'}) was CANCELLED by the kitchen at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+                                text: `[Caregiver Alert] Order #${item.order.id} for ${resident?.name?.trim() || 'resident'} (Room ${resident?.room?.trim() || '—'}) was CANCELLED by the kitchen at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
                                 channel: 'order',
                               });
                             },
@@ -1888,8 +1968,28 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       </View>
                     </View>
 
-                    {/* Action buttons */}
-                    <View style={{ alignItems: "center", gap: 8 }}>
+                    {/* Action buttons — availability toggle + edit + delete.
+                        All three share the 40x40 rounded-square shape so they
+                        read as a single cohesive control column. */}
+                    <View style={manageMenu.actionCol}>
+                      <TouchableOpacity
+                        style={[
+                          manageMenu.availBtn,
+                          meal.available === false && manageMenu.availBtnOff,
+                          togglingMealIds.has(meal.id) && { opacity: 0.6 },
+                        ]}
+                        onPress={() => handleToggleMealAvailability(meal)}
+                        activeOpacity={0.7}
+                        accessibilityLabel={meal.available === false ? "Make meal available" : "Hide meal from residents"}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: meal.available !== false }}
+                      >
+                        <Feather
+                          name={meal.available === false ? "eye-off" : "eye"}
+                          size={16}
+                          color={meal.available === false ? C.textMuted : C.primary}
+                        />
+                      </TouchableOpacity>
                       <TouchableOpacity style={manageMenu.editBtn} onPress={() => openEditMeal(meal)}>
                         <Feather name="edit-2" size={16} color={C.primary} />
                       </TouchableOpacity>
@@ -2171,6 +2271,33 @@ const s = StyleSheet.create({
     fontWeight: "800",
     color: C.primary,
   },
+  // Prominent ROOM badge — labelled, rectangular, easy to read from a few feet
+  // away at the cook's station. Color comes from the meal-period accent.
+  roomBadge: {
+    minWidth: 56,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roomBadgeLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    opacity: 0.85,
+  },
+  roomBadgeNumber: {
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 22,
+    marginTop: 1,
+  },
+  roomBadgeNumberPending: {
+    fontSize: 16,
+    opacity: 0.6,
+  },
   residentName: {
     fontSize: 16,
     fontWeight: "700",
@@ -2180,6 +2307,25 @@ const s = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: C.textMuted,
+  },
+  // Clean bordered chip for the order number so it reads as a distinct
+  // piece of info, not a stray caption.
+  orderIdPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  orderIdPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: C.textMuted,
+    letterSpacing: 0.3,
   },
   roomText: {
     fontSize: 12,
@@ -3095,6 +3241,13 @@ const manageMenu = StyleSheet.create({
     fontWeight: "700",
     color: C.danger,
   },
+  // Vertical action stack on each meal row. Tight gap so the three 40x40
+  // squares read as one control.
+  actionCol: {
+    alignItems: "center",
+    gap: 6,
+    marginLeft: 4,
+  },
   editBtn: {
     width: 40,
     height: 40,
@@ -3114,6 +3267,23 @@ const manageMenu = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#FECACA",
+  },
+  // Availability quick-toggle — matches editBtn sizing so it blends with the
+  // rest of the action column. Green-ish (primaryLight) when available,
+  // neutral muted when hidden.
+  availBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: C.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#D8D5C0",
+  },
+  availBtnOff: {
+    backgroundColor: C.inputBg,
+    borderColor: C.border,
   },
   // Edit form
   editHeader: {

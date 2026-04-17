@@ -828,6 +828,20 @@ export async function deleteMeal(mealId: number): Promise<void> {
   return request<void>(`/admin/menu/${mealId}`, { method: "DELETE" });
 }
 
+/**
+ * Kitchen-facing quick toggle for the `available` flag on a meal.
+ * Hits PATCH /menu/:id/availability (NOT /admin/...) because that admin
+ * prefix is locked to ROLE_ADMIN server-side; this route is method-gated
+ * to ROLE_ADMIN + ROLE_KITCHEN_STAFF so kitchen staff can flip it from
+ * the dashboard without 403-ing.
+ */
+export async function setMealAvailability(mealId: number, available: boolean): Promise<any> {
+  return request<any>(`/menu/${mealId}/availability`, {
+    method: "PATCH",
+    body: JSON.stringify({ available }),
+  });
+}
+
 export async function getAllMenuMeals(): Promise<any[]> {
   const data = await request<any>("/menu");
   return Array.isArray(data) ? data : [];

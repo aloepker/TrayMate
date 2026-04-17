@@ -15,6 +15,13 @@ import { useSettings } from './context/SettingsContext';
 import { useKitchenMessages } from './context/KitchenMessageContext';
 import { translateMealName } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
+import { useMealtimeReminder } from '../hooks/useMealtimeReminder';
+import MealtimeReminderBanner from './components/MealtimeReminderBanner';
+import {
+  initNotifications,
+  scheduleMealtimeReminders,
+  cancelAllMealtimeReminders,
+} from '../services/notificationService';
 
 const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount, getOrdersForResident } = useCart();
@@ -27,6 +34,27 @@ const HomeScreen = ({ navigation, route }: any) => {
   useEffect(() => {
     setCurrentResidentId(route?.params?.residentId ?? null);
   }, [route?.params?.residentId, setCurrentResidentId]);
+
+  // Schedule OS-level daily mealtime notifications for this resident.
+  // They fire even when the app is closed. Re-runs whenever the active
+  // resident changes so the notification body uses their name.
+  useEffect(() => {
+    let cancelled = false;
+    const setup = async () => {
+      const name = route?.params?.residentName ?? 'you';
+      const granted = await initNotifications();
+      if (cancelled) return;
+      if (granted && route?.params?.residentId) {
+        await scheduleMealtimeReminders(name);
+      } else if (!route?.params?.residentId) {
+        await cancelAllMealtimeReminders();
+      }
+    };
+    setup();
+    return () => {
+      cancelled = true;
+    };
+  }, [route?.params?.residentId, route?.params?.residentName]);
 
   // Get resident info from navigation params (set by admin dashboard)
   const residentId = route?.params?.residentId as string | undefined;
@@ -87,9 +115,29 @@ const HomeScreen = ({ navigation, route }: any) => {
     });
   };
 
+  // Mealtime reminder — nudge resident before each meal if not yet ordered
+  const { reminder, dismiss: dismissReminder } = useMealtimeReminder(
+    residentOrders,
+    residentName,
+    !!residentId,
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F3EF" />
+
+      {/* Mealtime reminder banner (floats above content) */}
+      <MealtimeReminderBanner
+        visible={!!reminder}
+        title={reminder?.title ?? ''}
+        body={reminder?.body ?? ''}
+        emoji={reminder?.emoji ?? '🍽️'}
+        onPress={() => {
+          dismissReminder();
+          navWithResident('BrowseMealOptions');
+        }}
+        onDismiss={dismissReminder}
+      />
 
       <ScrollView
         style={styles.scrollView}

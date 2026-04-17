@@ -56,6 +56,7 @@ import {
 } from "../services/geminiService";
 
 import { geminiChat } from "../services/geminiService";
+import { getUnsafeReason } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
@@ -1209,40 +1210,50 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   // Check if a meal conflicts with the resident's dietary profile
-  const getRestrictionConflicts = (meal: Meal): string[] => {
-    const allRestrictions: string[] = [
-      ...(route?.params?.dietaryRestrictions ?? []),
-      ...(route?.params?.foodAllergies ?? []),
-    ];
-    if (allRestrictions.length === 0) return [];
-    const allergens = (meal.allergens ?? []).map((a: string) => a.toLowerCase());
-    return allRestrictions.filter(r =>
-      allergens.some(a => a.includes(r.toLowerCase()) || r.toLowerCase().includes(a))
-    );
+  // Resident safety profile pulled from the navigation params that the
+  // login/home flow attaches. The centralised safety service consumes
+  // these arrays directly — keeping logic out of this file.
+  const residentSafetyProfile = {
+    foodAllergies: (route?.params?.foodAllergies ?? []) as string[],
+    dietaryRestrictions: (route?.params?.dietaryRestrictions ?? []) as string[],
+    medicalConditions: (route?.params?.medicalConditions ?? []) as string[],
   };
 
-  // Add meal (and optional drink) to cart from detail modal — with dietary warning
+  /** Centralised safety check — returns a human reason or null. */
+  const getMealUnsafeReason = (meal: Meal | null | undefined): string | null => {
+    if (!meal) return null;
+    return getUnsafeReason(meal as any, residentSafetyProfile);
+  };
+
+  // Add meal (and optional drink/side) to cart from detail modal.
+  // STRICT: if the resident's profile bans this meal, we refuse to add.
+  // There is no "Order Anyway" escape hatch — the kitchen substitute
+  // flow is the right tool for an intentional override.
   const handleAddToCartFromModal = () => {
     if (!selectedMeal) return;
-    const conflicts = getRestrictionConflicts(selectedMeal);
-    const doAdd = () => {
-      addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
-      if (selectedDrink) addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
-      if (selectedSide)  addToCart({ ...selectedSide,  id: parseInt(selectedSide.id)  });
-      setShowMealDetail(false);
-    };
-    if (conflicts.length > 0) {
+
+    // Check the main meal AND any attached drink/side — all must be safe.
+    const mainReason  = getMealUnsafeReason(selectedMeal);
+    const drinkReason = getMealUnsafeReason(selectedDrink);
+    const sideReason  = getMealUnsafeReason(selectedSide);
+    const firstUnsafe =
+      (mainReason  && { label: selectedMeal.name,  reason: mainReason })  ||
+      (drinkReason && { label: selectedDrink!.name, reason: drinkReason }) ||
+      (sideReason  && { label: selectedSide!.name,  reason: sideReason });
+
+    if (firstUnsafe) {
       Alert.alert(
-        '⚠️ Dietary Restriction Alert',
-        `This meal contains: ${conflicts.join(', ')}.\n\nThis conflicts with the resident\'s recorded profile. Do you still want to order?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Order Anyway', style: 'destructive', onPress: doAdd },
-        ],
+        'Not safe for this resident',
+        `${firstUnsafe.label} is blocked: ${firstUnsafe.reason}.\n\nPlease choose a safe alternative.`,
+        [{ text: 'OK', style: 'default' }],
       );
-    } else {
-      doAdd();
+      return;
     }
+
+    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
+    if (selectedDrink) addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
+    if (selectedSide)  addToCart({ ...selectedSide,  id: parseInt(selectedSide.id)  });
+    setShowMealDetail(false);
   };
 
   // Render individual meal item for FlatList
@@ -1255,18 +1266,32 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const inTimeWindow = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
     const available = kitchenEnabled && inTimeWindow;
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
-    const conflicts = getRestrictionConflicts(item);
-    const hasConflict = conflicts.length > 0;
+    // Centralised safety gate — card is disabled & marked when the resident's
+    // profile bans this meal (allergies / dietary / medical rules).
+    const unsafeReason = getMealUnsafeReason(item);
+    const isUnsafe = unsafeReason !== null;
+    const canTap = available && !isUnsafe;
     return (
       <TouchableOpacity
         style={[
           styles.card,
           { backgroundColor: theme.surface, borderColor: theme.border },
           !available && styles.cardUnavailable,
-          hasConflict && { borderColor: '#FCA5A5', borderWidth: 1.5 },
+          isUnsafe && styles.cardUnsafe,
         ]}
-        activeOpacity={available ? 0.7 : 1}
-        onPress={() => { if (available) openMealDetail(item); }}
+        activeOpacity={canTap ? 0.7 : 1}
+        onPress={() => {
+          if (!available) return;
+          if (isUnsafe) {
+            Alert.alert(
+              'Not safe for this resident',
+              `${item.name} is blocked: ${unsafeReason}.\n\nPlease choose a safe alternative.`,
+              [{ text: 'OK' }],
+            );
+            return;
+          }
+          openMealDetail(item);
+        }}
         disabled={!available}
       >
         {!available && (
@@ -1274,6 +1299,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <Feather name={kitchenEnabled ? "clock" : "slash"} size={13} color="#717644" />
             <Text style={styles.unavailableText}>
               {kitchenEnabled ? `Not available · ${item.time_range}` : 'Not available today'}
+            </Text>
+          </View>
+        )}
+        {isUnsafe && available && (
+          <View style={styles.unsafeOverlay}>
+            <Feather name="alert-triangle" size={12} color="#FFFFFF" />
+            <Text style={styles.unsafeOverlayText} numberOfLines={1}>
+              Not safe · {unsafeReason}
             </Text>
           </View>
         )}
@@ -1306,10 +1339,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <Text style={[styles.cardTitle, { fontSize: scaled(20), color: theme.textPrimary }]}>
               {translateMealName(item.name, language)}
             </Text>
-            {hasConflict && (
+            {isUnsafe && (
               <View style={styles.restrictionBadge}>
                 <Feather name="alert-triangle" size={11} color="#DC2626" />
-                <Text style={styles.restrictionBadgeText}>Restricted</Text>
+                <Text style={styles.restrictionBadgeText}>Not safe</Text>
               </View>
             )}
           </View>
@@ -2453,6 +2486,34 @@ const styles = StyleSheet.create({
   cardUnavailable: {
     borderColor: '#DDD0B8',
     borderStyle: 'dashed',
+  },
+  // Red-tinted card when this meal is unsafe for the resident's profile.
+  cardUnsafe: {
+    borderColor: '#DC2626',
+    borderWidth: 2,
+    opacity: 0.92,
+  },
+  // Top-ribbon overlay announcing exactly why a card is blocked.
+  unsafeOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    right: 10,
+    zIndex: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#DC2626',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  unsafeOverlayText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   unavailableOverlay: {
     position: 'absolute',
