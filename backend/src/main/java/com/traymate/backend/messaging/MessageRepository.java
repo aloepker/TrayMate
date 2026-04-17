@@ -17,4 +17,13 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
         Long sender2, Long receiver2
     );
 
+    //delete one specific message
+    void deleteById(Long id);
+
+    //delete the entire conversation
+    void deleteBySenderIdAndReceiverIdOrReceiverIdAndSenderId(
+        Long senderId1, Long receiverId1,
+        Long senderId2, Long receiverId2
+    );
+
 }
