@@ -1,7 +1,6 @@
 package com.traymate.backend.messaging;
 
 import java.time.LocalDateTime;
-//import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,18 +46,10 @@ public class MessageService {
         return repository.findByReceiverId(receiverId);
     } 
 
-    // public List<Message> getConversation(Long senderId, Long receiverId){
-    //     return repository.findBySenderIdAndReceiverId(senderId, receiverId);
-    // }
-
     //full coversation + mark as read 
     public List<Message> getConversation(Long userId, Long otherUserId){
 
-        List<Message> messages =
-                repository.findBySenderIdAndReceiverIdOrSenderIdAndReceiverIdOrderByCreatedAtAsc(
-                        userId, otherUserId,
-                        otherUserId, userId
-                );
+        List<Message> messages = repository.getConversation(userId, otherUserId);
 
         // auto mark as read
         messages.stream()
@@ -74,7 +65,7 @@ public class MessageService {
         public List<ChatResponse> getChats(Long userId) {
 
                 List<Message> allMessages =
-                        repository.findBySenderIdOrReceiverIdOrderByCreatedAtDesc(userId, userId);
+                        repository.getConversation(userId, userId);
 
                 Map<Long, Message> latestChats = new HashMap<>();
 
@@ -126,10 +117,7 @@ public class MessageService {
 
         //delete chat (full conversation)
         public void deleteChat(Long userId, Long otherUserId){
-                repository.deleteBySenderIdAndReceiverIdOrReceiverIdAndSenderId(
-                        userId, otherUserId,
-                        otherUserId, userId
-                );
+                repository.deleteConversation(userId, otherUserId);
         }
     
 }
