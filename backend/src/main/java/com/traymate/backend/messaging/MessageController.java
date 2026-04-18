@@ -10,45 +10,9 @@ import com.traymate.backend.auth.model.User;
 import com.traymate.backend.messaging.dto.ChatResponse;
 import com.traymate.backend.messaging.dto.MessageResponse;
 import com.traymate.backend.messaging.dto.SendMessageRequest;
+import com.traymate.backend.messaging.dto.UserList;
 
 import lombok.RequiredArgsConstructor;
-
-// @RestController
-// @RequestMapping("/messages")
-// @RequiredArgsConstructor
-// public class MessageController {
-    
-//     private final MessageService service;
-
-//     // SEND MESSAGE
-//     @PostMapping("/send")
-//     public MessageResponse sendMessage(
-//             @RequestBody SendMessageRequest req,
-//             Authentication authentication) {
-
-//         Long senderId = Long.parseLong(authentication.getName());
-
-//         return service.sendMessage(senderId, req);
-//     }
-
-//     // GET INBOX
-//     @GetMapping("/inbox")
-//     public List<Message> getInbox(Authentication authentication) {
-
-//         Long userId = Long.parseLong(authentication.getName());
-
-//         return service.getInbox(userId);
-//     }
-
-//     // GET CONVERSATION BETWEEN TWO USERS
-//     @GetMapping("/conversation")
-//     public List<Message> getConversation(
-//             @RequestParam Long senderId,
-//             @RequestParam Long receiverId) {
-
-//         return service.getConversation(senderId, receiverId);
-//     }
-// }
 
 @RestController
 @RequestMapping("/messages")
@@ -96,14 +60,6 @@ public class MessageController {
         return service.getConversation(user.getId(), otherUserId);
     }
 
-    // @GetMapping("/chats")
-    // public List<Message> getchats(Authentication authentication){
-    //     String email = authentication.getName();
-
-    //     User user = userRepository.findByEmail(email).orElseThrow();
-
-    //     return service.getChats(user.getId());
-    // }
     @GetMapping("/chats")
     public List<ChatResponse> getChats(Authentication authentication) {
 
@@ -113,5 +69,17 @@ public class MessageController {
                 .orElseThrow();
 
         return service.getChats(user.getId());
+    }
+
+    //get list of users to message to 
+    @GetMapping("/users")
+    public List<UserList> getAllUsers(Authentication authentication) {
+
+        String email = authentication.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow();
+
+        return userMessagingService.getAllUsers(user.getId());
     }
 }
