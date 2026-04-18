@@ -82,4 +82,22 @@ public class MessageController {
 
         return userMessagingService.getAllUsers(user.getId());
     }
+
+    //delete a single message
+    @DeleteMapping("/{messageId}")
+    public void deleteMEssage(@PathVariable Long messageId){
+        service.deleteMessage(messageId);
+    }
+
+    //delete conversation
+    @DeleteMapping("/conversation/{otherUserId}")
+    public void deleteChat(@PathVariable Long otherUserId, Authentication authentication) {
+
+        String email = authentication.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow();
+
+        service.deleteChat(user.getId(), otherUserId);
+    }
 }
