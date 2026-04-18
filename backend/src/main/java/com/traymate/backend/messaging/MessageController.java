@@ -21,6 +21,7 @@ public class MessageController {
 
     private final MessageService service;
     private final UserRepository userRepository;
+    private final UserMessagingService userMessagingService;
 
     @PostMapping("/send")
     public MessageResponse sendMessage(
