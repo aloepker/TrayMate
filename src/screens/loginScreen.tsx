@@ -9,6 +9,11 @@ import {
   useWindowDimensions,
   Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 
 const AUTH_BASE_URL = "https://traymate-auth.onrender.com";
@@ -81,57 +86,82 @@ export default function Login({ navigation }: any) {
   };
 
   return (
-    <View style={styles.page}>
-      <View style={[styles.card, isTablet && styles.cardTablet]}>
-        <Image
-          source={require("../styles/pictures/grandma.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-
-        <Text style={styles.title}>TrayMate</Text>
-        <Text style={styles.subtitle}>Every Meal Respects Every Need</Text>
-
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@traymate.com"
-          placeholderTextColor="#8E8E93"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          style={styles.input}
-        />
-
-        <Text style={[styles.label, { marginTop: 16 }]}>Password</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="••••••••"
-          placeholderTextColor="#8E8E93"
-          secureTextEntry
-          style={styles.input}
-        />
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
-          )}
-        </Pressable>
-      </View>
-    </View>
+          <View style={styles.page}>
+            <View style={[styles.card, isTablet && styles.cardTablet]}>
+              <Image
+                source={require("../styles/pictures/grandma.png")}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+
+              <Text style={styles.title}>TrayMate</Text>
+              <Text style={styles.subtitle}>Every Meal Respects Every Need</Text>
+
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@traymate.com"
+                placeholderTextColor="#8E8E93"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="next"
+                style={styles.input}
+              />
+
+              <Text style={[styles.label, { marginTop: 16 }]}>Password</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                placeholderTextColor="#8E8E93"
+                secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                style={styles.input}
+              />
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.buttonText}>Sign In</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: "#cbc2b4",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
   page: {
     flex: 1,
     backgroundColor: "#cbc2b4",
