@@ -621,6 +621,34 @@ export async function deleteOrderApi(orderId: number): Promise<void> {
 }
 
 /**
+ * 4b) Remove an order outright by (userId, mealOfDay, date).
+ *     DELETE /mealOrders/remove?userId=X&mealOfDay=X&date=YYYY-MM-DD
+ *
+ *     Unlike deleteOrderApi (which needs the row's PK), this lets the UI
+ *     delete an order when all we know is who it's for, which meal period,
+ *     and which day — handy for cancel flows where the frontend never
+ *     cached the backend order id.
+ *
+ *     Tested working example:
+ *       https://traymate-auth.onrender.com/mealOrders/remove?userId=21&mealOfDay=Dinner&date=2026-03-03
+ */
+export async function removeOrderApi(params: {
+  userId: string | number;
+  mealOfDay: string;
+  date: string;
+}): Promise<void> {
+  const qs = new URLSearchParams({
+    userId: String(params.userId),
+    mealOfDay: params.mealOfDay,
+    date: params.date,
+  }).toString();
+
+  await request<void>(`/mealOrders/remove?${qs}`, {
+    method: "DELETE",
+  });
+}
+
+/**
  * 5) Get all orders for a given date and meal period.
  *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD
  */
