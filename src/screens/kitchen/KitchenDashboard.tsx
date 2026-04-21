@@ -17,7 +17,7 @@ import Feather from "react-native-vector-icons/Feather";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder } from "../../services/mealDisplayService";
-import { getResidents, Resident as ApiResident, getChats } from "../../services/api";
+import { getResidents, Resident as ApiResident, getChats, removeOrderApi } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -831,6 +831,44 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     applyStatusChange(orderId, status, cook);
   };
 
+  // ── Permanently remove an order from the database ──
+  // Cancel (above) only flips status=cancelled so the caregiver still sees a
+  // record. Delete removes the row outright via DELETE /mealOrders/remove.
+  // Confirmation guard + optimistic UI removal with rollback on failure.
+  const handleRemoveOrder = (orderId: number) => {
+    const item = orders.find((o) => o.order.id === orderId);
+    if (!item) return;
+    const resident = backendResidents.find((r: ApiResident) => String(r.id) === String(item.order.userId));
+    const who = resident?.name ?? `user ${item.order.userId}`;
+    Alert.alert(
+      "Delete Order",
+      `Permanently delete Order #${orderId} (${item.order.mealOfDay}) for ${who}?\n\nThis cannot be undone.`,
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Delete",
+          style: "destructive",
+          onPress: async () => {
+            const snapshot = orders;
+            // optimistic remove
+            setOrders(prev => prev.filter(o => o.order.id !== orderId));
+            try {
+              await removeOrderApi({
+                userId: item.order.userId,
+                mealOfDay: item.order.mealOfDay,
+                date: item.order.date,
+              });
+            } catch (e: any) {
+              // rollback
+              setOrders(snapshot);
+              Alert.alert("Error", e?.message ?? "Could not delete the order. Please try again.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // ── bulk status update (applies per-period for each period that has orders) ──
   const handleBulkStatus = (status: Status) => {
     const label = status.charAt(0).toUpperCase() + status.slice(1);
@@ -1338,6 +1376,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   >
                     <Feather name="refresh-cw" size={13} color={C.warning} />
                     <Text style={[s.orderActionText, { color: C.warning }]}>Substitution</Text>
+                  </TouchableOpacity>
+
+                  {/* Delete — hard-removes the order row (vs. Cancel which only flips status) */}
+                  <TouchableOpacity
+                    style={[s.orderActionBtn, { borderColor: C.danger, backgroundColor: C.dangerBg }]}
+                    onPress={() => handleRemoveOrder(item.order.id)}
+                  >
+                    <Feather name="trash-2" size={13} color={C.danger} />
+                    <Text style={[s.orderActionText, { color: C.danger }]}>Delete</Text>
                   </TouchableOpacity>
                 </View>
 
