@@ -688,6 +688,21 @@ export async function deleteOrderApi(orderId: number): Promise<void> {
   });
 }
 
+// DELETE /mealOrders/remove?userId=X&mealOfDay=X&date=YYYY-MM-DD
+// Hard-remove by composite key (no primary id needed).
+export async function removeOrderApi(params: {
+  userId: string | number;
+  mealOfDay: string;
+  date: string;
+}): Promise<void> {
+  const qs = new URLSearchParams({
+    userId: String(params.userId),
+    mealOfDay: params.mealOfDay,
+    date: params.date,
+  }).toString();
+  await request<void>(`/mealOrders/remove?${qs}`, { method: "DELETE" });
+}
+
 /**
  * 5) Get all orders for a given date and meal period.
  *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD

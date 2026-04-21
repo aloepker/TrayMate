@@ -21,7 +21,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
-import { getResidents, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals } from "../../services/api";
+import { getResidents, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, removeOrderApi } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -884,6 +884,39 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     applyStatusChange(orderId, status, cook);
   };
 
+  // Hard-delete an order (vs. Cancel which only flips status).
+  const handleRemoveOrder = (orderId: number) => {
+    const item = orders.find((o) => o.order.id === orderId);
+    if (!item) return;
+    const resident = backendResidents.find((r: ApiResident) => String(r.id) === String(item.order.userId));
+    const who = resident?.name ?? `user ${item.order.userId}`;
+    Alert.alert(
+      "Delete Order",
+      `Permanently delete Order #${orderId} (${item.order.mealOfDay}) for ${who}?`,
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Delete",
+          style: "destructive",
+          onPress: async () => {
+            const snapshot = orders;
+            setOrders((prev) => prev.filter((o) => o.order.id !== orderId));
+            try {
+              await removeOrderApi({
+                userId: item.order.userId,
+                mealOfDay: item.order.mealOfDay,
+                date: item.order.date,
+              });
+            } catch (e: any) {
+              setOrders(snapshot);
+              Alert.alert("Error", e?.message ?? "Could not delete the order.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // ── bulk status update (applies per-period for each period that has orders) ──
   const handleBulkStatus = (status: Status) => {
     const label = status.charAt(0).toUpperCase() + status.slice(1);
@@ -1509,6 +1542,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   >
                     <Feather name="refresh-cw" size={13} color={C.warning} />
                     <Text style={[s.orderActionText, { color: C.warning }]}>Substitution</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[s.orderActionBtn, { borderColor: C.danger, backgroundColor: C.dangerBg }]}
+                    onPress={() => handleRemoveOrder(item.order.id)}
+                  >
+                    <Feather name="trash-2" size={13} color={C.danger} />
+                    <Text style={[s.orderActionText, { color: C.danger }]}>Delete</Text>
                   </TouchableOpacity>
                 </View>
 
