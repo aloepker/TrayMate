@@ -30,6 +30,41 @@ import { getCaregiverResidentList } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
+// Demo residents shown when backend is unreachable (Render down / offline).
+// Same spirit as MOCK_USERS in loginScreen: keep the app usable.
+const DEMO_RESIDENTS: Resident[] = [
+  {
+    id: "demo-1",
+    name: "Wendy Arenas",
+    room: "204",
+    dietaryRestrictions: ["Low sodium"],
+    foodAllergies: ["Peanuts"],
+    medicalConditions: [],
+    medications: [],
+    caregiverId: null,
+  },
+  {
+    id: "demo-2",
+    name: "Harold Jensen",
+    room: "112",
+    dietaryRestrictions: ["Diabetic"],
+    foodAllergies: [],
+    medicalConditions: [],
+    medications: [],
+    caregiverId: null,
+  },
+  {
+    id: "demo-3",
+    name: "Margaret O\u2019Neil",
+    room: "307",
+    dietaryRestrictions: ["Soft foods"],
+    foodAllergies: ["Shellfish"],
+    medicalConditions: [],
+    medications: [],
+    caregiverId: null,
+  },
+];
+
 interface CaregiverDashboardProps {
   navigation: any;
 }
@@ -146,6 +181,9 @@ export default function CaregiverDashboardScreen({
   // Inline retry banner shown when backend is unreachable (Render cold start)
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // True when we're rendering DEMO_RESIDENTS because the backend is down
+  const [isDemo, setIsDemo] = useState(false);
+
   // Selected resident for the popup modal
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
 
@@ -165,22 +203,28 @@ export default function CaregiverDashboardScreen({
   const loadDashboard = React.useCallback(async () => {
     const isNetErr = (err: any) => err?.message === "Network request failed";
 
-    // Retry wrapper: waits 4s and retries once on a cold-start network error.
+    // Retry wrapper: up to 3 attempts with 4s / 8s backoff for cold-start /
+    // slow Render wake-up. Total worst case ~12s before we give up and
+    // drop into demo mode.
     const callWithRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
-      try {
-        return await fn();
-      } catch (e: any) {
-        if (isNetErr(e)) {
-          await new Promise((r) => setTimeout(r, 4000));
+      const delays = [4000, 8000];
+      let lastErr: any;
+      for (let i = 0; i <= delays.length; i++) {
+        try {
           return await fn();
+        } catch (e: any) {
+          lastErr = e;
+          if (!isNetErr(e) || i === delays.length) break;
+          await new Promise((r) => setTimeout(r, delays[i]));
         }
-        throw e;
       }
+      throw lastErr;
     };
 
     try {
       setLoading(true);
       setLoadError(null);
+      setIsDemo(false);
 
       // Get my ID for storage lookups
       let myId: string | null = null;
@@ -226,31 +270,30 @@ export default function CaregiverDashboardScreen({
       const notifData: KitchenNotification[] =
         notifResult.status === "fulfilled" ? notifResult.value ?? [] : [];
 
-      setResidents([...mergedMap.values()]);
-      setNotifications(notifData);
-
       // If the backend-residents call failed with a network error AND we
-      // have nothing from storage to fall back on, show the retry banner.
+      // have nothing from storage to fall back on, drop into demo mode so
+      // the dashboard is still usable while the server is down.
       const backendFailedNet =
         backendResult.status === "rejected" && isNetErr(backendResult.reason);
       if (backendFailedNet && mergedMap.size === 0) {
-        const msg = "Server unreachable. It may be waking up — tap Retry in a moment.";
-        setLoadError(msg);
-        Alert.alert("Failed to load caregiver dashboard", msg, [
-          { text: "Retry", onPress: () => loadDashboard() },
-          { text: "OK", style: "cancel" },
-        ]);
+        setResidents(DEMO_RESIDENTS);
+        setNotifications([]);
+        setIsDemo(true);
+        setLoadError("Server unreachable — showing demo residents. Tap Retry to try again.");
+      } else {
+        setResidents([...mergedMap.values()]);
+        setNotifications(notifData);
       }
     } catch (e: any) {
       console.warn("[CaregiverDashboard] loadDashboard error:", e);
-      const msg = isNetErr(e)
-        ? "Server unreachable. It may be waking up — tap Retry in a moment."
-        : e?.message ?? "Request failed.";
-      setLoadError(msg);
-      Alert.alert("Failed to load caregiver dashboard", msg, [
-        { text: "Retry", onPress: () => loadDashboard() },
-        { text: "OK", style: "cancel" },
-      ]);
+      if (isNetErr(e)) {
+        setResidents(DEMO_RESIDENTS);
+        setNotifications([]);
+        setIsDemo(true);
+        setLoadError("Server unreachable — showing demo residents. Tap Retry to try again.");
+      } else {
+        setLoadError(e?.message ?? "Request failed.");
+      }
     } finally {
       setLoading(false);
     }
