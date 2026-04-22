@@ -17,6 +17,7 @@ import {
   translateMealPeriod,
 } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
+import { getUnsafeReason } from '../services/mealSafetyService';
 
 const COLORS = {
   primary: '#717644',
@@ -53,7 +54,45 @@ const CartScreen = ({ navigation, route }: any) => {
   const dietaryRestrictions = route?.params?.dietaryRestrictions ?? [];
   const foodAllergies = route?.params?.foodAllergies ?? [];
 
+  // ── Per-item safety evaluation (also drives the red warning card below) ──
+  const residentProfile = { foodAllergies, dietaryRestrictions };
+  const cartSafety = cartItems.map((item) => ({
+    item,
+    reason: getUnsafeReason(item as any, residentProfile),
+  }));
+  const unsafeEntries = cartSafety.filter((x) => x.reason !== null);
+  const hasUnsafe = unsafeEntries.length > 0;
+
+  const removeAllUnsafe = () => {
+    // Remove in reverse-index order so earlier indices stay valid as we splice.
+    const indices = cartSafety
+      .map((x, i) => (x.reason !== null ? i : -1))
+      .filter((i) => i >= 0)
+      .sort((a, b) => b - a);
+    indices.forEach((i) => removeFromCart(i));
+  };
+
   const confirmOrder = async () => {
+    // Safety gate — block checkout if any cart item is unsafe for this resident.
+    if (hasUnsafe) {
+      const lines = unsafeEntries
+        .map((x) => `• ${x.item.name} — ${x.reason}`)
+        .join('\n');
+      Alert.alert(
+        'Unsafe meals in cart',
+        `These items are not safe for ${residentName}:\n\n${lines}\n\nRemove them to continue.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove unsafe items',
+            style: 'destructive',
+            onPress: removeAllUnsafe,
+          },
+        ],
+      );
+      return;
+    }
+
     try {
       const { order, conflict } = await placeOrder(residentId);
 
@@ -149,8 +188,47 @@ const CartScreen = ({ navigation, route }: any) => {
       ) : (
         <>
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-            {cartItems.map((item, index) => (
-              <View key={`${item.id}-${index}`} style={styles.cartCard}>
+            {/* Safety banner — appears when any cart item is unsafe for the resident */}
+            {hasUnsafe && (
+              <View style={styles.safetyBanner}>
+                <View style={styles.safetyBannerIconWrap}>
+                  <Feather name="alert-triangle" size={20} color={COLORS.danger} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.safetyBannerTitle, { fontSize: scaled(15) }]}>
+                    {unsafeEntries.length === 1
+                      ? '1 unsafe meal in your cart'
+                      : `${unsafeEntries.length} unsafe meals in your cart`}
+                  </Text>
+                  <Text style={[styles.safetyBannerBody, { fontSize: scaled(13) }]}>
+                    Remove them to place your order.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.safetyBannerBtn, { minHeight: touchTarget, justifyContent: 'center' }]}
+                  onPress={removeAllUnsafe}
+                >
+                  <Text style={[styles.safetyBannerBtnText, { fontSize: scaled(13) }]}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {cartItems.map((item, index) => {
+              const unsafeReason = cartSafety[index]?.reason ?? null;
+              return (
+              <View
+                key={`${item.id}-${index}`}
+                style={[styles.cartCard, unsafeReason && styles.cartCardUnsafe]}
+              >
+                {/* Per-item unsafe reason strip */}
+                {unsafeReason && (
+                  <View style={styles.unsafeReasonRow}>
+                    <Feather name="alert-triangle" size={13} color={COLORS.danger} />
+                    <Text style={[styles.unsafeReasonText, { fontSize: scaled(12) }]}>
+                      {unsafeReason}
+                    </Text>
+                  </View>
+                )}
                 {/* Row 1: Period badge + remove */}
                 <View style={styles.cartCardTopRow}>
                   <View style={styles.periodBadge}>
@@ -197,7 +275,8 @@ const CartScreen = ({ navigation, route }: any) => {
                   </View>
                 </View>
               </View>
-            ))}
+              );
+            })}
 
           </ScrollView>
 
@@ -212,11 +291,21 @@ const CartScreen = ({ navigation, route }: any) => {
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.confirmButton, { minHeight: touchTarget, justifyContent: 'center' }]}
+              style={[
+                styles.confirmButton,
+                { minHeight: touchTarget, justifyContent: 'center' },
+                hasUnsafe && styles.confirmButtonDisabled,
+              ]}
               onPress={confirmOrder}
             >
-              <Feather name="check-circle" size={20} color="#FFFFFF" />
-              <Text style={[styles.confirmButtonText, { fontSize: scaled(16) }]}>{t.confirmOrder}</Text>
+              <Feather
+                name={hasUnsafe ? 'alert-triangle' : 'check-circle'}
+                size={20}
+                color="#FFFFFF"
+              />
+              <Text style={[styles.confirmButtonText, { fontSize: scaled(16) }]}>
+                {hasUnsafe ? 'Fix unsafe items' : t.confirmOrder}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -317,6 +406,72 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  // Red-tinted card when this item is unsafe for the resident.
+  cartCardUnsafe: {
+    borderColor: COLORS.danger,
+    backgroundColor: COLORS.dangerBg,
+  },
+  // Top-of-list red banner summarising unsafe item count.
+  safetyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: COLORS.dangerBg,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.danger,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  safetyBannerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  safetyBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.danger,
+  },
+  safetyBannerBody: {
+    fontSize: 13,
+    color: '#7F1D1D',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  safetyBannerBtn: {
+    backgroundColor: COLORS.danger,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  safetyBannerBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
+  // Per-card strip explaining WHY this specific meal is unsafe.
+  unsafeReasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FECACA',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  unsafeReasonText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#7F1D1D',
+    fontWeight: '700',
   },
   cartCardTopRow: {
     flexDirection: 'row',
@@ -434,6 +589,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 22,
     borderRadius: 14,
+  },
+  // Turns red when any cart item is unsafe — the button still taps, but
+  // opens the "remove unsafe items" dialog instead of placing the order.
+  confirmButtonDisabled: {
+    backgroundColor: COLORS.danger,
   },
   confirmButtonText: {
     fontSize: 16,
