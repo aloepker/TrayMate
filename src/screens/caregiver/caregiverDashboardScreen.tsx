@@ -143,6 +143,9 @@ export default function CaregiverDashboardScreen({
   // Loading spinner for initial page fetch
   const [loading, setLoading] = useState(true);
 
+  // Inline retry banner shown when backend is unreachable (Render cold start)
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // Selected resident for the popup modal
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
 
@@ -151,83 +154,111 @@ export default function CaregiverDashboardScreen({
 
   // -----------------------------
   // Initial data load
+  //   - Auto-retries the backend once on "Network request failed" (Render
+  //     free tier sleeps after 15 min of idle; first request after wake
+  //     fails immediately while the server boots — a short delay lets it
+  //     come up, then the retry usually succeeds).
+  //   - Surfaces a Retry button (inline banner + alert) when backend is
+  //     unreachable, instead of silently leaving the user with an empty
+  //     dashboard.
   // -----------------------------
-  useEffect(() => {
-    let cancelled = false;
+  const loadDashboard = React.useCallback(async () => {
+    const isNetErr = (err: any) => err?.message === "Network request failed";
 
-    const loadDashboard = async () => {
+    // Retry wrapper: waits 4s and retries once on a cold-start network error.
+    const callWithRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
       try {
-        setLoading(true);
-
-        // Get my ID for storage lookups
-        let myId: string | null = null;
-        try {
-          const me = await getMe();
-          myId = String(me.id);
-        } catch (e) {
-          console.warn("[CaregiverDashboard] getMe failed:", e);
-        }
-
-        // Fetch from all sources in parallel
-        const [backendResult, storedResult, notifResult] = await Promise.allSettled([
-          getCaregiverResidents(),
-          myId ? getCaregiverResidentList(myId) : Promise.resolve([]),
-          getCaregiverNotifications(),
-        ]);
-
-        const backendList: Resident[] =
-          backendResult.status === "fulfilled" ? backendResult.value ?? [] : [];
-
-        console.log("[CaregiverDashboard] Backend returned", backendList.length, "residents");
-
-        // Merge storage residents with backend list (dedup by id)
-        const storedList =
-          storedResult.status === "fulfilled" ? storedResult.value : [];
-        const mergedMap = new Map<string, Resident>();
-        for (const r of backendList) mergedMap.set(r.id, r);
-        for (const s of storedList) {
-          if (!mergedMap.has(s.id)) {
-            mergedMap.set(s.id, {
-              id: s.id,
-              name: s.name,
-              room: s.room,
-              dietaryRestrictions: s.dietaryRestrictions,
-              foodAllergies: s.foodAllergies,
-              medicalConditions: [],
-              medications: [],
-              caregiverId: myId,
-            });
-          }
-        }
-
-        const notifData: KitchenNotification[] =
-          notifResult.status === "fulfilled" ? notifResult.value ?? [] : [];
-
-        if (!cancelled) {
-          setResidents([...mergedMap.values()]);
-          setNotifications(notifData);
-        }
+        return await fn();
       } catch (e: any) {
-        console.warn("[CaregiverDashboard] loadDashboard error:", e);
-        if (!cancelled) {
-          Alert.alert(
-            "Failed to load caregiver dashboard",
-            e?.message ?? "Request failed."
-          );
+        if (isNetErr(e)) {
+          await new Promise((r) => setTimeout(r, 4000));
+          return await fn();
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        throw e;
       }
     };
 
-    loadDashboard();
+    try {
+      setLoading(true);
+      setLoadError(null);
 
-    return () => {
-      cancelled = true;
-    };
+      // Get my ID for storage lookups
+      let myId: string | null = null;
+      try {
+        const me = await callWithRetry(() => getMe());
+        myId = String(me.id);
+      } catch (e) {
+        console.warn("[CaregiverDashboard] getMe failed:", e);
+      }
+
+      // Fetch from all sources in parallel (each with cold-start retry)
+      const [backendResult, storedResult, notifResult] = await Promise.allSettled([
+        callWithRetry(() => getCaregiverResidents()),
+        myId ? getCaregiverResidentList(myId) : Promise.resolve([]),
+        callWithRetry(() => getCaregiverNotifications()),
+      ]);
+
+      const backendList: Resident[] =
+        backendResult.status === "fulfilled" ? backendResult.value ?? [] : [];
+
+      console.log("[CaregiverDashboard] Backend returned", backendList.length, "residents");
+
+      // Merge storage residents with backend list (dedup by id)
+      const storedList =
+        storedResult.status === "fulfilled" ? storedResult.value : [];
+      const mergedMap = new Map<string, Resident>();
+      for (const r of backendList) mergedMap.set(r.id, r);
+      for (const s of storedList) {
+        if (!mergedMap.has(s.id)) {
+          mergedMap.set(s.id, {
+            id: s.id,
+            name: s.name,
+            room: s.room,
+            dietaryRestrictions: s.dietaryRestrictions,
+            foodAllergies: s.foodAllergies,
+            medicalConditions: [],
+            medications: [],
+            caregiverId: myId,
+          });
+        }
+      }
+
+      const notifData: KitchenNotification[] =
+        notifResult.status === "fulfilled" ? notifResult.value ?? [] : [];
+
+      setResidents([...mergedMap.values()]);
+      setNotifications(notifData);
+
+      // If the backend-residents call failed with a network error AND we
+      // have nothing from storage to fall back on, show the retry banner.
+      const backendFailedNet =
+        backendResult.status === "rejected" && isNetErr(backendResult.reason);
+      if (backendFailedNet && mergedMap.size === 0) {
+        const msg = "Server unreachable. It may be waking up — tap Retry in a moment.";
+        setLoadError(msg);
+        Alert.alert("Failed to load caregiver dashboard", msg, [
+          { text: "Retry", onPress: () => loadDashboard() },
+          { text: "OK", style: "cancel" },
+        ]);
+      }
+    } catch (e: any) {
+      console.warn("[CaregiverDashboard] loadDashboard error:", e);
+      const msg = isNetErr(e)
+        ? "Server unreachable. It may be waking up — tap Retry in a moment."
+        : e?.message ?? "Request failed.";
+      setLoadError(msg);
+      Alert.alert("Failed to load caregiver dashboard", msg, [
+        { text: "Retry", onPress: () => loadDashboard() },
+        { text: "OK", style: "cancel" },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   // -----------------------------
   // Small stat cards data
@@ -389,6 +420,17 @@ export default function CaregiverDashboardScreen({
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.container}>
+          {/* Inline retry banner — backend unreachable (e.g. Render cold start) */}
+          {loadError && (
+            <View style={styles.errorBanner}>
+              <Feather name="wifi-off" size={18} color="#B45309" />
+              <Text style={styles.errorBannerText}>{loadError}</Text>
+              <Pressable style={styles.errorBannerBtn} onPress={() => loadDashboard()}>
+                <Text style={styles.errorBannerBtnText}>Retry</Text>
+              </Pressable>
+            </View>
+          )}
+
           {/* Page intro */}
           <Text style={styles.h1}>My Assigned Residents</Text>
           <Text style={styles.subtitle}>
@@ -831,6 +873,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#5A5A5A",
     fontWeight: "700",
+  },
+
+  // Network error banner (Render cold start, etc.)
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F2D57E",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: "#78350F",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  errorBannerBtn: {
+    backgroundColor: "#B45309",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  errorBannerBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   // Main content
