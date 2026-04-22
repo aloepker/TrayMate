@@ -61,6 +61,13 @@ type Status = "pending" | "preparing" | "ready" | "served" | "cancelled" | "subs
 // ─── Base URL + API helpers ────────────────────────────────────────────────────
 const BASE = "https://traymate-auth.onrender.com";
 
+const formatLocalDate = (date: Date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 async function apiSetStatusSingle(
   userId: string,
   mealOfDay: string,
@@ -860,7 +867,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   // ── fetch ALL orders for today (every meal period) ──
   const fetchAllOrders = async () => {
     setLoading(true);
-    const today = new Date().toISOString().split("T")[0];
+    const today = formatLocalDate();
     try {
       const tok = token || await getAuthToken();
       const headers: Record<string, string> = {};
@@ -875,7 +882,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         } catch { return []; }
       });
       const results = await Promise.all(fetches);
-      setOrders(results.flat());
+      setOrders(
+        results
+          .flat()
+          .filter((item) => String(item?.order?.status ?? '').toLowerCase() !== 'cancelled')
+      );
     } catch {
       setOrders([]);
     } finally {
@@ -897,7 +908,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       prev.map((o) => o.order.id === orderId ? { ...o, order: { ...o.order, status } } : o)
     );
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = formatLocalDate();
       const tok = token || await getAuthToken();
       await apiSetStatusSingle(item.order.userId, item.order.mealOfDay, today, status, cookName, tok);
     } catch {
@@ -924,7 +935,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         const prevOrders = orders;
         setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
         try {
-          const today = new Date().toISOString().split("T")[0];
+          const today = formatLocalDate();
           const tok = token || await getAuthToken();
           const cook = status === "preparing" ? (loggedInEmail ?? undefined) : undefined;
           // Call bulk for each period that has orders
