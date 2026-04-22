@@ -441,29 +441,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setShowEditResident(true);
   };
 
-  // const submitEditResidentUIOnly = async () => {
-  //   if (!editingResident) return;
-  //   const nextDietary = editDietary
-  //     .split(",")
-  //     .map((s) => s.trim())
-  //     .filter(Boolean);
-
-  //   setResidents((prev) =>
-  //     prev.map((r) =>
-  //       r.id === editingResident.id
-  //         ? {
-  //             ...r,
-  //             name: editName.trim(),
-  //             room: editRoom.trim(),
-  //             dietaryRestrictions: nextDietary
-  //           }
-  //         : r
-  //     )
-  //   );
-  //   Alert.alert("Updated (UI only)", "Backend update endpoint isn't ready yet.");
-  //   setShowEditResident(false);
-  //   setEditingResident(null);
-  // };
   const submitEditResident = async () => {
     if (!editingResident) return;
 
@@ -885,7 +862,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
             <Pressable
               style={styles.modalPrimaryBtn}
-              //onPress={submitEditResidentUIOnly}
               onPress={submitEditResident}
             >
               <Text style={styles.modalPrimaryText}>Update Resident</Text>
