@@ -29,4 +29,17 @@ public class MenuService {
     public List<Meal> getSides() {
         return mealRepository.findByMealtypeIgnoreCase("Side");
     }
+
+    /**
+     * Toggle a single meal's `available` flag. Used by the kitchen-dashboard
+     * hide/show icon to take a dish off the menu for every resident in one
+     * click (next time any resident fetches /menu the flag is reflected).
+     */
+    public Meal setAvailability(Integer id, boolean available) {
+        Meal meal = mealRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Meal not found: " + id));
+        meal.setAvailable(available);
+        return mealRepository.save(meal);
+    }
 }
