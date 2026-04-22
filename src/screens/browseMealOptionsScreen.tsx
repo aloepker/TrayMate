@@ -55,8 +55,8 @@ import {
   translateMealDescriptionsWithGemini,
 } from "../services/geminiService";
 
-import { geminiChat } from "../services/geminiService";
-import { getUnsafeReason } from "../services/mealSafetyService";
+import { geminiChat, getAIRecommendation } from "../services/geminiService";
+import { getUnsafeReason, filterSafeMeals, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
@@ -228,13 +228,16 @@ type PeriodOption = {
 };
 
 // ── Period accent colours (for card left strip) ───────────────────────────────
-const PERIOD_ACCENT: Record<string, { color: string; light: string }> = {
-  Breakfast: { color: '#C47A2A', light: '#FEF3C7' },
-  Lunch:     { color: '#2D7A52', light: '#DCFCE7' },
-  Dinner:    { color: '#4F4FA8', light: '#EEF2FF' },
-  Drinks:    { color: '#2A6FA8', light: '#E0F2FE' },
-  Sides:     { color: '#7A3A6A', light: '#FCE7F3' },
-  'All Day': { color: '#717644', light: '#F0EFE6' },
+// `icon` uses Feather names so the period pill shows a small glyph next
+// to the label ("☀️ Breakfast", "🌙 Dinner") for quick visual parsing —
+// helpful for low-vision residents who pattern-match shapes faster than text.
+const PERIOD_ACCENT: Record<string, { color: string; light: string; icon: string }> = {
+  Breakfast: { color: '#C47A2A', light: '#FEF3C7', icon: 'sun' },
+  Lunch:     { color: '#2D7A52', light: '#DCFCE7', icon: 'coffee' },
+  Dinner:    { color: '#4F4FA8', light: '#EEF2FF', icon: 'moon' },
+  Drinks:    { color: '#2A6FA8', light: '#E0F2FE', icon: 'droplet' },
+  Sides:     { color: '#7A3A6A', light: '#FCE7F3', icon: 'grid' },
+  'All Day': { color: '#717644', light: '#F0EFE6', icon: 'clock' },
 };
 
 // ── Per-period header themes ──────────────────────────────────────────────────
@@ -699,13 +702,23 @@ function timeRangeStartMinutes(timeRange: string): number {
   return parseTimeToMinutes(first);
 }
 
-/** Sort meals: available-now first (ordered by start time), then unavailable (ordered by start time) */
+/**
+ * Sort meals into three tiers: available now → pre-order for tomorrow →
+ * unavailable. Within each tier, sort by serving-window start time.
+ * This keeps the breakfast pre-order block together and below any
+ * genuinely-available-right-now meals at night.
+ */
 function sortMealsByAvailability(meals: Meal[], now: Date = new Date()): Meal[] {
+  const tierFor = (m: Meal): number => {
+    const s = getAvailabilityStatus(m.time_range, m.meal_period, now);
+    if (s === 'available') return 0;
+    if (s === 'preorder_tomorrow') return 1;
+    return 2;
+  };
   return [...meals].sort((a, b) => {
-    const aAvail = isWithinTimeRange(a.time_range, a.meal_period, now);
-    const bAvail = isWithinTimeRange(b.time_range, b.meal_period, now);
-    if (aAvail && !bAvail) return -1;
-    if (!aAvail && bAvail) return 1;
+    const ta = tierFor(a);
+    const tb = tierFor(b);
+    if (ta !== tb) return ta - tb;
     return timeRangeStartMinutes(a.time_range) - timeRangeStartMinutes(b.time_range);
   });
 }
@@ -716,6 +729,43 @@ const MEAL_SCHEDULE = [
   { label: 'Lunch',     start: 11 * 60, end: 14 * 60, color: '#4A7A60', icon: '🍽️' },
   { label: 'Dinner',    start: 16 * 60, end: 19 * 60, color: '#5C5FA8', icon: '🌙' },
 ];
+
+// After 7 PM the breakfast menu opens for PRE-ORDER so residents can set up
+// tomorrow morning's tray before bed. Everything in the UI around this window
+// must SHOUT "for tomorrow" — residents have confused breakfast-at-night with
+// "breakfast is open now". The banner copy and disabled lunch/dinner are how
+// we keep that distinction obvious.
+const BREAKFAST_PREORDER_START = 19 * 60; // 7:00 PM
+
+/** True from 7:00 PM through midnight on the device clock. */
+function isBreakfastPreorderTime(now: Date = new Date()): boolean {
+  const mins = now.getHours() * 60 + now.getMinutes();
+  return mins >= BREAKFAST_PREORDER_START;
+}
+
+/** Pretty string for the breakfast serving window, used in banner copy. */
+const BREAKFAST_WINDOW_LABEL = '7:00 AM – 10:00 AM';
+
+export type MealAvailabilityStatus = 'available' | 'preorder_tomorrow' | 'unavailable';
+
+/**
+ * Three-state availability:
+ *  - available           → order it right now
+ *  - preorder_tomorrow   → breakfast after 7 PM: orderable, served tomorrow morning
+ *  - unavailable         → outside window, and not a preorder case
+ * UI branches on this to avoid showing a "Not available" grey-out on meals that
+ * are actually orderable (just for a future serving).
+ */
+function getAvailabilityStatus(
+  timeRange: string,
+  period: string | undefined,
+  now: Date = new Date(),
+): MealAvailabilityStatus {
+  if (period === 'Drinks' || period === 'Sides') return 'available';
+  if (isWithinTimeRange(timeRange, period, now)) return 'available';
+  if (period === 'Breakfast' && isBreakfastPreorderTime(now)) return 'preorder_tomorrow';
+  return 'unavailable';
+}
 
 function getCurrentMealPeriod(now: Date = new Date()): string | null {
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -876,29 +926,45 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         ? await MealService.getSeasonalMeals()
         : await MealService.getMealsByPeriod(period);
 
-      // Filter out meals that are unsafe for this resident's dietary restrictions
+      // Filter out meals that are unsafe for this resident — SAME safety source
+      // of truth that drives the cart gate and GrannyGBT recommendation.
+      // Works for both local and backend residents by building a SafetyResident.
       const resId = residentId || ResidentService.getDefaultResident().id;
       const resident = ResidentService.getResidentById(resId);
-      if (resident) {
-        // Local DB resident — use full safety check
-        serviceMeals = serviceMeals.filter((m) =>
-          ResidentService.isMealSafeForResident(m, resident)
-        );
-      } else {
-        // API/backend resident — filter using both dietaryRestrictions AND foodAllergies from caregiver
-        const allRestrictions = [
-          ...(route?.params?.dietaryRestrictions ?? []),
-          ...(route?.params?.foodAllergies ?? []),
-        ].map((r: string) => r.toLowerCase());
-        if (allRestrictions.length > 0) {
-          serviceMeals = serviceMeals.filter((m) => {
-            const mealAllergens = m.allergenInfo.map((a) => a.toLowerCase());
-            return !mealAllergens.some((allergen) =>
-              allRestrictions.some((r) => r.includes(allergen) || allergen.includes(r))
-            );
-          });
-        }
-      }
+
+      const cleanList = (arr: string[] | undefined) =>
+        (arr ?? []).map((s) => String(s).trim()).filter(Boolean);
+
+      const safetyResidentForMenu: SafetyResident = resident
+        ? {
+            foodAllergies: resident.dietaryRestrictions
+              .filter((r) => r.type === 'allergy')
+              .map((r) => r.name),
+            dietaryRestrictions: resident.dietaryRestrictions
+              .filter((r) => r.type !== 'allergy')
+              .map((r) => r.name),
+            medicalConditions: [],
+          }
+        : {
+            foodAllergies:        cleanList(route?.params?.foodAllergies as any),
+            dietaryRestrictions:  cleanList(route?.params?.dietaryRestrictions as any),
+            medicalConditions:    cleanList(route?.params?.medicalConditions as any),
+          };
+
+      const safetyInputs = serviceMeals.map((m) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        tags: m.tags,
+        allergenInfo: m.allergenInfo,
+        ingredients: m.ingredients,
+        sodium: m.nutrition?.sodium,
+        meal_period: m.mealPeriod,
+      }));
+      const safeIdsForMenu = new Set(
+        filterSafeMeals(safetyInputs, safetyResidentForMenu).map((m) => String(m.id)),
+      );
+      serviceMeals = serviceMeals.filter((m) => safeIdsForMenu.has(String(m.id)));
 
       // mapServiceMeal imported from mealDisplayService.ts
       const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
@@ -955,6 +1021,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Fetch recommendation — targets the CURRENT meal period if we're in one,
   // otherwise the next upcoming period so the suggestion is always actionable.
+  //
+  // Pipeline (same for local AND backend residents):
+  //   1. Pull meals for the current/next meal period.
+  //   2. Run them through the canonical safety filter (mealSafetyService).
+  //   3. Ask Gemini to pick ONE from the safe candidates (AI recommendation).
+  //   4. Fall back to the legacy rule-based picker if Gemini is unreachable
+  //      OR hallucinates a meal not in the candidate list.
   const loadRecommendation = useCallback(async () => {
     setRecLoading(true);
     setError("");
@@ -968,42 +1041,127 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const nextPeriod    = getNextMealPeriod(new Date());
       const targetPeriod  = currentPeriod ?? nextPeriod?.period.label ?? selectedPeriod.value;
 
-      let rec;
+      // ── Step 1: pull meals for the target period ──
+      const periodMeals = await MealService.getMealsByPeriod(targetPeriod as any);
+      setRecPeriodMeals(periodMeals.map(mapServiceMeal));
+
+      // ── Step 2: build a SafetyResident (unified shape for both paths) ──
+      // Empty strings are filtered out so they don't turn into wildcard matches.
+      const clean = (arr: string[] | undefined) =>
+        (arr ?? []).map((s) => String(s).trim()).filter(Boolean);
+
+      let residentName: string;
+      let safetyResident: SafetyResident;
+
       if (localResident) {
-        // local resident — use normal path
-        rec = await RecommendationService.getTopRecommendation(resId, targetPeriod as any);
-      } else {
-        // backend resident — build a virtual resident from route params
-        // Combine both dietaryRestrictions AND foodAllergies from caregiver dashboard
-        const rawAllergies: string[] = [
-          ...(route?.params?.dietaryRestrictions ?? []),
-          ...(route?.params?.foodAllergies ?? []),
-        ];
-        const virtualResident: Resident = {
-          id: resId,
-          firstName: (route?.params?.residentName ?? 'Resident').split(' ')[0],
-          lastName: '',
-          fullName: route?.params?.residentName ?? 'Resident',
-          email: '',
-          phone: '',
-          roomNumber: '',
-          role: 'resident',
-          dietaryRestrictions: rawAllergies.map((name: string) => ({
-            type: 'allergy' as const,
-            name,
-            severity: 'moderate' as const,
-          })),
-          nutritionGoals: { dailyCalories: 1800, maxSodium: 2000, minProtein: 45, maxCholesterol: 250, maxSugar: 40 },
-          dislikedIngredients: [],
-          favoriteMealIds: [],
-          isActive: true,
+        residentName = localResident.fullName;
+        safetyResident = {
+          foodAllergies: localResident.dietaryRestrictions
+            .filter((r) => r.type === 'allergy')
+            .map((r) => r.name),
+          dietaryRestrictions: localResident.dietaryRestrictions
+            .filter((r) => r.type !== 'allergy')
+            .map((r) => r.name),
+          medicalConditions: [],
         };
-        rec = await RecommendationService.getTopRecommendationForResident(virtualResident, targetPeriod as any);
+      } else {
+        residentName = route?.params?.residentName ?? 'Resident';
+        safetyResident = {
+          foodAllergies:        clean(route?.params?.foodAllergies as any),
+          dietaryRestrictions:  clean(route?.params?.dietaryRestrictions as any),
+          medicalConditions:    clean(route?.params?.medicalConditions as any),
+        };
       }
 
-      // Pre-load meals for the target period so the card can open meal details
-      const targetMeals = await MealService.getMealsByPeriod(targetPeriod as any);
-      setRecPeriodMeals(targetMeals.map(mapServiceMeal));
+      // ── Step 3: safety-filter the menu through the SINGLE source of truth ──
+      // Map each ServiceMeal into the SafetyMeal shape the filter expects.
+      const safetyInputs = periodMeals.map((m) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        tags: m.tags,
+        allergenInfo: m.allergenInfo,
+        ingredients: m.ingredients,
+        sodium: m.nutrition?.sodium,
+        meal_period: m.mealPeriod,
+      }));
+      const safeIds = new Set(
+        filterSafeMeals(safetyInputs, safetyResident).map((m) => String(m.id)),
+      );
+      const safeMeals = periodMeals.filter((m) => safeIds.has(String(m.id)));
+
+      // No safe options at all — let the UI show a clear "nothing matches" state.
+      if (safeMeals.length === 0) {
+        setRecommendation(null);
+        setRecLoading(false);
+        return;
+      }
+
+      // ── Step 4: ask Gemini to pick ONE from the safe candidates ──
+      const aiCandidates = safeMeals.map((m) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        ingredients: m.ingredients,
+        allergens: m.allergenInfo,
+        calories: m.nutrition?.calories,
+        sodium: m.nutrition?.sodium,
+        protein: m.nutrition?.protein,
+        tags: m.tags,
+        meal_period: m.mealPeriod,
+        time_range: m.timeRange,
+      }));
+
+      const aiRec = await getAIRecommendation(
+        {
+          name: residentName,
+          foodAllergies: safetyResident.foodAllergies,
+          dietaryRestrictions: safetyResident.dietaryRestrictions,
+          medicalConditions: safetyResident.medicalConditions,
+        },
+        aiCandidates,
+        targetPeriod ?? null,
+      );
+
+      let rec: any;
+      if (aiRec) {
+        rec = aiRec;
+      } else {
+        // ── Step 5: fallback — legacy rule-based picker on SAFE meals only ──
+        // Reuses RecommendationService so the card still renders something
+        // sensible when Gemini is offline or quota-exhausted.
+        if (localResident) {
+          rec = await RecommendationService.getTopRecommendation(resId, targetPeriod as any);
+        } else {
+          const virtualResident: Resident = {
+            id: resId,
+            firstName: residentName.split(' ')[0],
+            lastName: '',
+            fullName: residentName,
+            email: '',
+            phone: '',
+            roomNumber: '',
+            role: 'resident',
+            dietaryRestrictions: [
+              ...safetyResident.foodAllergies!.map((name) => ({
+                type: 'allergy' as const,
+                name,
+                severity: 'moderate' as const,
+              })),
+              ...safetyResident.dietaryRestrictions!.map((name) => ({
+                type: 'preference' as const,
+                name,
+                severity: 'moderate' as const,
+              })),
+            ],
+            nutritionGoals: { dailyCalories: 1800, maxSodium: 2000, minProtein: 45, maxCholesterol: 250, maxSugar: 40 },
+            dislikedIngredients: [],
+            favoriteMealIds: [],
+            isActive: true,
+          };
+          rec = await RecommendationService.getTopRecommendationForResident(virtualResident, targetPeriod as any);
+        }
+      }
 
       setRecommendation(rec ? { ...rec, targetPeriod: targetPeriod ?? undefined } : null);
       setRecLoading(false);
@@ -1250,7 +1408,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return;
     }
 
-    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: specialNote.trim() || undefined });
+    // If this is a breakfast pre-order (after 7 PM), prepend a clear
+    // "[FOR TOMORROW'S BREAKFAST]" tag to the note so the kitchen sorts it
+    // to the right tray run the next morning. Resident typed note is kept
+    // verbatim after the tag.
+    const isPreorderAdd = getAvailabilityStatus(
+      selectedMeal.time_range,
+      selectedMeal.meal_period,
+      currentTime,
+    ) === 'preorder_tomorrow';
+    const trimmedNote = specialNote.trim();
+    const finalNote = isPreorderAdd
+      ? `[FOR TOMORROW'S BREAKFAST]${trimmedNote ? ' ' + trimmedNote : ''}`
+      : (trimmedNote || undefined);
+
+    addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: finalNote });
     if (selectedDrink) addToCart({ ...selectedDrink, id: parseInt(selectedDrink.id) });
     if (selectedSide)  addToCart({ ...selectedSide,  id: parseInt(selectedSide.id)  });
     setShowMealDetail(false);
@@ -1260,11 +1432,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
     const mealImg = !!item.imageUrl;
-    // A meal is "available" if the kitchen hasn't disabled it AND we're
-    // within the time window for its meal period.
+    // A meal is orderable if the kitchen hasn't disabled it AND we're either
+    // within the time window OR within a breakfast pre-order window.
     const kitchenEnabled = item.isAvailable !== false;
-    const inTimeWindow = isWithinTimeRange(item.time_range, item.meal_period, currentTime);
-    const available = kitchenEnabled && inTimeWindow;
+    const status = getAvailabilityStatus(item.time_range, item.meal_period, currentTime);
+    const isPreorder = status === 'preorder_tomorrow';
+    const available = kitchenEnabled && (status === 'available' || isPreorder);
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
     // Centralised safety gate — card is disabled & marked when the resident's
     // profile bans this meal (allergies / dietary / medical rules).
@@ -1296,16 +1469,31 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       >
         {!available && (
           <View style={styles.unavailableOverlay}>
-            <Feather name={kitchenEnabled ? "clock" : "slash"} size={13} color="#717644" />
-            <Text style={styles.unavailableText}>
+            <Feather name={kitchenEnabled ? "clock" : "slash"} size={15} color="#717644" />
+            <Text style={[styles.unavailableText, { fontSize: scaled(14) }]}>
               {kitchenEnabled ? `Not available · ${item.time_range}` : 'Not available today'}
+            </Text>
+          </View>
+        )}
+        {/*
+          Compact pre-order chip for breakfast after 7 PM. Mirrors the
+          "Not available" pill style (top-left, pill-shaped) but in amber
+          so it reads as "different category, not disabled". Clear but
+          not overwhelming — the serving window stays on the green time
+          pill below the title, no need to repeat it in the chip.
+        */}
+        {isPreorder && available && (
+          <View style={styles.preorderOverlay}>
+            <Feather name="sunrise" size={15} color="#FFFFFF" />
+            <Text style={[styles.preorderOverlayText, { fontSize: scaled(13) }]} numberOfLines={1}>
+              Tomorrow&apos;s breakfast
             </Text>
           </View>
         )}
         {isUnsafe && available && (
           <View style={styles.unsafeOverlay}>
-            <Feather name="alert-triangle" size={12} color="#FFFFFF" />
-            <Text style={styles.unsafeOverlayText} numberOfLines={1}>
+            <Feather name="alert-triangle" size={14} color="#FFFFFF" />
+            <Text style={[styles.unsafeOverlayText, { fontSize: scaled(13) }]} numberOfLines={2}>
               Not safe · {unsafeReason}
             </Text>
           </View>
@@ -1329,9 +1517,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         {/* Coloured left accent strip */}
         <View style={[styles.periodStrip, { backgroundColor: accent.color }]} />
         <View style={[styles.cardContent, { backgroundColor: theme.surface }]}>
-          {/* Period pill next to meal title */}
+          {/*
+            Period pill ("Breakfast" / "Lunch" / "Dinner") — sits above the
+            meal title as the section label. Sized for elderly eyes and
+            honors the accessibility scale via scaled().
+          */}
           <View style={[styles.periodPill, { backgroundColor: accent.light, borderColor: accent.color }]}>
-            <Text style={[styles.periodPillText, { color: accent.color }]}>
+            <Feather
+              name={(PERIOD_ACCENT[item.meal_period]?.icon as any) ?? 'circle'}
+              size={13}
+              color={accent.color}
+            />
+            <Text style={[styles.periodPillText, { fontSize: scaled(14), color: accent.color }]}>
               {translateMealPeriod(item.meal_period, language)}
             </Text>
           </View>
@@ -1341,8 +1538,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </Text>
             {isUnsafe && (
               <View style={styles.restrictionBadge}>
-                <Feather name="alert-triangle" size={11} color="#DC2626" />
-                <Text style={styles.restrictionBadgeText}>Not safe</Text>
+                <Feather name="alert-triangle" size={13} color="#DC2626" />
+                <Text style={[styles.restrictionBadgeText, { fontSize: scaled(12) }]}>Not safe</Text>
               </View>
             )}
           </View>
@@ -1486,13 +1683,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     <View style={styles.bottomCard}>
       {/* Grandma avatar */}
       <View style={styles.bottomCardAvatar}>
-        <Image source={require('../styles/pictures/grandma.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />
+        <Image source={require('../styles/pictures/grandma.png')} style={{ width: 52, height: 52 }} resizeMode="contain" />
       </View>
 
       <View style={{ flex: 1, gap: 10 }}>
         {/* Recommendation row */}
         <View>
-          <Text style={[styles.bottomCardLabel, { fontSize: scaled(12) }]}>
+          <Text style={[styles.bottomCardLabel, { fontSize: scaled(13) }]}>
             GrannyGBT · {residentName}
           </Text>
           {recLoading ? (
@@ -1522,18 +1719,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   style={styles.bottomCardRecRow}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>
+                    <Text style={[styles.bottomCardRecText, { fontSize: scaled(17), lineHeight: scaled(24) }]}>
                       {recommendation.reason}{' '}
                       <Text style={styles.bottomCardMealName}>
                         {translateMealName(recommendation.meal_name, language)}
                       </Text>
                     </Text>
                     {isServing ? (
-                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11), color: '#4A7A60' }]}>
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(13), color: '#4A7A60' }]}>
                         ✓ Available now
                       </Text>
                     ) : targetSched ? (
-                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(11) }]}>
+                      <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(13) }]}>
                         Not serving now · Available {recMeal?.time_range || (() => {
                           const sh = targetSched.start / 60;
                           const eh = targetSched.end / 60;
@@ -1543,14 +1740,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     ) : null}
                   </View>
                   <View style={styles.bottomCardOrderBtn}>
-                    <Feather name="plus" size={14} color="#FFF" />
-                    <Text style={styles.bottomCardOrderBtnText}>Order</Text>
+                    <Feather name="plus" size={18} color="#FFF" />
+                    <Text style={[styles.bottomCardOrderBtnText, { fontSize: scaled(17) }]}>Order</Text>
                   </View>
                 </TouchableOpacity>
               );
             })()
           ) : (
-            <Text style={[styles.bottomCardRecText, { fontSize: scaled(14) }]}>{t.noRecommendation}</Text>
+            <Text style={[styles.bottomCardRecText, { fontSize: scaled(17), lineHeight: scaled(24) }]}>{t.noRecommendation}</Text>
           )}
         </View>
 
@@ -1560,20 +1757,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.bottomCardDivider} />
             {/* Header row */}
             <View style={styles.bottomCardSuggestHeader}>
-              <Feather name="clock" size={13} color="#4A5C2A" />
-              <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(12) }]}>
+              <Feather name="clock" size={16} color="#4A5C2A" />
+              <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(14) }]}>
                 {autoSuggest.isNow
                   ? `Current meal: ${autoSuggest.period} — ${formatMinsUntil(autoSuggest.minsUntil)} left`
                   : `Next meal: ${autoSuggest.period} in ${formatMinsUntil(autoSuggest.minsUntil)}`}
                 {' — based on your favorites'}
               </Text>
-              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={8}>
-                <Feather name="x" size={14} color="#9CA3AF" />
+              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={10}>
+                <Feather name="x" size={18} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
             {/* Main meal row */}
             <View style={styles.bottomCardSuggestRow}>
-              <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+              <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(17), lineHeight: scaled(24), flex: 1 }]}>
                 <Text style={styles.bottomCardSuggestLabel}>Meal: </Text>
                 <Text style={styles.bottomCardMealName}>{autoSuggest.meal.name}</Text>
               </Text>
@@ -1584,13 +1781,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   addToCart({ id: Number(m.id), name: m.name, meal_period: m.meal_period as any, description: m.description, kcal: m.kcal, sodium_mg: m.sodium_mg, protein_g: m.protein_g, tags: m.tags });
                 }}
               >
-                <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                <Text style={[styles.bottomCardSuggestConfirmText, { fontSize: scaled(16) }]}>Add</Text>
               </TouchableOpacity>
             </View>
             {/* Drink row */}
             {autoSuggest.drink && (
               <View style={styles.bottomCardSuggestRow}>
-                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(17), lineHeight: scaled(24), flex: 1 }]}>
                   <Text style={styles.bottomCardSuggestLabel}>Drink: </Text>
                   <Text style={styles.bottomCardMealName}>{autoSuggest.drink.name}</Text>
                 </Text>
@@ -1601,14 +1798,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     addToCart({ id: Number(d.id), name: d.name, meal_period: d.meal_period as any, description: d.description, kcal: d.kcal, sodium_mg: d.sodium_mg, protein_g: d.protein_g, tags: d.tags });
                   }}
                 >
-                  <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                  <Text style={[styles.bottomCardSuggestConfirmText, { fontSize: scaled(16) }]}>Add</Text>
                 </TouchableOpacity>
               </View>
             )}
             {/* Dessert row */}
             {autoSuggest.dessert && (
               <View style={styles.bottomCardSuggestRow}>
-                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(13), flex: 1 }]}>
+                <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(17), lineHeight: scaled(24), flex: 1 }]}>
                   <Text style={styles.bottomCardSuggestLabel}>Side: </Text>
                   <Text style={styles.bottomCardMealName}>{autoSuggest.dessert.name}</Text>
                 </Text>
@@ -1619,7 +1816,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     addToCart({ id: Number(s.id), name: s.name, meal_period: s.meal_period as any, description: s.description, kcal: s.kcal, sodium_mg: s.sodium_mg, protein_g: s.protein_g, tags: s.tags });
                   }}
                 >
-                  <Text style={styles.bottomCardSuggestConfirmText}>Add</Text>
+                  <Text style={[styles.bottomCardSuggestConfirmText, { fontSize: scaled(16) }]}>Add</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1654,15 +1851,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 }
               }}
             >
-              <Feather name="check-circle" size={14} color="#FFF" />
-              <Text style={styles.bottomCardPlaceAllText}>Place Order</Text>
+              <Feather name="check-circle" size={20} color="#FFF" />
+              <Text style={[styles.bottomCardPlaceAllText, { fontSize: scaled(18) }]}>Place Order</Text>
             </TouchableOpacity>
             {/* Dismiss all */}
             <TouchableOpacity
               style={styles.bottomCardSuggestDismiss}
               onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }}
             >
-              <Text style={[styles.bottomCardSuggestDismissText, { fontSize: scaled(12) }]}>Dismiss all</Text>
+              <Text style={[styles.bottomCardSuggestDismissText, { fontSize: scaled(14) }]}>Dismiss all</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1731,7 +1928,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.detailSheet}>
               <View style={styles.detailSheetHandle} />
               <View style={styles.detailSheetHeader}>
-                <Text style={styles.detailSheetLabel}>Customize order</Text>
+                <Text style={[styles.detailSheetLabel, { fontSize: scaled(15) }]}>Customize order</Text>
                 <TouchableOpacity
                   style={styles.detailCloseButton}
                   onPress={() => setShowMealDetail(false)}
@@ -1749,6 +1946,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               const ph = getMealPlaceholder(selectedMeal.name);
               //const mealImg = getMealImage(selectedMeal.name);
               const mealImg = !!selectedMeal.imageUrl;
+              // Is this being customised during the breakfast pre-order window?
+              // Drives the big "for tomorrow" banner + the kitchen note prefix.
+              const detailIsPreorder = getAvailabilityStatus(
+                selectedMeal.time_range,
+                selectedMeal.meal_period,
+                currentTime,
+              ) === 'preorder_tomorrow';
               return (
                 <>
                   {/* Image */}
@@ -1766,12 +1970,36 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   </View>
                   {/* Info */}
                   <View style={styles.detailBody}>
+                    {/*
+                      Pre-order explainer — the first thing the resident sees
+                      inside the detail sheet when it's past 7 PM. Written
+                      plainly so there's no room to misread it as
+                      "breakfast is being served now".
+                    */}
+                    {detailIsPreorder && (
+                      <View style={styles.preorderBanner}>
+                        <View style={styles.preorderBannerIconWrap}>
+                          <Feather name="sunrise" size={26} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.preorderBannerTitle, { fontSize: scaled(18) }]}>
+                            This is for TOMORROW MORNING
+                          </Text>
+                          <Text style={[styles.preorderBannerBody, { fontSize: scaled(16) }]}>
+                            You&apos;re pre-ordering tomorrow&apos;s breakfast now so
+                            it&apos;s ready when the kitchen opens. It will be served
+                            between {BREAKFAST_WINDOW_LABEL}. The kitchen is closed
+                            right now.
+                          </Text>
+                        </View>
+                      </View>
+                    )}
                     <Text style={[styles.detailTitle, { fontSize: scaled(22) }]}>{translateMealName(selectedMeal.name, language)}</Text>
                     <Text style={[styles.detailDesc, { fontSize: scaled(15) }]}>{translateMealDescription(selectedMeal.description, language)}</Text>
                     <View style={styles.detailNutrRow}>
-                      <Text style={styles.detailNutr}>{selectedMeal.kcal} kcal</Text>
-                      <Text style={styles.detailNutr}>Sodium: {selectedMeal.sodium_mg}mg</Text>
-                      <Text style={styles.detailNutr}>Protein: {selectedMeal.protein_g}g</Text>
+                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>{selectedMeal.kcal} kcal</Text>
+                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>Sodium: {selectedMeal.sodium_mg}mg</Text>
+                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>Protein: {selectedMeal.protein_g}g</Text>
                     </View>
 
                     {/* Special Note */}
@@ -1918,35 +2146,35 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         <View style={styles.supportBackdrop}>
           <View style={styles.supportCard}>
             <View style={styles.supportCardHeader}>
-              <Text style={styles.supportCardTitle}>Need Help?</Text>
+              <Text style={[styles.supportCardTitle, { fontSize: scaled(20) }]}>Need Help?</Text>
               <TouchableOpacity onPress={() => setShowBrowseSupport(false)} hitSlop={10}>
                 <Feather name="x" size={22} color="#1A1A1A" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.supportCardSub}>Contact your care team or kitchen staff for assistance with meal orders.</Text>
+            <Text style={[styles.supportCardSub, { fontSize: scaled(14) }]}>Contact your care team or kitchen staff for assistance with meal orders.</Text>
 
             <View style={styles.scheduleCardBlock}>
-              <Text style={styles.scheduleCardTitle}>Kitchen Hours</Text>
+              <Text style={[styles.scheduleCardTitle, { fontSize: scaled(16) }]}>Kitchen Hours</Text>
               {MEAL_SCHEDULE.map((s) => {
                 const isActive = activePeriod === s.label;
                 return (
                   <View key={s.label} style={[styles.scheduleCardRow, isActive && styles.scheduleCardRowActive]}>
-                    <Text style={styles.scheduleCardIcon}>{s.icon}</Text>
-                    <Text style={[styles.scheduleCardLabel, isActive && styles.scheduleCardLabelActive]}>
+                    <Text style={[styles.scheduleCardIcon, { fontSize: scaled(20) }]}>{s.icon}</Text>
+                    <Text style={[styles.scheduleCardLabel, { fontSize: scaled(15) }, isActive && styles.scheduleCardLabelActive]}>
                       {s.label}
                     </Text>
-                    <Text style={[styles.scheduleCardTime, isActive && styles.scheduleCardLabelActive]}>
+                    <Text style={[styles.scheduleCardTime, { fontSize: scaled(14) }, isActive && styles.scheduleCardLabelActive]}>
                       {s.label === 'Breakfast' ? '7:00 am – 10:00 am' : s.label === 'Lunch' ? '11:00 am – 2:00 pm' : '4:00 pm – 7:00 pm'}
                     </Text>
                     {isActive && <View style={styles.scheduleActiveDot} />}
                   </View>
                 );
               })}
-              <Text style={styles.scheduleKitchenNote}>Kitchen open 7 am – 7 pm daily</Text>
+              <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>Kitchen open 7 am – 7 pm daily</Text>
             </View>
 
             <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
-              <Text style={styles.supportCloseBtnText}>Close</Text>
+              <Text style={[styles.supportCloseBtnText, { fontSize: scaled(15) }]}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2095,26 +2323,29 @@ const styles = StyleSheet.create({
   },
   floatingGrannyButton: {
     position: 'absolute',
-    right: 16,
-    bottom: 22,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    right: 20,
+    bottom: 26,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
     shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
-    borderWidth: 2,
+    shadowOpacity: 0.20,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 9,
+    borderWidth: 2.5,
     borderColor: COLORS.primary,
   },
   floatingGrannyImage: {
-    width: 38,
-    height: 38,
+    // Keep the image at ~65% of the button diameter — same visual ratio as
+    // the original 38/58 design. Larger than this makes the square image's
+    // corners poke past the circular border and the art looks clipped.
+    width: 50,
+    height: 50,
   },
   floatingTopActions: {
     position: 'absolute',
@@ -2257,15 +2488,19 @@ const styles = StyleSheet.create({
   },
   periodPill: {
     alignSelf: 'flex-start',
-    borderRadius: 6,
-    borderWidth: 1,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginBottom: 8,
   },
   periodPillText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   cardContent: {
     padding: 16,
@@ -2400,20 +2635,20 @@ const styles = StyleSheet.create({
   bottomCardOrderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: '#4A5C2A',
-    borderRadius: 10,
-    paddingVertical: 7,
+    borderRadius: 12,
+    paddingVertical: 11,
     paddingHorizontal: 12,
   },
   bottomCardOrderBtnText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 17,
   },
   bottomCardAvailBadge: {
     color: '#B45309',
-    marginTop: 3,
+    marginTop: 5,
     fontWeight: '600',
   },
   bottomCardDivider: {
@@ -2449,30 +2684,32 @@ const styles = StyleSheet.create({
   },
   bottomCardSuggestConfirm: {
     backgroundColor: '#4A5C2A',
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 12,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
   },
+  // Base sizes below are fallbacks — authoritative size is the inline
+  // `scaled(…)` in the render, so accessibility scaling is honored.
   bottomCardSuggestConfirmText: {
     color: '#FFF',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 16,
   },
   bottomCardPlaceAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: '#4A5C2A',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginTop: 6,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginTop: 8,
   },
   bottomCardPlaceAllText: {
     color: '#FFF',
     fontWeight: '900',
-    fontSize: 13,
+    fontSize: 18,
   },
   bottomCardSuggestDismiss: {
     alignSelf: 'center',
@@ -2545,6 +2782,72 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(245,243,238,0.55)',
     zIndex: 1,
+  },
+  // Compact pill — same footprint/shape as the "Not available" chip so the
+  // visual grammar stays consistent. Amber color distinguishes it: the
+  // dull olive chip means "you can't order this", the amber chip means
+  // "you CAN order this, but it arrives tomorrow morning".
+  preorderOverlay: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#D97706',
+    borderWidth: 1,
+    borderColor: '#B45309',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  preorderOverlayText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  // Larger banner at the top of the meal detail modal — same amber, more
+  // text so it stands as its own section explaining the pre-order concept.
+  preorderBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    backgroundColor: '#FFF7ED',
+    borderColor: '#D97706',
+    borderWidth: 2,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  preorderBannerIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#D97706',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Base sizes here are a fallback — the inline fontSize via scaled() in the
+  // render is the authoritative size so accessibility scaling is honored.
+  preorderBannerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#9A3412',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  preorderBannerBody: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#7C2D12',
   },
   aiRecommendationIcon: {
     width: 36,

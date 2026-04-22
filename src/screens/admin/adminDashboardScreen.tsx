@@ -1,5 +1,7 @@
 // src/screens/admin/adminDashboardScreen.tsx
 
+import { getAuthToken } from "../../services/storage"; //new add
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -439,28 +441,47 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setShowEditResident(true);
   };
 
-  const submitEditResidentUIOnly = async () => {
+  const submitEditResident = async () => {
     if (!editingResident) return;
-    const nextDietary = editDietary
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
 
-    setResidents((prev) =>
-      prev.map((r) =>
-        r.id === editingResident.id
-          ? {
-              ...r,
-              name: editName.trim(),
-              room: editRoom.trim(),
-              dietaryRestrictions: nextDietary
-            }
-          : r
-      )
-    );
-    Alert.alert("Updated (UI only)", "Backend update endpoint isn't ready yet.");
-    setShowEditResident(false);
-    setEditingResident(null);
+    try {
+      const token = await getAuthToken();
+
+      if (!token) {
+        Alert.alert("Auth error", "No token found. Please log in again.");
+        return;
+      }
+
+      const response = await fetch(
+        `https://traymate-auth.onrender.com/admin/residents/${editingResident.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: editName.trim(),
+            roomNumber: editRoom.trim(),
+            foodAllergies: editDietary || "None",
+            medicalConditions: editMedicalNeeds || "None",
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update resident");
+      }
+
+      await refreshResidents(); 
+
+      Alert.alert("Success", "Resident updated successfully");
+
+      setShowEditResident(false);
+      setEditingResident(null);
+    } catch (e: any) {
+      Alert.alert("Update failed", e.message);
+    }
   };
 
   const submitCaregiver = async () => {
@@ -841,7 +862,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
             <Pressable
               style={styles.modalPrimaryBtn}
-              onPress={submitEditResidentUIOnly}
+              onPress={submitEditResident}
             >
               <Text style={styles.modalPrimaryText}>Update Resident</Text>
             </Pressable>

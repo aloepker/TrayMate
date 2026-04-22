@@ -668,6 +668,36 @@ export async function replaceOrderApi(
 }
 
 /**
+ * 2b) Cancel an existing order by updating its status.
+ *     Reuses PUT /mealOrders/{orderId}.
+ */
+export async function cancelOrderApi(payload: {
+  orderId: number;
+  date: string;
+  mealOfDay: string;
+  userId: string;
+  mealItemsIdNumbers: string;
+}): Promise<MealOrderResponse> {
+  return replaceOrderApi(payload.orderId, {
+    date: payload.date,
+    mealOfDay: payload.mealOfDay,
+    userId: payload.userId,
+    status: "cancelled",
+    mealItemsIdNumbers: payload.mealItemsIdNumbers,
+  });
+}
+
+/**
+ * 2c) Delete an existing order if the backend supports hard deletion.
+ *     DELETE /mealOrders/{orderId}
+ */
+export async function deleteOrderApi(orderId: number): Promise<void> {
+  await request<void>(`/mealOrders/${orderId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
  * 3) Get a resident's order history.
  *    GET /mealOrders/history/{userId}
  */

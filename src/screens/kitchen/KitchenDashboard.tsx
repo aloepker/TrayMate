@@ -21,7 +21,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
-import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, removeOrderApi, setMealAvailability } from "../../services/api";
+import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, setMealAvailability } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -60,6 +60,13 @@ type Status = "pending" | "preparing" | "ready" | "served" | "cancelled" | "subs
 
 // ─── Base URL + API helpers ────────────────────────────────────────────────────
 const BASE = "https://traymate-auth.onrender.com";
+
+const formatLocalDate = (date: Date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 async function apiSetStatusSingle(
   userId: string,
@@ -860,7 +867,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   // ── fetch ALL orders for today (every meal period) ──
   const fetchAllOrders = async () => {
     setLoading(true);
-    const today = new Date().toISOString().split("T")[0];
+    const today = formatLocalDate();
     try {
       const tok = token || await getAuthToken();
       const headers: Record<string, string> = {};
@@ -875,7 +882,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         } catch { return []; }
       });
       const results = await Promise.all(fetches);
-      setOrders(results.flat());
+      setOrders(
+        results
+          .flat()
+          .filter((item) => String(item?.order?.status ?? '').toLowerCase() !== 'cancelled')
+      );
     } catch {
       setOrders([]);
     } finally {
@@ -897,7 +908,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       prev.map((o) => o.order.id === orderId ? { ...o, order: { ...o.order, status } } : o)
     );
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = formatLocalDate();
       const tok = token || await getAuthToken();
       await apiSetStatusSingle(item.order.userId, item.order.mealOfDay, today, status, cookName, tok);
     } catch {
@@ -915,39 +926,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     applyStatusChange(orderId, status, cook);
   };
 
-  // Hard-delete an order (vs. Cancel which only flips status).
-  const handleRemoveOrder = (orderId: number) => {
-    const item = orders.find((o) => o.order.id === orderId);
-    if (!item) return;
-    const resident = backendResidents.find((r: ApiResident) => String(r.id) === String(item.order.userId));
-    const who = resident?.name ?? `user ${item.order.userId}`;
-    Alert.alert(
-      "Delete Order",
-      `Permanently delete Order #${orderId} (${item.order.mealOfDay}) for ${who}?`,
-      [
-        { text: "No", style: "cancel" },
-        {
-          text: "Yes, Delete",
-          style: "destructive",
-          onPress: async () => {
-            const snapshot = orders;
-            setOrders((prev) => prev.filter((o) => o.order.id !== orderId));
-            try {
-              await removeOrderApi({
-                userId: item.order.userId,
-                mealOfDay: item.order.mealOfDay,
-                date: item.order.date,
-              });
-            } catch (e: any) {
-              setOrders(snapshot);
-              Alert.alert("Error", e?.message ?? "Could not delete the order.");
-            }
-          },
-        },
-      ],
-    );
-  };
-
   // ── bulk status update (applies per-period for each period that has orders) ──
   const handleBulkStatus = (status: Status) => {
     const label = status.charAt(0).toUpperCase() + status.slice(1);
@@ -957,7 +935,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         const prevOrders = orders;
         setOrders((prev) => prev.map((o) => ({ ...o, order: { ...o.order, status } })));
         try {
-          const today = new Date().toISOString().split("T")[0];
+          const today = formatLocalDate();
           const tok = token || await getAuthToken();
           const cook = status === "preparing" ? (loggedInEmail ?? undefined) : undefined;
           // Call bulk for each period that has orders
@@ -1378,7 +1356,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const initials  = (resident?.name ?? "?").slice(0, 2).toUpperCase();
             const orderPeriod = item.order.mealOfDay || "Breakfast";
             const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
-            const orderNote = item.order.note || item.order.specialInstructions || "";
+            const rawOrderNote = item.order.note || item.order.specialInstructions || "";
+            // Pre-order marker — set by the resident browse screen when ordering
+            // breakfast after 7 PM the previous evening. Kitchen needs to queue
+            // these for the NEXT morning's tray run, not today's batch.
+            const isPreorderForTomorrow = /\[FOR TOMORROW'S BREAKFAST\]/i.test(rawOrderNote);
+            // Strip the tag from the displayed note so it's not duplicated
+            // (the banner above the note already conveys the meaning).
+            const orderNote = rawOrderNote.replace(/\[FOR TOMORROW'S BREAKFAST\]\s*/i, "").trim();
             const isReplying = replyingTo === item.order.id;
 
             // Per-order messages: match by order ID tag in text (e.g. "[Order #123]")
@@ -1462,6 +1447,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                     </Text>
                   </View>
                 </View>
+
+                {/* ── "For tomorrow" banner (breakfast pre-orders placed the night before) ── */}
+                {isPreorderForTomorrow && (
+                  <View style={s.preorderBanner}>
+                    <Feather name="sunrise" size={18} color="#FFFFFF" />
+                    <Text style={s.preorderBannerText} numberOfLines={2}>
+                      PRE-ORDER FOR TOMORROW&apos;S BREAKFAST · Serve 7:00–10:00 AM
+                    </Text>
+                  </View>
+                )}
 
                 {/* ── Dietary / allergy / medical badges ── */}
                 {(allergies.length > 0 || dietary.length > 0 || medical.length > 0) && (
@@ -1622,14 +1617,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   >
                     <Feather name="refresh-cw" size={13} color={C.warning} />
                     <Text style={[s.orderActionText, { color: C.warning }]}>Substitution</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[s.orderActionBtn, { borderColor: C.danger, backgroundColor: C.dangerBg }]}
-                    onPress={() => handleRemoveOrder(item.order.id)}
-                  >
-                    <Feather name="trash-2" size={13} color={C.danger} />
-                    <Text style={[s.orderActionText, { color: C.danger }]}>Delete</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -2502,6 +2489,26 @@ const s = StyleSheet.create({
     marginBottom: 4,
     borderWidth: 1,
     borderColor: "#FDE68A",
+  },
+  // Loud amber banner on orders pre-placed the night before — kitchen queues
+  // these for tomorrow morning's tray run, NOT today's.
+  preorderBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#D97706",
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  preorderBannerText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   noteText: {
     flex: 1,
