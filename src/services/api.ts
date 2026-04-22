@@ -707,17 +707,6 @@ export async function getOrderHistoryApi(
   return request<MealOrderWithMeals[]>(`/mealOrders/history/${userId}`);
 }
 
-/**
- * 4) Delete a single order by backend ID.
- *    DELETE /mealOrders/{orderId}
- *    Returns 204 No Content on success.
- */
-export async function deleteOrderApi(orderId: number): Promise<void> {
-  await request<void>(`/mealOrders/${orderId}`, {
-    method: "DELETE",
-  });
-}
-
 // DELETE /mealOrders/remove?userId=X&mealOfDay=X&date=YYYY-MM-DD
 // Hard-remove by composite key (no primary id needed).
 export async function removeOrderApi(params: {

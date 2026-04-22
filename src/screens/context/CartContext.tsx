@@ -4,6 +4,7 @@ import {
   replaceOrderApi,
   getOrderHistoryApi,
   deleteOrderApi,
+  removeOrderApi,
   type MealOrderResponse,
 } from '../../services/api';
 
@@ -29,6 +30,9 @@ export type Order = {
   status: 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'substitution_requested';
   placedAt: Date;
   totalNutrition: { calories: number; sodium: number; protein: number };
+  // Composite key for the tested DELETE /mealOrders/remove endpoint
+  mealOfDay?: string;       // "Breakfast" | "Lunch" | "Dinner"
+  date?: string;            // "YYYY-MM-DD"
 };
 
 // What the context provides
@@ -101,7 +105,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   };
 
   /** Build a local Order object from cart state */
-  const buildLocalOrder = (residentId: string, backendId?: number): Order => {
+  const buildLocalOrder = (
+    residentId: string,
+    backendId?: number,
+    mealOfDay?: string,
+    date?: string,
+  ): Order => {
     const totals = getTotalNutrition();
     return {
       id: backendId ? `backend_${backendId}` : `order_${Date.now()}`,
@@ -111,6 +120,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       status: 'confirmed',
       placedAt: new Date(),
       totalNutrition: totals,
+      mealOfDay,
+      date,
     };
   };
 
@@ -139,7 +150,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       });
 
       // Success — backend returned 201
-      const newOrder = buildLocalOrder(rid, response.id);
+      const newOrder = buildLocalOrder(rid, response.id, meal, today);
       setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       return { order: newOrder };
@@ -164,7 +175,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Network error or other failure — fall back to local-only order
       console.warn('Backend order failed, saving locally:', err?.message);
-      const localOrder = buildLocalOrder(rid);
+      const localOrder = buildLocalOrder(rid, undefined, meal, today);
       setOrders((prev) => [localOrder, ...prev]);
       setCart([]);
       return { order: localOrder };
@@ -194,14 +205,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         mealItemsIdNumbers: itemIds,
       });
 
-      const newOrder = buildLocalOrder(rid, response.id);
+      const newOrder = buildLocalOrder(rid, response.id, meal, today);
       // Remove old order with same backend ID if present
       setOrders((prev) => [newOrder, ...prev.filter((o) => o.backendId !== backendOrderId)]);
       setCart([]);
       return newOrder;
     } catch (err: any) {
       console.warn('Backend replace failed, saving locally:', err?.message);
-      const localOrder = buildLocalOrder(rid);
+      const localOrder = buildLocalOrder(rid, undefined, meal, today);
       setOrders((prev) => [localOrder, ...prev]);
       setCart([]);
       return localOrder;
@@ -247,6 +258,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),
           protein: entry.meals.reduce((sum, m) => sum + m.protein, 0),
         },
+        mealOfDay: entry.order.mealOfDay,
+        date: entry.order.date,
       }));
 
       // Merge: keep local-only orders (no backendId) + replace backend orders
@@ -274,6 +287,27 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   };
 
   /**
+   * Delete a single order on the backend.
+   * Prefers the tested composite-key endpoint:
+   *   DELETE /mealOrders/remove?userId=X&mealOfDay=X&date=YYYY-MM-DD
+   * Falls back to DELETE /mealOrders/{orderId} if composite key fields
+   * aren't available on the local Order.
+   */
+  const deleteOrderOnBackend = async (order: Order): Promise<void> => {
+    if (order.mealOfDay && order.date && order.residentId) {
+      await removeOrderApi({
+        userId: order.residentId,
+        mealOfDay: order.mealOfDay,
+        date: order.date,
+      });
+      return;
+    }
+    if (order.backendId != null) {
+      await deleteOrderApi(order.backendId);
+    }
+  };
+
+  /**
    * Remove a single order — deletes from backend first, then local state.
    * Falls back to local-only removal if backend call fails.
    */
@@ -282,8 +316,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     if (order?.backendId) {
       // Track this ID so fetchOrderHistory won't re-add it even if delete fails
       setDeletedBackendIds((prev) => new Set(prev).add(order.backendId!));
+    }
+    if (order) {
       try {
-        await deleteOrderApi(order.backendId);
+        await deleteOrderOnBackend(order);
       } catch (err: any) {
         console.warn('Backend delete failed, removing locally only:', err?.message);
       }
@@ -303,8 +339,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     // Delete from backend in parallel, ignoring individual failures
     await Promise.allSettled(
       toDelete
-        .filter((o) => o.backendId != null)
-        .map((o) => deleteOrderApi(o.backendId!))
+        .filter((o) => o.backendId != null || (o.mealOfDay && o.date))
+        .map((o) => deleteOrderOnBackend(o))
     );
 
     // Remove cleared orders from local state
