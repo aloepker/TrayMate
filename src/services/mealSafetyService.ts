@@ -50,6 +50,49 @@ export type SafetyResident = {
   medicalConditions?: string[];
 };
 
+/**
+ * Canonical list of allergen options shown in UI dropdowns
+ * (Add/Edit Resident, medical staff edit, etc.). These strings are what
+ * actually get stored on the resident's `foodAllergies` field, and they
+ * match the keys in ALLERGEN_KEYWORDS below so `getUnsafeReason` picks
+ * them up without any extra translation. Edit this one array to add a
+ * new allergen everywhere in the app.
+ */
+export const COMMON_ALLERGENS: string[] = [
+  "Dairy",
+  "Eggs",
+  "Gluten",
+  "Wheat",
+  "Peanuts",
+  "Tree Nuts",
+  "Shellfish",
+  "Fish",
+  "Soy",
+  "Sesame",
+];
+
+/**
+ * Canonical list of medical conditions shown in UI dropdowns. Kept next
+ * to COMMON_ALLERGENS on purpose — both feed the same resident profile
+ * and both are consumed by getUnsafeReason below. Names that match the
+ * condition checks in getUnsafeReason (e.g. "Hypertension") auto-enforce
+ * numeric rules like the 600mg sodium cap.
+ */
+export const COMMON_MEDICAL_CONDITIONS: string[] = [
+  "Hypertension",
+  "Diabetes",
+  "Heart Disease",
+  "Kidney Disease",
+  "High Cholesterol",
+  "Celiac Disease",
+  "Lactose Intolerance",
+  "GERD",
+  "Dysphagia",
+  "Dementia",
+  "Osteoporosis",
+  "Arthritis",
+];
+
 // ── Allergy keyword groups ───────────────────────────────────────
 // When a resident lists an allergy like "dairy", we also scan the
 // meal's name/description/tags for any of these related keywords —

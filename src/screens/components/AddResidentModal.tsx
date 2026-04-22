@@ -24,6 +24,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { COMMON_ALLERGENS, COMMON_MEDICAL_CONDITIONS } from "../../services/mealSafetyService";
 
 type Props = {
   visible: boolean;
@@ -33,6 +34,10 @@ type Props = {
 
 export default function AddResidentModal({ visible, onClose, onSuccess }: Props) {
   const [saving, setSaving] = useState(false);
+  // Collapsed-by-default chip pickers for Allergies and Medical Conditions
+  // to keep the form short. Tap the header to expand the chip grid.
+  const [allergiesOpen, setAllergiesOpen] = useState(false);
+  const [medCondsOpen, setMedCondsOpen] = useState(false);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -45,8 +50,8 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     emergencyPhone: "",
     doctor: "",
     doctorPhone: "",
-    medicalConditions: "",
-    foodAllergies: "",
+    medicalConditions: [] as string[],
+    foodAllergies: [] as string[],
     medications: "",
     roomNumber: "",
   });
@@ -77,9 +82,56 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     errors.includes(key) && { color: "#B91C1C" },
   ];
 
-  const update = (key: keyof typeof form, value: string) => {
-    setForm((p) => ({ ...p, [key]: value }));
+  // Generic field setter. Accepts strings for text inputs and string[]
+  // for multi-select fields like `foodAllergies`.
+  const update = (key: keyof typeof form, value: string | string[]) => {
+    setForm((p) => ({ ...p, [key]: value as any }));
     if (errors.includes(key)) setErrors((p) => p.filter((x) => x !== key));
+  };
+
+  // Coerce any field value to a clean string[] regardless of what's in
+  // state. Needed because React Native fast-refresh can preserve the old
+  // string-shaped value across hot reloads, and because backend reads may
+  // hand us a comma-separated string instead of an array.
+  const asStringArray = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.filter((x) => typeof x === "string");
+    if (typeof v === "string") {
+      return v.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  // Kept for back-compat with existing call sites using the old name.
+  const asAllergenArray = asStringArray;
+
+  // Generic toggle for any chip-based multi-select field on the form.
+  // Case-insensitive compare so "Peanuts" and "peanuts" never double-add.
+  const toggleChip = (key: "foodAllergies" | "medicalConditions", value: string) => {
+    setForm((p) => {
+      const current = asStringArray((p as any)[key]);
+      const exists = current.some((a) => a.toLowerCase() === value.toLowerCase());
+      const next = exists
+        ? current.filter((a) => a.toLowerCase() !== value.toLowerCase())
+        : [...current, value];
+      return { ...p, [key]: next };
+    });
+    if (errors.includes(key)) {
+      setErrors((p) => p.filter((x) => x !== key));
+    }
+  };
+
+  // Back-compat wrapper for the existing allergen chip.
+  const toggleAllergen = (allergen: string) => toggleChip("foodAllergies", allergen);
+
+  // Formats room input as `<digits><optional single letter>` while typing,
+  // so the caller can't paste free-form text like "Bob's Room". Keeps up
+  // to 4 digits followed by one uppercase A–Z. Anything else is stripped.
+  // Examples: "101" → "101", "101a" → "101A", "12 B!" → "12B".
+  const formatRoom = (raw: string) => {
+    const cleaned = raw.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    const match = cleaned.match(/^(\d{0,4})([A-Z]?)/);
+    if (!match) return "";
+    return `${match[1]}${match[2]}`;
   };
 
   // Formats date input as YYYY-MM-DD while typing
@@ -115,17 +167,25 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       emergencyPhone: "",
       doctor: "",
       doctorPhone: "",
-      medicalConditions: "",
-      foodAllergies: "",
+      medicalConditions: [] as string[],
+      foodAllergies: [] as string[],
       medications: "",
     });
   };
 
   const submit = async () => {
-    // required field validation
-    const missing = requiredKeys.filter((k) => !String((form as any)[k]).trim());
+    // required field validation (handles arrays for multi-select fields)
+    const missing = requiredKeys.filter((k) => {
+      const v = (form as any)[k];
+      if (k === "foodAllergies") return asAllergenArray(v).length === 0;
+      if (Array.isArray(v)) return v.length === 0;
+      return !String(v ?? "").trim();
+    });
     if (missing.length) {
       setErrors(missing);
+      // If a collapsed chip picker is the problem, pop it open so the
+      // user actually sees the options they need to pick.
+      if (missing.includes("foodAllergies")) setAllergiesOpen(true);
       Alert.alert("Missing Fields", "Please fill out the highlighted fields.");
       return;
     }
@@ -153,6 +213,18 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       return;
     }
 
+    // Validate Room format: 1-4 digits, optional single A–Z letter.
+    // e.g. "101", "101A", "2045B". Rejects "Room 1", "ABC", "101AB", etc.
+    const roomOk = /^\d{1,4}[A-Z]?$/.test(form.roomNumber.trim());
+    if (!roomOk) {
+      setErrors((p) => Array.from(new Set([...p, "roomNumber"])));
+      Alert.alert(
+        "Invalid Room",
+        "Room must be a number with an optional letter (e.g. 101 or 101A)."
+      );
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -162,6 +234,11 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
         middleName: form.middleName.trim(),
         lastName: form.lastName.trim(),
         room: form.roomNumber.trim(), // <-- send room
+        // Backend stores foodAllergies as a single TEXT column, so flatten
+        // the multi-select array to a comma-separated string. The read-side
+        // (`normalizeStringArray` in api.ts) splits it back into an array.
+        foodAllergies: asStringArray(form.foodAllergies).join(", "),
+        medicalConditions: asStringArray(form.medicalConditions).join(", "),
         // dob already in backend format YYYY-MM-DD
       };
 
@@ -206,8 +283,8 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
         emergencyPhone: "",
         doctor: "",
         doctorPhone: "",
-        medicalConditions: "",
-        foodAllergies: "",
+        medicalConditions: [] as string[],
+        foodAllergies: [] as string[],
         medications: "",
         roomNumber: "",
       });
@@ -287,14 +364,16 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 </View>
               </View>
 
-              {/* Room (NEW) */}
+              {/* Room (NEW) — digits + optional letter only (e.g. 101, 101A) */}
               <Text style={labelStyle("roomNumber")}>Room*</Text>
               <TextInput
                 style={styles.modalInput}
                 value={form.roomNumber}
-                onChangeText={(v) => update("roomNumber", v)}
+                onChangeText={(v) => update("roomNumber", formatRoom(v))}
                 placeholder="e.g., 101A"
                 autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={5}
               />
 
               {/* Phone */}
@@ -353,36 +432,127 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 </View>
               </View>
 
-              {/* Medical notes */}
-              <Text style={styles.modalLabel}>Medical Conditions</Text>
-              <TextInput
-                style={[styles.modalInput, { height: 90, textAlignVertical: "top" }]}
-                value={form.medicalConditions}
-                onChangeText={(v) => update("medicalConditions", v)}
-                multiline
-                placeholder="e.g., Diabetes, High blood pressure"
-              />
+              {/* Medical Conditions — collapsed chip picker. Same pattern
+                  as Food Allergies above. Names matching getUnsafeReason
+                  (e.g. "Hypertension") auto-enforce safety rules. */}
+              {(() => {
+                const selectedConds = asStringArray(form.medicalConditions);
+                const count = selectedConds.length;
+                const preview = count
+                  ? selectedConds.slice(0, 3).join(", ") + (count > 3 ? `, +${count - 3} more` : "")
+                  : "None selected";
+                return (
+                  <>
+                    <Pressable
+                      onPress={() => setMedCondsOpen((v) => !v)}
+                      style={styles.dropdownHeader}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.modalLabel}>Medical Conditions</Text>
+                        <Text style={styles.dropdownPreview} numberOfLines={1}>
+                          {preview}
+                        </Text>
+                      </View>
+                      {count > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{count}</Text>
+                        </View>
+                      )}
+                      <Text style={styles.chevron}>{medCondsOpen ? "▲" : "▼"}</Text>
+                    </Pressable>
+                    {medCondsOpen && (
+                      <>
+                        <Text style={styles.chipHint}>Tap all that apply.</Text>
+                        <View style={styles.chipWrap}>
+                          {COMMON_MEDICAL_CONDITIONS.map((cond) => {
+                            const selected = selectedConds.some(
+                              (c) => c.toLowerCase() === cond.toLowerCase()
+                            );
+                            return (
+                              <Pressable
+                                key={cond}
+                                onPress={() => toggleChip("medicalConditions", cond)}
+                                style={[styles.chip, selected && styles.chipSelected]}
+                              >
+                                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                                  {selected ? "✓ " : ""}{cond}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
 
-              <View style={styles.row}>
-                <View style={styles.col}>
-                  <Text style={labelStyle("foodAllergies")}>Food Allergies*</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={form.foodAllergies}
-                    onChangeText={(v) => update("foodAllergies", v)}
-                    placeholder="e.g., Peanuts"
-                  />
-                </View>
-                <View style={styles.col}>
-                  <Text style={styles.modalLabel}>Medications</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={form.medications}
-                    onChangeText={(v) => update("medications", v)}
-                    placeholder="e.g., Metformin"
-                  />
-                </View>
-              </View>
+              {/* Food Allergies — collapsed chip picker. Header shows
+                  selection count + preview; tap to expand the full grid. */}
+              {(() => {
+                const selectedAllergies = asStringArray(form.foodAllergies);
+                const count = selectedAllergies.length;
+                const preview = count
+                  ? selectedAllergies.slice(0, 3).join(", ") + (count > 3 ? `, +${count - 3} more` : "")
+                  : "None selected";
+                return (
+                  <>
+                    <Pressable
+                      onPress={() => setAllergiesOpen((v) => !v)}
+                      style={[
+                        styles.dropdownHeader,
+                        errors.includes("foodAllergies") && styles.dropdownHeaderError,
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={labelStyle("foodAllergies")}>Food Allergies*</Text>
+                        <Text style={styles.dropdownPreview} numberOfLines={1}>
+                          {preview}
+                        </Text>
+                      </View>
+                      {count > 0 && (
+                        <View style={styles.countBadge}>
+                          <Text style={styles.countBadgeText}>{count}</Text>
+                        </View>
+                      )}
+                      <Text style={styles.chevron}>{allergiesOpen ? "▲" : "▼"}</Text>
+                    </Pressable>
+                    {allergiesOpen && (
+                      <>
+                        <Text style={styles.chipHint}>
+                          Tap all that apply. Leave blank only if none confirmed.
+                        </Text>
+                        <View style={styles.chipWrap}>
+                          {COMMON_ALLERGENS.map((allergen) => {
+                            const selected = selectedAllergies.some(
+                              (a) => a.toLowerCase() === allergen.toLowerCase()
+                            );
+                            return (
+                              <Pressable
+                                key={allergen}
+                                onPress={() => toggleAllergen(allergen)}
+                                style={[styles.chip, selected && styles.chipSelected]}
+                              >
+                                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                                  {selected ? "✓ " : ""}{allergen}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+
+              <Text style={styles.modalLabel}>Medications</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={form.medications}
+                onChangeText={(v) => update("medications", v)}
+                placeholder="e.g., Metformin"
+              />
             </ScrollView>
 
             <Pressable style={styles.modalPrimaryBtn} onPress={submit} disabled={saving}>
@@ -483,5 +653,79 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#F3F3F3",
     marginTop: 10,
+  },
+
+  // Collapsible dropdown header for chip pickers.
+  dropdownHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F3F3",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 10,
+    gap: 10,
+  },
+  dropdownHeaderError: {
+    borderWidth: 1,
+    borderColor: "#B91C1C",
+  },
+  dropdownPreview: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  countBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  chevron: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "700",
+  },
+
+  // Multi-select chip picker for Food Allergies.
+  chipHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 8,
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 4,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#F3F3F3",
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
+  chipSelected: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  chipTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: "800",
   },
 });

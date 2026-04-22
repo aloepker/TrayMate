@@ -436,3 +436,170 @@ ${numbered}`;
 export function createGeminiChat(): GeminiChatService {
   return new GeminiChatService();
 }
+
+// ──────────────────────────────────────────────────────────────────
+// AI Meal Recommendation (single-shot, non-chat)
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Shape we ask Gemini to pick from. Only the fields the model needs —
+ * keep the prompt tight so the model stays focused.
+ */
+export type AICandidateMeal = {
+  id: number | string;
+  name: string;
+  description?: string;
+  ingredients?: string[];
+  allergens?: string[];
+  calories?: number | string;
+  sodium?: number | string;
+  protein?: number | string;
+  tags?: string[];
+  meal_period?: string;
+  time_range?: string;
+};
+
+export type AIRecommendationResult = {
+  meal_name: string;
+  reason: string;
+  dietary_restrictions: string[];
+};
+
+type AIResidentInfo = {
+  name: string;
+  foodAllergies?: string[];
+  dietaryRestrictions?: string[];
+  medicalConditions?: string[];
+};
+
+/**
+ * Ask Gemini to pick ONE meal from an already-safety-filtered candidate list.
+ * Returns null if Gemini is unreachable or the pick isn't in the candidate
+ * list (hallucination guard). Callers should fall back to a sensible default
+ * in that case.
+ *
+ * The safety filter MUST run before this — never trust the model to enforce
+ * allergy rules alone.
+ */
+export async function getAIRecommendation(
+  resident: AIResidentInfo,
+  candidates: AICandidateMeal[],
+  targetPeriod: string | null | undefined,
+): Promise<AIRecommendationResult | null> {
+  if (!candidates || candidates.length === 0) return null;
+
+  // If only one candidate, skip the API call — nothing to pick from.
+  if (candidates.length === 1) {
+    const only = candidates[0];
+    return {
+      meal_name: only.name,
+      reason: `Only safe option in the current ${targetPeriod || 'menu'} — we recommend the`,
+      dietary_restrictions: [
+        ...(resident.foodAllergies ?? []),
+        ...(resident.dietaryRestrictions ?? []),
+      ],
+    };
+  }
+
+  const candidateBlock = candidates
+    .map((m, i) => {
+      const lines = [
+        `${i + 1}. ${m.name} (id: ${m.id})`,
+        m.description ? `   Description: ${m.description}` : null,
+        m.ingredients && m.ingredients.length > 0
+          ? `   Ingredients: ${m.ingredients.join(', ')}`
+          : null,
+        m.allergens && m.allergens.length > 0
+          ? `   Allergens: ${m.allergens.join(', ')}`
+          : null,
+        `   Nutrition: ${m.calories ?? '?'} cal, ${m.sodium ?? '?'} sodium, ${m.protein ?? '?'} protein`,
+        m.tags && m.tags.length > 0 ? `   Tags: ${m.tags.join(', ')}` : null,
+        m.time_range ? `   Serving window: ${m.time_range}` : null,
+      ].filter(Boolean);
+      return lines.join('\n');
+    })
+    .join('\n\n');
+
+  const allergyLines: string[] = [];
+  if (resident.foodAllergies && resident.foodAllergies.length > 0) {
+    allergyLines.push(`Food allergies: ${resident.foodAllergies.join(', ')}`);
+  }
+  if (resident.dietaryRestrictions && resident.dietaryRestrictions.length > 0) {
+    allergyLines.push(`Dietary restrictions: ${resident.dietaryRestrictions.join(', ')}`);
+  }
+  if (resident.medicalConditions && resident.medicalConditions.length > 0) {
+    allergyLines.push(`Medical conditions: ${resident.medicalConditions.join(', ')}`);
+  }
+  const profileBlock = allergyLines.length > 0
+    ? allergyLines.join('\n')
+    : 'No allergies or restrictions on file.';
+
+  const systemPrompt = `You are GrannyGBT, a meal-planning assistant for a senior living facility.
+You pick exactly ONE meal from a short candidate list that has ALREADY been safety-filtered for the resident.
+Your job is to pick the most appealing and nutritionally balanced option for THIS meal period.
+
+RULES:
+- Pick exactly one meal from the candidate list. Never invent meals.
+- The "meal_name" you return MUST match one of the candidate names verbatim.
+- Keep "reason" to one short warm sentence (max 20 words) explaining why it's a good pick.
+- Consider balance (not too high sodium, decent protein), flavor appeal, and the resident's profile.
+- Do NOT mention the candidates you did NOT pick.
+- Return ONLY valid JSON — no markdown, no commentary, no code fences.
+
+Response format (strict):
+{"meal_name": "<exact name>", "reason": "<one short sentence>"}`;
+
+  const userMessage = `Resident: ${resident.name}
+Meal period: ${targetPeriod || 'current'}
+Profile:
+${profileBlock}
+
+Candidate meals (all already safe for this resident):
+${candidateBlock}
+
+Pick the best single meal and return the required JSON only.`;
+
+  // Build a valid candidate-name set for hallucination guard (case-insensitive)
+  const candidateNames = new Set(candidates.map((c) => c.name.toLowerCase()));
+
+  for (const modelName of GEMINI_CONFIG.models) {
+    try {
+      const raw = await callGeminiModel(modelName, systemPrompt, [], userMessage);
+      // Strip markdown fences if the model slipped any in
+      const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+
+      // Be lenient: grab the first {...} block if the model added prose
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) continue;
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      const pickedName: string = typeof parsed?.meal_name === 'string' ? parsed.meal_name : '';
+      const reason: string = typeof parsed?.reason === 'string' ? parsed.reason : '';
+
+      if (!pickedName) continue;
+
+      // Hallucination guard — the pick must exist in the candidate list.
+      if (!candidateNames.has(pickedName.toLowerCase())) {
+        console.warn(`[GrannyGBT] Model picked "${pickedName}" not in candidates, retrying next model...`);
+        continue;
+      }
+
+      return {
+        meal_name: pickedName,
+        reason: reason.trim().length > 0
+          ? `${reason.trim().replace(/[.!]$/, '')} — we recommend the`
+          : `A great fit for your profile — we recommend the`,
+        dietary_restrictions: [
+          ...(resident.foodAllergies ?? []),
+          ...(resident.dietaryRestrictions ?? []),
+        ],
+      };
+    } catch (err: any) {
+      console.warn(`[GrannyGBT] getAIRecommendation ${modelName} failed: ${err.message}`);
+      continue;
+    }
+  }
+
+  // All models failed — return null so caller can fall back.
+  return null;
+}
