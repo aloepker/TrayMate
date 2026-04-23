@@ -21,6 +21,7 @@ import LoginScreen from './src/screens/loginScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
 import OrderHistoryScreen from './src/screens/OrderHistoryScreen';
+import DietaryAuditScreen from './src/screens/DietaryAuditScreen';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboard';
@@ -56,6 +57,7 @@ export default function App() {
                   <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
                   <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
                   <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
+                  <Stack.Screen name="DietaryAudit" component={DietaryAuditScreen} />
                 </Stack.Navigator>
               </NavigationContainer>
             </CartProvider>

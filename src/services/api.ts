@@ -865,3 +865,31 @@ export async function getAllMenuMeals(): Promise<any[]> {
   const data = await request<any>("/menu");
   return Array.isArray(data) ? data : [];
 }
+
+// ========================= DIETARY AUDIT LOG =========================
+
+/**
+ * One row per field-level change to a resident's dietary profile.
+ * Matches backend DietaryAuditEntryDto.
+ */
+export type DietaryAuditEntry = {
+  id: number;
+  residentId: number;
+  fieldName: "foodAllergies" | "medicalConditions" | "medications" | "dietaryRestrictions" | string;
+  oldValue: string | null;
+  newValue: string | null;
+  changedByUserId: number | null;
+  changedByName: string | null;
+  changedByRole: string | null;
+  changedAt: string; // ISO-8601
+};
+
+/**
+ * Fetch the dietary-change history for a resident.
+ * GET /residents/{id}/dietary-audit
+ * Gated server-side to ROLE_ADMIN, ROLE_CAREGIVER, ROLE_KITCHEN_STAFF.
+ */
+export async function getDietaryAuditLog(residentId: string | number): Promise<DietaryAuditEntry[]> {
+  const data = await request<DietaryAuditEntry[]>(`/residents/${residentId}/dietary-audit`);
+  return Array.isArray(data) ? data : [];
+}

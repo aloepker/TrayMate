@@ -312,6 +312,14 @@ function SettingsScreen({ navigation, route }: any) {
             minHeight={touchTarget}
             onPress={() => navigation.navigate('OrderHistory', { residentId, residentName })}
           />
+          <ActionRow
+            featherIcon="file-text" bg="#F0E8D8"
+            title="Dietary History"
+            desc="See every change to this resident's diet"
+            fontSize={scaled(16)} descFontSize={scaled(13)}
+            minHeight={touchTarget}
+            onPress={() => navigation.navigate('DietaryAudit', { residentId, residentName })}
+          />
 
           <ActionRow
             featherIcon="calendar" bg="#F6D7B8"
