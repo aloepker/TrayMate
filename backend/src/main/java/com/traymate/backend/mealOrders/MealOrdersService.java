@@ -1,5 +1,9 @@
 package com.traymate.backend.mealOrders;
 
+import com.traymate.backend.admin.resident.Resident;
+import com.traymate.backend.admin.resident.ResidentRepository;
+import com.traymate.backend.compliance.DietaryComplianceService;
+import com.traymate.backend.compliance.dto.ComplianceResult;
 import com.traymate.backend.menu.Meal;
 import com.traymate.backend.menu.MealRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +22,8 @@ public class MealOrdersService {
 
     private final MealOrdersRepository mealOrdersRepository;
     private final MealRepository mealRepository; // Inject the existing menu repository
+    private final ResidentRepository residentRepository;
+    private final DietaryComplianceService complianceService;
 
     //updated logic to check at see if an order has already ben placed
     public MealOrders saveOrder(MealOrders order) {
@@ -53,8 +59,56 @@ public class MealOrdersService {
         }
         // 2. If no conflict, proceed as normal
 
+        // 3. Server-side dietary compliance gate. Mirrors the frontend
+        //    mealSafetyService.ts so a direct API call can't bypass the UI
+        //    safety net. Throws IllegalStateException("COMPLIANCE_BLOCKED")
+        //    with details so the controller can surface 422 + violation list.
+        enforceCompliance(order);
+
         order.setStatus("pending");
         return mealOrdersRepository.save(order);
+    }
+
+    /**
+     * Runs the resident's meals through DietaryComplianceService. If any
+     * meal has a violation, throws IllegalStateException with message
+     * "COMPLIANCE_BLOCKED". Caller is expected to catch and re-run the
+     * same check (or hold onto the result) when building the error body.
+     *
+     * Not a no-op when the resident/meals can't be resolved: we let the
+     * order through in that case (audit elsewhere). The point here is
+     * catching real dietary violations, not gating on data integrity.
+     */
+    private void enforceCompliance(MealOrders order) {
+        if (order.getUserId() == null || order.getMealItemsIdNumbers() == null) return;
+
+        Integer residentId;
+        try {
+            residentId = Integer.parseInt(order.getUserId().trim());
+        } catch (NumberFormatException e) {
+            return; // userId is not a resident id; skip (e.g. legacy string ids)
+        }
+
+        Optional<Resident> residentOpt = residentRepository.findById(residentId);
+        if (residentOpt.isEmpty()) return;
+
+        List<Integer> mealIds;
+        try {
+            mealIds = Arrays.stream(order.getMealItemsIdNumbers().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Integer::parseInt)
+                .collect(Collectors.toList());
+        } catch (NumberFormatException e) {
+            return;
+        }
+        if (mealIds.isEmpty()) return;
+
+        List<Meal> meals = mealRepository.findAllById(mealIds);
+        ComplianceResult result = complianceService.validate(residentOpt.get(), meals);
+        if (!result.isSafe()) {
+            throw new ComplianceBlockedException(result);
+        }
     }
 
     public List<MealOrders> getUserHistory(String userId) {
@@ -72,9 +126,13 @@ public class MealOrdersService {
 
     // 3. Overwrite the items and any other relevant fields
     existing.setMealItemsIdNumbers(newOrderData.getMealItemsIdNumbers());
-    
+
     // Optional: if you want to allow them to change the meal type (e.g., Lunch to Dinner)
-    // existing.setMealOfDay(newOrderData.getMealOfDay()); 
+    // existing.setMealOfDay(newOrderData.getMealOfDay());
+
+    // Re-run compliance on the updated contents so replacing an order
+    // can't smuggle unsafe meals past the gate.
+    enforceCompliance(existing);
 
     return mealOrdersRepository.save(existing);
 }

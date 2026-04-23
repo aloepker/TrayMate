@@ -30,6 +30,15 @@ public ResponseEntity<?> placeOrder(@RequestBody MealOrders newOrder) {
     try {
         MealOrders saved = mealOrdersService.saveOrder(newOrder);
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
+    } catch (ComplianceBlockedException e) {
+        // 422 with the full violation breakdown so the client can render
+        // every reason (allergen + condition + dietary) next to each meal.
+        ErrorResponse error = new ErrorResponse(
+            "COMPLIANCE_BLOCKED",
+            "Order contains meals that violate the resident's dietary profile",
+            e.getResult()
+        );
+        return new ResponseEntity<>(error, HttpStatus.UNPROCESSABLE_ENTITY);
     } catch (IllegalStateException e) {
         String message = e.getMessage();
         Object data = null;
@@ -38,12 +47,12 @@ public ResponseEntity<?> placeOrder(@RequestBody MealOrders newOrder) {
         if (message.contains("PENDING_CONFLICT")) {
             // Re-run the same search the service just did to get the object for the UI
             data = mealOrdersRepository.findByUserIdAndMealOfDayAndDate(
-                newOrder.getUserId(), 
-                newOrder.getMealOfDay(), 
+                newOrder.getUserId(),
+                newOrder.getMealOfDay(),
                 newOrder.getDate()
             ).orElse(null);
-            
-            message = "PENDING_CONFLICT"; 
+
+            message = "PENDING_CONFLICT";
         }
 
         ErrorResponse error = new ErrorResponse(message, "Conflict detected", data);
@@ -52,13 +61,22 @@ public ResponseEntity<?> placeOrder(@RequestBody MealOrders newOrder) {
 }
 
     @PutMapping("/{id}")
-    public ResponseEntity<MealOrders> overwriteOrder(
-        @PathVariable Integer id, 
+    public ResponseEntity<?> overwriteOrder(
+        @PathVariable Integer id,
         @RequestBody MealOrders updatedOrder
     ) {
-        // We use the ID from the URL to ensure we hit the right record
-        MealOrders saved = mealOrdersService.updateExistingOrderById(id, updatedOrder);
-        return ResponseEntity.ok(saved);
+        try {
+            // We use the ID from the URL to ensure we hit the right record
+            MealOrders saved = mealOrdersService.updateExistingOrderById(id, updatedOrder);
+            return ResponseEntity.ok(saved);
+        } catch (ComplianceBlockedException e) {
+            ErrorResponse error = new ErrorResponse(
+                "COMPLIANCE_BLOCKED",
+                "Order contains meals that violate the resident's dietary profile",
+                e.getResult()
+            );
+            return new ResponseEntity<>(error, HttpStatus.UNPROCESSABLE_ENTITY);
+        }
     }
 
     // 2. RETRIEVE history for a specific user

@@ -8,11 +8,13 @@
  * nothing leaks past the safety net.
  *
  * Exports
- *   getUnsafeReason(meal, resident)  → human reason or null
- *   isMealSafe(meal, resident)       → boolean
- *   filterSafeMeals(meals, resident) → only the safe ones
- *   getSafeAlternatives(...)         → same-period, safe substitutes
- *   collectUnsafeMealNames(...)      → list for GrannyGBT hard prompt
+ *   getUnsafeReason(meal, resident)     → first human reason or null
+ *   getAllUnsafeReasons(meal, resident) → every violation w/ severity
+ *   validateOrder(meals, resident)      → aggregated order-level result
+ *   isMealSafe(meal, resident)          → boolean (any violation)
+ *   filterSafeMeals(meals, resident)    → only the safe ones
+ *   getSafeAlternatives(...)            → same-period, safe substitutes
+ *   collectUnsafeMealNames(...)         → list for GrannyGBT hard prompt
  */
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -128,6 +130,58 @@ const DIET_KEYWORDS: Record<string, string[]> = {
 // Medical-condition-driven rules. Most are keyword-based like diets, but
 // a few (low sodium, diabetic) need numeric thresholds.
 const CONDITION_SODIUM_LIMIT_MG = 600;
+const DIABETES_SUGAR_LIMIT_G = 25;
+
+// ── Condition → implicit allergen/diet mapping ──────────────────
+// A resident with "Celiac Disease" should have gluten-containing
+// meals blocked even if they never added "Gluten" to their allergy
+// list. Same for "Lactose Intolerance" → dairy. These mappings are
+// applied in getAllUnsafeReasons so the compliance layer catches
+// real-world conditions staff don't always translate manually.
+const CONDITION_IMPLIED_ALLERGIES: Record<string, string[]> = {
+  "celiac disease": ["gluten", "wheat"],
+  "celiac": ["gluten", "wheat"],
+  "lactose intolerance": ["dairy"],
+  "lactose": ["dairy"],
+};
+
+// ── Severity ─────────────────────────────────────────────────────
+// allergy = hard block (life-safety)
+// medical = hard block (medical directive: sodium cap, diabetic sugar)
+// dietary = hard block (diet preference/religious: vegan, halal, etc.)
+// Callers can still treat them identically; severity is provided so
+// medical reports / audit UI can group violations meaningfully.
+export type ViolationSeverity = "allergy" | "medical" | "dietary";
+export type ViolationCategory =
+  | "allergen"
+  | "condition-sodium"
+  | "condition-sugar"
+  | "condition-implied-allergen"
+  | "diet-restriction"
+  | "diet-low-sodium";
+
+export interface ComplianceViolation {
+  severity: ViolationSeverity;
+  category: ViolationCategory;
+  /** Short human sentence suitable for UI display. */
+  reason: string;
+  /** Raw value from the resident profile that triggered the rule (e.g. "Dairy", "Hypertension"). */
+  trigger: string;
+}
+
+export interface MealComplianceResult {
+  mealId: number | string;
+  mealName: string;
+  safe: boolean;
+  violations: ComplianceViolation[];
+}
+
+export interface OrderComplianceResult {
+  safe: boolean;
+  meals: MealComplianceResult[];
+  /** Flat list across every meal, in order of severity (allergy > medical > dietary). */
+  violations: ComplianceViolation[];
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -277,4 +331,172 @@ export function collectUnsafeMealNames(
     .filter((m) => !isMealSafe(m, resident))
     .map((m) => m.name ?? "")
     .filter(Boolean);
+}
+
+// ── Centralized compliance: multi-reason reporting ───────────────
+
+/** Pull a numeric sugar value (grams) out of the meal if present. */
+function extractSugarG(meal: SafetyMeal): number | null {
+  const anyMeal = meal as Record<string, unknown>;
+  const candidates = ["sugar_g", "sugarG", "sugar", "sugars"];
+  for (const key of candidates) {
+    const v = anyMeal[key];
+    if (typeof v === "number") return v;
+    if (typeof v === "string") {
+      const n = parseInt(v.replace(/[^\d]/g, ""), 10);
+      if (!isNaN(n)) return n;
+    }
+  }
+  return null;
+}
+
+function matchesAllergenKeywords(allergy: string, meal: SafetyMeal, haystack: string): boolean {
+  const explicit = [...(meal.allergens ?? []), ...(meal.allergenInfo ?? [])].map(norm);
+  if (explicit.some((a) => a.includes(allergy) || allergy.includes(a))) return true;
+  const keywords = ALLERGEN_KEYWORDS[allergy] ?? [allergy];
+  return keywords.some((kw) => haystack.includes(kw));
+}
+
+/**
+ * Returns EVERY compliance violation the meal triggers for this
+ * resident, tagged with severity + category so UI / audit surfaces
+ * can group and prioritize them. Does NOT short-circuit on first
+ * match — that's the whole point over getUnsafeReason.
+ *
+ * Severity order in the output: allergy → medical → dietary.
+ */
+export function getAllUnsafeReasons(
+  meal: SafetyMeal,
+  resident: SafetyResident | null | undefined,
+): ComplianceViolation[] {
+  if (!resident) return [];
+
+  const allergies    = (resident.foodAllergies ?? []).map(norm).filter(Boolean);
+  const restrictions = (resident.dietaryRestrictions ?? []).map(norm).filter(Boolean);
+  const conditions   = (resident.medicalConditions ?? []).map(norm).filter(Boolean);
+  const haystack     = mealHaystack(meal);
+  const sodium       = extractSodium(meal);
+  const sugar        = extractSugarG(meal);
+
+  const violations: ComplianceViolation[] = [];
+  // Guard against the same allergen being reported twice (explicit list +
+  // implied-by-condition). Keyed by the normalized allergen string.
+  const reportedAllergens = new Set<string>();
+
+  // 1. Explicit allergies (life-safety)
+  for (const allergy of allergies) {
+    if (matchesAllergenKeywords(allergy, meal, haystack)) {
+      violations.push({
+        severity: "allergy",
+        category: "allergen",
+        reason: `Contains ${titleCase(allergy)} — resident is allergic`,
+        trigger: titleCase(allergy),
+      });
+      reportedAllergens.add(allergy);
+    }
+  }
+
+  // 2. Medical conditions
+  for (const condition of conditions) {
+    // 2a. Implied allergens (Celiac → gluten, Lactose Intolerance → dairy…)
+    const implied = CONDITION_IMPLIED_ALLERGIES[condition];
+    if (implied) {
+      for (const impliedAllergy of implied) {
+        if (reportedAllergens.has(impliedAllergy)) continue;
+        if (matchesAllergenKeywords(impliedAllergy, meal, haystack)) {
+          violations.push({
+            severity: "allergy",
+            category: "condition-implied-allergen",
+            reason: `Contains ${titleCase(impliedAllergy)} — resident has ${titleCase(condition)}`,
+            trigger: titleCase(condition),
+          });
+          reportedAllergens.add(impliedAllergy);
+        }
+      }
+    }
+
+    // 2b. Hypertension / high blood pressure → sodium cap
+    if (condition.includes("hypertension") || condition.includes("high blood pressure")) {
+      if (sodium != null && sodium > CONDITION_SODIUM_LIMIT_MG) {
+        violations.push({
+          severity: "medical",
+          category: "condition-sodium",
+          reason: `High sodium (${sodium}mg) — resident has ${titleCase(condition)}`,
+          trigger: titleCase(condition),
+        });
+      }
+    }
+
+    // 2c. Diabetes → sugar cap (best-effort, only if meal exposes sugar)
+    if (condition.includes("diabetes") || condition.includes("diabetic")) {
+      if (sugar != null && sugar > DIABETES_SUGAR_LIMIT_G) {
+        violations.push({
+          severity: "medical",
+          category: "condition-sugar",
+          reason: `High sugar (${sugar}g) — resident has ${titleCase(condition)}`,
+          trigger: titleCase(condition),
+        });
+      }
+    }
+  }
+
+  // 3. Dietary restrictions (religious / lifestyle)
+  for (const restriction of restrictions) {
+    if (restriction.includes("low sodium") || restriction.includes("low-sodium")) {
+      if (sodium != null && sodium > CONDITION_SODIUM_LIMIT_MG) {
+        violations.push({
+          severity: "medical",
+          category: "diet-low-sodium",
+          reason: `High sodium (${sodium}mg) — resident on low-sodium diet`,
+          trigger: "Low-Sodium Diet",
+        });
+      }
+      continue;
+    }
+    const keywords = DIET_KEYWORDS[restriction] ?? [];
+    if (keywords.length > 0 && keywords.some((kw) => haystack.includes(kw))) {
+      violations.push({
+        severity: "dietary",
+        category: "diet-restriction",
+        reason: `Not ${titleCase(restriction)} — resident follows ${titleCase(restriction)} diet`,
+        trigger: titleCase(restriction),
+      });
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Validate an entire order (multiple meals) against a resident. The
+ * backend also enforces this on POST /mealOrders, but running it client-
+ * side first means the cart can show every reason inline before the user
+ * tries to submit. Server is authoritative — never treat a pass here as
+ * approval.
+ */
+export function validateOrder(
+  meals: ReadonlyArray<SafetyMeal>,
+  resident: SafetyResident | null | undefined,
+): OrderComplianceResult {
+  const severityRank: Record<ViolationSeverity, number> = { allergy: 0, medical: 1, dietary: 2 };
+
+  const perMeal: MealComplianceResult[] = meals.map((m) => {
+    const violations = getAllUnsafeReasons(m, resident);
+    return {
+      mealId: m.id,
+      mealName: m.name ?? String(m.id),
+      safe: violations.length === 0,
+      violations,
+    };
+  });
+
+  const flat = perMeal
+    .flatMap((r) => r.violations)
+    .sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
+
+  return {
+    safe: flat.length === 0,
+    meals: perMeal,
+    violations: flat,
+  };
 }

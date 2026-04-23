@@ -618,6 +618,62 @@ export type MealOrderConflict = {
 };
 
 /**
+ * Server-side dietary compliance result (matches ComplianceResult DTO
+ * from backend/src/main/java/com/traymate/backend/compliance/dto).
+ * Shape intentionally mirrors the frontend mealSafetyService.ts
+ * OrderComplianceResult so callers can render from either source.
+ */
+export type ComplianceViolation = {
+  severity: "allergy" | "medical" | "dietary";
+  category: string;
+  reason: string;
+  trigger: string;
+};
+
+export type MealComplianceResult = {
+  mealId: number;
+  mealName: string;
+  safe: boolean;
+  violations: ComplianceViolation[];
+};
+
+export type ComplianceResult = {
+  residentId: number;
+  safe: boolean;
+  meals: MealComplianceResult[];
+  violations: ComplianceViolation[];
+};
+
+/**
+ * Error body returned on 422 when an order violates the resident's
+ * dietary profile. Frontend should render `data.violations` grouped by
+ * severity (allergy first) and refuse to submit.
+ */
+export type MealOrderComplianceError = {
+  errorCode: "COMPLIANCE_BLOCKED";
+  message: string;
+  data: ComplianceResult;
+};
+
+/**
+ * Pre-flight compliance check. Use this from cart / browse to ask the
+ * server "would this order pass?" before actually submitting. Server-side
+ * validation on POST /mealOrders is still the authoritative gate.
+ */
+export async function checkComplianceApi(payload: {
+  residentId: number;
+  mealIds: number[];
+}): Promise<ComplianceResult> {
+  return request<ComplianceResult>("/compliance/check", {
+    method: "POST",
+    body: JSON.stringify({
+      residentId: payload.residentId,
+      mealIds: payload.mealIds,
+    }),
+  });
+}
+
+/**
  * 1) Place an order.
  *    POST /mealOrders
  *    Returns 201 on success, throws with 409 body on conflict.
