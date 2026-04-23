@@ -6,6 +6,7 @@ import {
   deleteOrderApi,
   removeOrderApi,
   type MealOrderResponse,
+  type ComplianceResult,
 } from '../../services/api';
 
 // Meal type definition
@@ -45,7 +46,7 @@ type CartContextType = {
   getTotalNutrition: () => { calories: number; sodium: number; protein: number };
   // Orders
   orders: Order[];
-  placeOrder: (residentId?: string, mealOfDay?: string) => Promise<{ order: Order | null; conflict?: MealOrderResponse }>;
+  placeOrder: (residentId?: string, mealOfDay?: string) => Promise<{ order: Order | null; conflict?: MealOrderResponse; complianceBlock?: ComplianceResult }>;
   replaceOrder: (backendOrderId: number, residentId: string, mealOfDay?: string) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
@@ -133,7 +134,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const placeOrder = async (
     residentId?: string,
     mealOfDay?: string
-  ): Promise<{ order: Order | null; conflict?: MealOrderResponse }> => {
+  ): Promise<{ order: Order | null; conflict?: MealOrderResponse; complianceBlock?: ComplianceResult }> => {
     if (cart.length === 0) return { order: null };
 
     const rid = residentId || 'unknown';
@@ -171,6 +172,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
             mealItemsIdNumbers: itemIds,
           },
         };
+      }
+
+      // 422 COMPLIANCE_BLOCKED — backend rejected because one or more meals
+      // violate the resident's dietary profile. Surface the full result so
+      // the UI can show per-meal violations and offer the override path.
+      if (err?.status === 422 && err?.data?.errorCode === 'COMPLIANCE_BLOCKED') {
+        return { order: null, complianceBlock: err.data.data as ComplianceResult };
       }
 
       // Network error or other failure — fall back to local-only order

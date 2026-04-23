@@ -22,8 +22,10 @@ import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
 import OrderHistoryScreen from './src/screens/OrderHistoryScreen';
 import DietaryAuditScreen from './src/screens/DietaryAuditScreen';
+import MyOverridesScreen from './src/screens/MyOverridesScreen';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
+import PendingOverridesScreen from './src/screens/admin/PendingOverridesScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboard';
 
 //Caregiver dashboard screen
@@ -54,10 +56,12 @@ export default function App() {
                   <Stack.Screen name="Settings" component={SettingsScreen} />
                   <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
                   <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+                  <Stack.Screen name="PendingOverrides" component={PendingOverridesScreen} />
                   <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
                   <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
                   <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
                   <Stack.Screen name="DietaryAudit" component={DietaryAuditScreen} />
+                  <Stack.Screen name="MyOverrides" component={MyOverridesScreen} />
                 </Stack.Navigator>
               </NavigationContainer>
             </CartProvider>

@@ -6,6 +6,8 @@ import com.traymate.backend.compliance.DietaryComplianceService;
 import com.traymate.backend.compliance.dto.ComplianceResult;
 import com.traymate.backend.menu.Meal;
 import com.traymate.backend.menu.MealRepository;
+import com.traymate.backend.override.MedicalOverrideRequest;
+import com.traymate.backend.override.MedicalOverrideService;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Optional;
@@ -24,6 +26,7 @@ public class MealOrdersService {
     private final MealRepository mealRepository; // Inject the existing menu repository
     private final ResidentRepository residentRepository;
     private final DietaryComplianceService complianceService;
+    private final MedicalOverrideService overrideService;
 
     //updated logic to check at see if an order has already ben placed
     public MealOrders saveOrder(MealOrders order) {
@@ -106,9 +109,21 @@ public class MealOrdersService {
 
         List<Meal> meals = mealRepository.findAllById(mealIds);
         ComplianceResult result = complianceService.validate(residentOpt.get(), meals);
-        if (!result.isSafe()) {
-            throw new ComplianceBlockedException(result);
+        if (result.isSafe()) return;
+
+        // Not safe — see if an admin has already approved a matching override
+        // for exactly this resident + mealOfDay + date + meal id set. If so,
+        // consume the approval and let the order through. Otherwise block.
+        Optional<MedicalOverrideRequest> activeOverride = overrideService.findActiveApproval(
+            residentId, order.getMealOfDay(), order.getDate(), mealIds
+        );
+
+        if (activeOverride.isPresent()) {
+            overrideService.consume(activeOverride.get());
+            return;
         }
+
+        throw new ComplianceBlockedException(result);
     }
 
     public List<MealOrders> getUserHistory(String userId) {

@@ -778,6 +778,84 @@ export async function removeOrderApi(params: {
   await request<void>(`/mealOrders/remove?${qs}`, { method: "DELETE" });
 }
 
+/* ─────────────── Medical override workflow ────────────────────── */
+
+/** Status values for a MedicalOverrideRequest on the wire. */
+export type OverrideStatus = "PENDING" | "APPROVED" | "DENIED" | "EXPIRED" | "CONSUMED";
+
+/**
+ * Wire-format override request. Mirrors OverrideRequestDto on the
+ * backend. `violationsJson` is actually a plain-text multi-line summary
+ * (not JSON) — name kept for parity with the backend field.
+ */
+export type OverrideRequest = {
+  id: number;
+  residentId: number;
+  requestedByUserId: number;
+  requestedByName: string;
+  requestedByRole: string | null;
+  mealIds: string;          // "3,5,7"
+  mealOfDay: string | null; // "Breakfast" | "Lunch" | "Dinner"
+  targetDate: string | null; // "YYYY-MM-DD"
+  violationsJson: string | null;
+  reason: string | null;
+  status: OverrideStatus;
+  decidedByUserId: number | null;
+  decidedByName: string | null;
+  decisionReason: string | null;
+  requestedAt: string;   // ISO instant
+  decidedAt: string | null;
+  expiresAt: string | null;
+};
+
+/** Create a new override request. */
+export async function createOverrideApi(payload: {
+  residentId: number;
+  mealIds: number[];
+  mealOfDay?: string;
+  targetDate?: string; // YYYY-MM-DD
+  reason?: string;
+}): Promise<OverrideRequest> {
+  return request<OverrideRequest>("/overrides", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Admin: list all pending override requests. */
+export async function listPendingOverridesApi(): Promise<OverrideRequest[]> {
+  return request<OverrideRequest[]>("/overrides/pending");
+}
+
+/** List every override request tied to a single resident. */
+export async function listResidentOverridesApi(
+  residentId: number | string
+): Promise<OverrideRequest[]> {
+  return request<OverrideRequest[]>(`/overrides/resident/${residentId}`);
+}
+
+/** Admin: approve a pending override. */
+export async function approveOverrideApi(
+  overrideId: number,
+  reason?: string
+): Promise<OverrideRequest> {
+  return request<OverrideRequest>(`/overrides/${overrideId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
+/** Admin: deny a pending override. */
+export async function denyOverrideApi(
+  overrideId: number,
+  reason?: string
+): Promise<OverrideRequest> {
+  return request<OverrideRequest>(`/overrides/${overrideId}/deny`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
 /**
  * 5) Get all orders for a given date and meal period.
  *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD

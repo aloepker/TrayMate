@@ -18,6 +18,7 @@ import {
 } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
 import { getUnsafeReason } from '../services/mealSafetyService';
+import { createOverrideApi } from '../services/api';
 
 const COLORS = {
   primary: '#717644',
@@ -72,6 +73,39 @@ const CartScreen = ({ navigation, route }: any) => {
     indices.forEach((i) => removeFromCart(i));
   };
 
+  /**
+   * File a medical-override request for the current cart and return the
+   * user to the dashboard. Admin will review in their Pending Overrides
+   * queue; on approval the resident's NEXT attempt at this exact cart +
+   * meal period + date will pass compliance.
+   */
+  const requestOverride = async (violationLines: string) => {
+    try {
+      const mealIds = cartItems.map((m) => Number(m.id)).filter((n) => !isNaN(n));
+      const today = new Date().toISOString().slice(0, 10);
+      const ridNum = Number(residentId);
+      if (!mealIds.length || isNaN(ridNum)) {
+        Alert.alert('Unable to request override', 'Cart or resident is invalid.');
+        return;
+      }
+      await createOverrideApi({
+        residentId: ridNum,
+        mealIds,
+        mealOfDay: undefined, // backend fills in from order context on placement
+        targetDate: today,
+        reason: `Violations at request:\n${violationLines}`,
+      });
+      Alert.alert(
+        'Override requested',
+        `Your request has been sent to the administrator for review. You can re-attempt this order after it's approved.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
+    } catch (err: any) {
+      console.warn('Failed to create override request', err);
+      Alert.alert('Unable to request override', err?.message ?? 'Please try again.');
+    }
+  };
+
   const confirmOrder = async () => {
     // Safety gate — block checkout if any cart item is unsafe for this resident.
     if (hasUnsafe) {
@@ -80,9 +114,13 @@ const CartScreen = ({ navigation, route }: any) => {
         .join('\n');
       Alert.alert(
         'Unsafe meals in cart',
-        `These items are not safe for ${residentName}:\n\n${lines}\n\nRemove them to continue.`,
+        `These items are not safe for ${residentName}:\n\n${lines}\n\nYou can remove the unsafe items, or request a one-time medical override from an administrator.`,
         [
           { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Request Override',
+            onPress: () => requestOverride(lines),
+          },
           {
             text: 'Remove unsafe items',
             style: 'destructive',
@@ -94,7 +132,31 @@ const CartScreen = ({ navigation, route }: any) => {
     }
 
     try {
-      const { order, conflict } = await placeOrder(residentId);
+      const { order, conflict, complianceBlock } = await placeOrder(residentId);
+
+      // Backend rejected the order because a meal violates the resident's
+      // dietary profile and there's no approved override. Offer a one-shot
+      // path to request one from the admin.
+      if (complianceBlock) {
+        const lines = (complianceBlock.meals ?? [])
+          .filter((m) => !m.safe)
+          .flatMap((m) =>
+            (m.violations ?? []).map((v) => `• ${m.mealName} — ${v.reason}`),
+          )
+          .join('\n');
+        Alert.alert(
+          'Order blocked by dietary profile',
+          `${lines || 'This order violates the resident\'s dietary profile.'}\n\nYou can request a one-time medical override from an administrator.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Request Override',
+              onPress: () => requestOverride(lines),
+            },
+          ],
+        );
+        return;
+      }
 
       if (conflict && conflict.id > 0) {
         Alert.alert(

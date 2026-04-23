@@ -320,6 +320,14 @@ function SettingsScreen({ navigation, route }: any) {
             minHeight={touchTarget}
             onPress={() => navigation.navigate('DietaryAudit', { residentId, residentName })}
           />
+          <ActionRow
+            featherIcon="shield" bg="#E8EDD7"
+            title="Override Requests"
+            desc="See the status of medical overrides on this account"
+            fontSize={scaled(16)} descFontSize={scaled(13)}
+            minHeight={touchTarget}
+            onPress={() => navigation.navigate('MyOverrides', { residentId: Number(residentId), residentName })}
+          />
 
           <ActionRow
             featherIcon="calendar" bg="#F6D7B8"

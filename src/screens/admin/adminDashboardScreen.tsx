@@ -552,6 +552,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         <View style={styles.topBarRight}>
           <Pressable
             style={styles.chatIconBtn}
+            onPress={() => navigation.navigate("PendingOverrides")}
+          >
+            <Feather name="shield" size={16} color="#6D6B3B" />
+            <Text style={styles.chatIconBtnText}>Overrides</Text>
+          </Pressable>
+          <Pressable
+            style={styles.chatIconBtn}
             onPress={() => setShowMessagesModal(true)}
           >
             <Feather name="message-square" size={16} color="#6D6B3B" />
