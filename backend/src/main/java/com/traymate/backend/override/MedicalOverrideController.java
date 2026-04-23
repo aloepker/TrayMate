@@ -26,8 +26,9 @@ public class MedicalOverrideController {
     private final MedicalOverrideService service;
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF','ROLE_USER','ROLE_RESIDENT')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER')")
     public OverrideRequestDto create(@RequestBody CreateOverrideRequest req) {
+        // Service does row-level scoping (caregiver must own the resident).
         return OverrideRequestDto.from(service.create(req));
     }
 
@@ -38,8 +39,9 @@ public class MedicalOverrideController {
     }
 
     @GetMapping("/resident/{residentId}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF','ROLE_USER','ROLE_RESIDENT')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF')")
     public List<OverrideRequestDto> listForResident(@PathVariable Integer residentId) {
+        // Service enforces "caregiver must be assigned to this resident".
         return service.listForResident(residentId).stream().map(OverrideRequestDto::from).toList();
     }
 

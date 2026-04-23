@@ -102,6 +102,13 @@ const CartScreen = ({ navigation, route }: any) => {
       );
     } catch (err: any) {
       console.warn('Failed to create override request', err);
+      if (err?.status === 403) {
+        Alert.alert(
+          'Not authorized',
+          "You can only request overrides for residents you're assigned to. Ask an administrator for help.",
+        );
+        return;
+      }
       Alert.alert('Unable to request override', err?.message ?? 'Please try again.');
     }
   };

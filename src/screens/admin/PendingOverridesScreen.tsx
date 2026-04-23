@@ -98,7 +98,16 @@ export default function PendingOverridesScreen({ navigation }: any) {
       setItems((prev) => prev.filter((r) => r.id !== id));
     } catch (err: any) {
       console.warn(`Failed to ${verb} override`, err);
-      Alert.alert(`Unable to ${verb}`, err?.message ?? 'Please try again.');
+      if (err?.status === 403) {
+        Alert.alert(
+          'Not authorized',
+          err?.message?.includes('yourself')
+            ? "You can't approve or deny an override you filed yourself — another admin has to do it."
+            : 'Only administrators can decide override requests.',
+        );
+      } else {
+        Alert.alert(`Unable to ${verb}`, err?.message ?? 'Please try again.');
+      }
     } finally {
       setBusyId(null);
     }

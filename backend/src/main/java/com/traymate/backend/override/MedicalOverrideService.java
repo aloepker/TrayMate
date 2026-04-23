@@ -45,6 +45,7 @@ public class MedicalOverrideService {
     private final ResidentRepository residentRepository;
     private final MealRepository mealRepository;
     private final DietaryComplianceService complianceService;
+    private final OverrideAuthorizationService authz;
 
     private static final Duration APPROVAL_TTL = Duration.ofHours(24);
 
@@ -57,6 +58,9 @@ public class MedicalOverrideService {
         if (req.getMealIds() == null || req.getMealIds().isEmpty()) {
             throw new IllegalArgumentException("mealIds is required");
         }
+
+        // Row-level auth: admin unrestricted, caregiver only for their residents.
+        authz.assertCanRequestFor(req.getResidentId());
 
         // Capture a plain-text violations snapshot so the admin review UI
         // sees what the resident was trying to override, even if their
@@ -100,6 +104,9 @@ public class MedicalOverrideService {
             throw new IllegalStateException("Override already decided: status=" + request.getStatus());
         }
 
+        // Admin only (plus self-approval block).
+        authz.assertCanDecide(request);
+
         ActingUser actor = currentUser();
         request.setStatus(status);
         request.setDecidedByUserId(actor.id);
@@ -117,6 +124,8 @@ public class MedicalOverrideService {
     }
 
     public List<MedicalOverrideRequest> listForResident(Integer residentId) {
+        // Scope: admin + kitchen unrestricted, caregiver only for assigned residents.
+        authz.assertCanViewResident(residentId);
         return repo.findByResidentIdOrderByRequestedAtDesc(residentId);
     }
 

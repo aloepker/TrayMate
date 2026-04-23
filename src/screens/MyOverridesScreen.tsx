@@ -83,7 +83,11 @@ export default function MyOverridesScreen({ navigation, route }: any) {
       setItems(list);
     } catch (err: any) {
       console.warn('Failed to load my overrides', err);
-      setError(err?.message ?? 'Unable to load your requests.');
+      if (err?.status === 403) {
+        setError("You aren't authorized to view this resident's override history.");
+      } else {
+        setError(err?.message ?? 'Unable to load your requests.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

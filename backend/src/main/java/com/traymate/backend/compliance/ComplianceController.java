@@ -2,6 +2,7 @@ package com.traymate.backend.compliance;
 
 import com.traymate.backend.compliance.dto.ComplianceCheckRequest;
 import com.traymate.backend.compliance.dto.ComplianceResult;
+import com.traymate.backend.override.OverrideAuthorizationService;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,13 +21,16 @@ import org.springframework.web.bind.annotation.*;
 public class ComplianceController {
 
     private final DietaryComplianceService complianceService;
+    private final OverrideAuthorizationService authz;
 
     @PostMapping("/check")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF','ROLE_USER','ROLE_RESIDENT')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF')")
     public ComplianceResult check(@RequestBody ComplianceCheckRequest req) {
         if (req.getResidentId() == null) {
             throw new IllegalArgumentException("residentId is required");
         }
+        // Row-level scope: caregiver must be assigned to this resident.
+        authz.assertCanViewResident(req.getResidentId());
         return complianceService.check(req.getResidentId(), req.getMealIds());
     }
 }
