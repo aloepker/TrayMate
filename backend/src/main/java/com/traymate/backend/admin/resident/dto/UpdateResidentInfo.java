@@ -8,5 +8,7 @@ public class UpdateResidentInfo {
     private String name;
     private String roomNumber;
     private String foodAllergies;
+    private String dietaryRestrictions;
     private String medicalConditions;
+    private String medications;
 }

@@ -52,6 +52,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     doctorPhone: "",
     medicalConditions: [] as string[],
     foodAllergies: [] as string[],
+    dietaryRestrictions: "",
     medications: "",
     roomNumber: "",
   });
@@ -169,6 +170,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       doctorPhone: "",
       medicalConditions: [] as string[],
       foodAllergies: [] as string[],
+      dietaryRestrictions: "",
       medications: "",
     });
   };
@@ -238,6 +240,11 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
         // the multi-select array to a comma-separated string. The read-side
         // (`normalizeStringArray` in api.ts) splits it back into an array.
         foodAllergies: asStringArray(form.foodAllergies).join(", "),
+        dietaryRestrictions: String(form.dietaryRestrictions ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(", "),
         medicalConditions: asStringArray(form.medicalConditions).join(", "),
         // dob already in backend format YYYY-MM-DD
       };
@@ -285,6 +292,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
         doctorPhone: "",
         medicalConditions: [] as string[],
         foodAllergies: [] as string[],
+        dietaryRestrictions: "",
         medications: "",
         roomNumber: "",
       });
@@ -545,6 +553,14 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                   </>
                 );
               })()}
+
+              <Text style={styles.modalLabel}>Dietary Restrictions</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={String(form.dietaryRestrictions ?? "")}
+                onChangeText={(v) => update("dietaryRestrictions", v)}
+                placeholder="e.g., Vegetarian, Low Sodium"
+              />
 
               <Text style={styles.modalLabel}>Medications</Text>
               <TextInput

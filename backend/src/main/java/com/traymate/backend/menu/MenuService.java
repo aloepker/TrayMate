@@ -1,5 +1,7 @@
 package com.traymate.backend.menu;
 
+import com.traymate.backend.coverage.MealCoverageAlertService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -9,6 +11,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MenuService {
     private final MealRepository mealRepository;
+    private final MealCoverageAlertService coverageAlertService;
 
     public List<Meal> getAllMeals(){
         return mealRepository.findAll();
@@ -40,6 +43,11 @@ public class MenuService {
             .orElseThrow(() -> new IllegalArgumentException(
                 "Meal not found: " + id));
         meal.setAvailable(available);
-        return mealRepository.save(meal);
+        Meal saved = mealRepository.save(meal);
+        // Menu changes can push a resident off the "has safe options" cliff
+        // (or pull one back). Re-run coverage for everyone — cheaper than
+        // doing nothing and waiting for someone to hit a blocked order.
+        coverageAlertService.evaluateAllResidents();
+        return saved;
     }
 }

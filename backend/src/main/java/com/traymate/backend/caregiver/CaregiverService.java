@@ -32,6 +32,7 @@ public class CaregiverService {
                         .roomNumber(r.getRoomNumber())
                         .medicalConditions(r.getMedicalConditions())
                         .foodAllergies(r.getFoodAllergies())
+                        .dietaryRestrictions(r.getDietaryRestrictions())
                         .medications(r.getMedications())
                         .build())
                 .toList();

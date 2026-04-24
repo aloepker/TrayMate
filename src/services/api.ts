@@ -478,12 +478,18 @@ export async function createResident(payload: {
   room: string;
   dietaryRestrictions: string[];
 }): Promise<Resident> {
+  const parts = payload.name.trim().split(/\s+/).filter(Boolean);
+  const firstName = parts[0] ?? "";
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
+  const middleName = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
   const created = await request<ResidentApi>("/admin/residents", {
     method: "POST",
     body: JSON.stringify({
-      fullName: payload.name,
+      firstName,
+      middleName,
+      lastName,
       roomNumber: payload.room,
-      foodAllergies: payload.dietaryRestrictions,
+      dietaryRestrictions: payload.dietaryRestrictions.join(", "),
     }),
   });
 
@@ -510,9 +516,9 @@ export async function updateResident(
   const updated = await request<ResidentApi>(`/admin/residents/${id}`, {
     method: "PUT",
     body: JSON.stringify({
-      fullName: payload.name,
+      name: payload.name,
       roomNumber: payload.room,
-      foodAllergies: payload.dietaryRestrictions,
+      dietaryRestrictions: payload.dietaryRestrictions.join(", "),
     }),
   });
 
@@ -812,7 +818,7 @@ export type OverrideRequest = {
 export async function createOverrideApi(payload: {
   residentId: number;
   mealIds: number[];
-  mealOfDay?: string;
+  mealOfDay: string;
   targetDate?: string; // YYYY-MM-DD
   reason?: string;
 }): Promise<OverrideRequest> {
@@ -853,6 +859,57 @@ export async function denyOverrideApi(
   return request<OverrideRequest>(`/overrides/${overrideId}/deny`, {
     method: "POST",
     body: JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
+// ========================= MEAL COVERAGE ALERTS =========================
+// Backend-raised flag that a resident has zero safe meals in a given meal
+// period (breakfast / lunch / dinner) because of their dietary profile.
+// Auto-created/resolved as profiles and menu availability change; admin
+// can additionally acknowledge an ACTIVE alert to de-emphasize it.
+
+export type CoverageAlertStatus = "ACTIVE" | "ACKNOWLEDGED" | "RESOLVED";
+
+export type MealCoverageAlert = {
+  id: number;
+  residentId: number;
+  residentName: string | null;
+  residentRoom: string | null;
+  mealPeriod: string;
+  totalMealsConsidered: number;
+  detectedAt: string;
+  lastEvaluatedAt: string;
+  status: CoverageAlertStatus;
+  acknowledgedByName: string | null;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+};
+
+/** Admin + kitchen: list every alert that isn't yet resolved. */
+export async function listCoverageAlertsApi(): Promise<MealCoverageAlert[]> {
+  return request<MealCoverageAlert[]>("/coverage-alerts");
+}
+
+/** Full alert history (active + resolved) for one resident. */
+export async function listResidentCoverageAlertsApi(
+  residentId: number | string
+): Promise<MealCoverageAlert[]> {
+  return request<MealCoverageAlert[]>(`/coverage-alerts/resident/${residentId}`);
+}
+
+/** Admin: mark an ACTIVE alert as ACKNOWLEDGED. */
+export async function acknowledgeCoverageAlertApi(
+  alertId: number
+): Promise<MealCoverageAlert> {
+  return request<MealCoverageAlert>(`/coverage-alerts/${alertId}/acknowledge`, {
+    method: "POST",
+  });
+}
+
+/** Admin-triggered batch re-evaluation. Returns how many residents were run. */
+export async function reEvaluateCoverageAlertsApi(): Promise<{ residentsEvaluated: number }> {
+  return request<{ residentsEvaluated: number }>("/coverage-alerts/re-evaluate", {
+    method: "POST",
   });
 }
 

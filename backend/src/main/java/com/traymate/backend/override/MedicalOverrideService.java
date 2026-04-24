@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -51,12 +52,19 @@ public class MedicalOverrideService {
 
     // ── Creation ───────────────────────────────────────────────────
 
+    @Transactional
     public MedicalOverrideRequest create(CreateOverrideRequest req) {
         if (req.getResidentId() == null) {
             throw new IllegalArgumentException("residentId is required");
         }
         if (req.getMealIds() == null || req.getMealIds().isEmpty()) {
             throw new IllegalArgumentException("mealIds is required");
+        }
+        if (req.getMealOfDay() == null || req.getMealOfDay().isBlank()) {
+            throw new IllegalArgumentException("mealOfDay is required");
+        }
+        if (req.getTargetDate() == null) {
+            throw new IllegalArgumentException("targetDate is required");
         }
 
         // Row-level auth: admin unrestricted, caregiver only for their residents.
@@ -88,10 +96,12 @@ public class MedicalOverrideService {
 
     // ── Admin decisions ────────────────────────────────────────────
 
+    @Transactional
     public MedicalOverrideRequest approve(Integer id, String decisionReason) {
         return decide(id, MedicalOverrideRequest.STATUS_APPROVED, decisionReason, Instant.now().plus(APPROVAL_TTL));
     }
 
+    @Transactional
     public MedicalOverrideRequest deny(Integer id, String decisionReason) {
         return decide(id, MedicalOverrideRequest.STATUS_DENIED, decisionReason, null);
     }
@@ -123,10 +133,13 @@ public class MedicalOverrideService {
         return repo.findByStatusOrderByRequestedAtDesc(MedicalOverrideRequest.STATUS_PENDING);
     }
 
+    @Transactional
     public List<MedicalOverrideRequest> listForResident(Integer residentId) {
         // Scope: admin + kitchen unrestricted, caregiver only for assigned residents.
         authz.assertCanViewResident(residentId);
-        return repo.findByResidentIdOrderByRequestedAtDesc(residentId);
+        List<MedicalOverrideRequest> list = repo.findByResidentIdOrderByRequestedAtDesc(residentId);
+        expireOverdueApprovals(list);
+        return list;
     }
 
     // ── Matching (used by order-placement path) ────────────────────
@@ -136,6 +149,7 @@ public class MedicalOverrideService {
      * exactly the given (resident, mealOfDay, targetDate, mealIds). If
      * multiple candidates exist (unlikely), return the most recent.
      */
+    @Transactional
     public Optional<MedicalOverrideRequest> findActiveApproval(
         Integer residentId, String mealOfDay, LocalDate targetDate, List<Integer> mealIds
     ) {
@@ -144,15 +158,17 @@ public class MedicalOverrideService {
         }
         String canonicalRequested = normalizeMealIds(mealIds);
         Instant now = Instant.now();
-        return repo.findByResidentIdAndMealOfDayAndTargetDateAndStatus(
+        List<MedicalOverrideRequest> approved = repo.findByResidentIdAndMealOfDayAndTargetDateAndStatus(
                 residentId, mealOfDay, targetDate, MedicalOverrideRequest.STATUS_APPROVED
-            ).stream()
+            );
+        expireOverdueApprovals(approved);
+        return approved.stream()
             .filter(o -> canonicalRequested.equals(normalizeStored(o.getMealIds())))
-            .filter(o -> o.getExpiresAt() == null || o.getExpiresAt().isAfter(now))
             .findFirst();
     }
 
     /** Mark an approval CONSUMED once the order it covers has been saved. */
+    @Transactional
     public void consume(MedicalOverrideRequest override) {
         override.setStatus(MedicalOverrideRequest.STATUS_CONSUMED);
         repo.save(override);
@@ -198,6 +214,16 @@ public class MedicalOverrideService {
             .sorted()
             .map(String::valueOf)
             .collect(Collectors.joining(","));
+    }
+
+    private void expireOverdueApprovals(List<MedicalOverrideRequest> requests) {
+        Instant now = Instant.now();
+        for (MedicalOverrideRequest request : requests) {
+            if (!MedicalOverrideRequest.STATUS_APPROVED.equals(request.getStatus())) continue;
+            if (request.getExpiresAt() == null || request.getExpiresAt().isAfter(now)) continue;
+            request.setStatus(MedicalOverrideRequest.STATUS_EXPIRED);
+            repo.save(request);
+        }
     }
 
     private ActingUser currentUser() {

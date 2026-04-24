@@ -114,6 +114,9 @@ public class Resident {
     @Column(name = "food_allergies")
     private String foodAllergies;
 
+    @Column(name = "dietary_restrictions")
+    private String dietaryRestrictions;
+
     @Column(name = "medications")
     private String medications;
 

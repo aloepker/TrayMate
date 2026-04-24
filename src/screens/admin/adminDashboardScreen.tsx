@@ -40,6 +40,7 @@ import {
   deleteEntity,
   getChats,
   getMe,
+  listCoverageAlertsApi,
 } from "../../services/api";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
@@ -57,6 +58,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   // ---- Core Data State ----
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
+  const [alertActiveCount, setAlertActiveCount] = useState(0);
 
   useEffect(() => {
     const checkUnread = async () => {
@@ -71,6 +73,22 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     };
     checkUnread();
     const iv = setInterval(checkUnread, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Poll for meal-coverage alerts so the pill badge stays fresh even when
+  // alerts are raised server-side (kitchen toggled a meal off, another
+  // admin updated a profile, etc.). 30s matches the messages poll cadence.
+  useEffect(() => {
+    const checkAlerts = async () => {
+      try {
+        const alerts = await listCoverageAlertsApi();
+        if (!Array.isArray(alerts)) return;
+        setAlertActiveCount(alerts.filter(a => a.status === 'ACTIVE').length);
+      } catch { /* ignore — not all roles can see alerts */ }
+    };
+    checkAlerts();
+    const iv = setInterval(checkAlerts, 30000);
     return () => clearInterval(iv);
   }, []);
 
@@ -112,8 +130,10 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [editingResident, setEditingResident] = useState<Resident | null>(null);
   const [editName, setEditName] = useState("");
   const [editRoom, setEditRoom] = useState("");
+  const [editFoodAllergies, setEditFoodAllergies] = useState("");
   const [editDietary, setEditDietary] = useState("");
   const [editMedicalNeeds, setEditMedicalNeeds] = useState("");
+  const [editMedications, setEditMedications] = useState("");
 
   // ---- Confirm Delete Modal State ----
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -436,8 +456,10 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setEditingResident(r);
     setEditName(r.name ?? "");
     setEditRoom(r.room ?? "");
+    setEditFoodAllergies((r.foodAllergies ?? []).join(", "));
     setEditDietary((r.dietaryRestrictions ?? []).join(", "));
-    setEditMedicalNeeds("");
+    setEditMedicalNeeds((r.medicalConditions ?? []).join(", "));
+    setEditMedications((r.medications ?? []).join(", "));
     setShowEditResident(true);
   };
 
@@ -463,8 +485,10 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           body: JSON.stringify({
             name: editName.trim(),
             roomNumber: editRoom.trim(),
-            foodAllergies: editDietary || "None",
-            medicalConditions: editMedicalNeeds || "None",
+            foodAllergies: editFoodAllergies.trim(),
+            dietaryRestrictions: editDietary.trim(),
+            medicalConditions: editMedicalNeeds.trim(),
+            medications: editMedications.trim(),
           }),
         }
       );
@@ -550,6 +574,20 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </View>
         </View>
         <View style={styles.topBarRight}>
+          <Pressable
+            style={styles.chatIconBtn}
+            onPress={() => navigation.navigate("MealCoverageAlerts")}
+          >
+            <Feather name="alert-triangle" size={16} color="#6D6B3B" />
+            <Text style={styles.chatIconBtnText}>Alerts</Text>
+            {alertActiveCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {alertActiveCount > 9 ? "9+" : alertActiveCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
           <Pressable
             style={styles.chatIconBtn}
             onPress={() => navigation.navigate("PendingOverrides")}
@@ -853,6 +891,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               autoCapitalize="characters"
             />
 
+            <Text style={styles.modalLabel}>Food Allergies</Text>
+            <TextInput
+              value={editFoodAllergies}
+              onChangeText={setEditFoodAllergies}
+              style={styles.modalInput}
+            />
+
             <Text style={styles.modalLabel}>Dietary Restrictions</Text>
             <TextInput
               value={editDietary}
@@ -864,6 +909,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
             <TextInput
               value={editMedicalNeeds}
               onChangeText={setEditMedicalNeeds}
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Medications</Text>
+            <TextInput
+              value={editMedications}
+              onChangeText={setEditMedications}
               style={styles.modalInput}
             />
 

@@ -22,7 +22,7 @@ const AUTH_BASE_URL = "https://traymate-auth.onrender.com";
 const MOCK_USERS: Record<string, { token: string; role: string }> = {
   "admin@traymate.com":      { token: "mock-admin-token",     role: "ROLE_ADMIN" },
   "caregiver@traymate.com":  { token: "mock-caregiver-token", role: "ROLE_CAREGIVER" },
-  "kitchen@traymate.com":    { token: "mock-kitchen-token",   role: "ROLE_KITCHEN" },
+  "kitchen@traymate.com":    { token: "mock-kitchen-token",   role: "ROLE_KITCHEN_STAFF" },
   "salimova.s@traymate.com": { token: "mock-caregiver-token", role: "ROLE_CAREGIVER" },
 };
 

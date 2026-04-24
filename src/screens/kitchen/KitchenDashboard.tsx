@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
-import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, setMealAvailability } from "../../services/api";
+import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, setMealAvailability, listCoverageAlertsApi, type MealCoverageAlert } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -140,6 +140,8 @@ const PERIOD_OPTIONS: {
   { value: "Sides",     label: "Side Dish", icon: "layers",   color: "#15803d" },
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
 ];
+
+const COVERAGE_ALERT_PERIODS = ["Breakfast", "Lunch", "Dinner"] as const;
 
 function getPeriodColor(period: string): string {
   const norm = normalizePeriod(period);
@@ -741,6 +743,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [editAvailable, setEditAvailable] = useState(true);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
+  const [coverageAlerts, setCoverageAlerts] = useState<MealCoverageAlert[]>([]);
 
   // Per-order messaging
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
@@ -804,6 +807,32 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     const iv = setInterval(checkUnread, 30000);
     return () => clearInterval(iv);
   }, []);
+
+  const loadCoverageAlerts = useCallback(async () => {
+    try {
+      const alerts = await listCoverageAlertsApi();
+      if (!Array.isArray(alerts)) {
+        setCoverageAlerts([]);
+        return;
+      }
+      const sorted = [...alerts].sort((a, b) => {
+        const rank = (status: MealCoverageAlert["status"]) =>
+          status === "ACTIVE" ? 0 : status === "ACKNOWLEDGED" ? 1 : 2;
+        const byStatus = rank(a.status) - rank(b.status);
+        if (byStatus !== 0) return byStatus;
+        return new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime();
+      });
+      setCoverageAlerts(sorted);
+    } catch {
+      setCoverageAlerts([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCoverageAlerts();
+    const iv = setInterval(loadCoverageAlerts, 30000);
+    return () => clearInterval(iv);
+  }, [loadCoverageAlerts]);
 
   // ── STRICT resident lookup ──
   // Only match by backend user id. Previously we fell back to name / room,
@@ -1129,6 +1158,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       // Use the kitchen-scoped endpoint so ROLE_KITCHEN_STAFF doesn't 403
       // on the admin-only /admin/menu/:id PUT route.
       await setMealAvailability(Number(id), nextAvailable);
+      loadCoverageAlerts();
     } catch (e: any) {
       // Revert on failure
       setMenuMeals((prev) => prev.map((m) => (m.id === id ? { ...m, available: !nextAvailable } : m)));
@@ -1145,6 +1175,18 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const filteredMenuMeals = menuFilter === "All"
     ? menuMeals
     : menuMeals.filter((m) => normalizePeriod(m.mealperiod || m.mealPeriod) === menuFilter);
+
+  const coverageAlertsByPeriod = useMemo(() => {
+    const grouped: Record<string, MealCoverageAlert[]> = Object.fromEntries(
+      COVERAGE_ALERT_PERIODS.map((period) => [period, [] as MealCoverageAlert[]]),
+    );
+    for (const alert of coverageAlerts) {
+      const period = alert.mealPeriod?.trim() || "";
+      if (!grouped[period]) grouped[period] = [];
+      grouped[period].push(alert);
+    }
+    return grouped;
+  }, [coverageAlerts]);
 
   // ── send message to resident (per-order) ──
   const handleSendReply = (orderId: number) => {
@@ -1269,6 +1311,83 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             </View>
           ))}
         </View>
+
+        {coverageAlerts.length > 0 && (
+          <View style={s.coverageBanner}>
+            <View style={s.coverageBannerHeader}>
+              <View style={s.coverageBannerTitleRow}>
+                <View style={s.coverageBannerIcon}>
+                  <Feather name="alert-triangle" size={18} color={C.warning} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.coverageBannerTitle}>Meal coverage alerts</Text>
+                  <Text style={s.coverageBannerSub}>
+                    These residents currently have no safe meal in at least one served period.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={s.coverageBannerCta}
+                onPress={() => navigation?.navigate("MealCoverageAlerts")}
+              >
+                <Text style={s.coverageBannerCtaText}>Open list</Text>
+                <Feather name="chevron-right" size={15} color={C.warning} />
+              </TouchableOpacity>
+            </View>
+
+            {COVERAGE_ALERT_PERIODS
+              .filter((period) => (coverageAlertsByPeriod[period] ?? []).length > 0)
+              .map((period) => {
+                const alerts = coverageAlertsByPeriod[period] ?? [];
+                const accent = PERIOD_ACCENT[period] ?? PERIOD_ACCENT.Breakfast;
+                return (
+                  <View key={period} style={s.coverageGroup}>
+                    <View style={s.coverageGroupHeader}>
+                      <View style={[s.coverageGroupPill, { backgroundColor: accent.light, borderColor: accent.color }]}>
+                        <Feather name={accent.icon as any} size={12} color={accent.color} />
+                        <Text style={[s.coverageGroupPillText, { color: accent.color }]}>{period}</Text>
+                      </View>
+                      <Text style={s.coverageGroupCount}>
+                        {alerts.length} resident{alerts.length === 1 ? "" : "s"}
+                      </Text>
+                    </View>
+
+                    <View style={s.coverageResidentRow}>
+                      {alerts.map((alert) => {
+                        const isActive = alert.status === "ACTIVE";
+                        const residentLabel = alert.residentName || `Resident #${alert.residentId}`;
+                        const roomLabel = alert.residentRoom ? `Room ${alert.residentRoom}` : "Room unknown";
+                        return (
+                          <View
+                            key={alert.id}
+                            style={[
+                              s.coverageResidentChip,
+                              isActive ? s.coverageResidentChipActive : s.coverageResidentChipAcked,
+                            ]}
+                          >
+                            <Feather
+                              name={isActive ? "alert-circle" : "eye"}
+                              size={12}
+                              color={isActive ? C.danger : C.warning}
+                            />
+                            <Text
+                              style={[
+                                s.coverageResidentText,
+                                isActive ? s.coverageResidentTextActive : s.coverageResidentTextAcked,
+                              ]}
+                            >
+                              {residentLabel}
+                            </Text>
+                            <Text style={s.coverageResidentRoom}>{roomLabel}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+          </View>
+        )}
 
         {/* ── Seasonal Meals ── */}
         {tabSeasonalMeals.length > 0 && (
@@ -2145,6 +2264,127 @@ const s = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 13,
+    color: C.textMuted,
+    fontWeight: "600",
+  },
+
+  coverageBanner: {
+    backgroundColor: "#FFF9ED",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#F6D78B",
+    padding: 16,
+    marginBottom: 20,
+    gap: 14,
+  },
+  coverageBannerHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  coverageBannerTitleRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  coverageBannerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  coverageBannerTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: C.text,
+  },
+  coverageBannerSub: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#7C5A12",
+    marginTop: 3,
+  },
+  coverageBannerCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: "#FFF3D6",
+    borderWidth: 1,
+    borderColor: "#F0C86B",
+  },
+  coverageBannerCtaText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: C.warning,
+  },
+  coverageGroup: {
+    gap: 10,
+  },
+  coverageGroupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  coverageGroupPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  coverageGroupPillText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  coverageGroupCount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: C.textMuted,
+  },
+  coverageResidentRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  coverageResidentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  coverageResidentChipActive: {
+    backgroundColor: C.dangerBg,
+    borderColor: "#F7B5B5",
+  },
+  coverageResidentChipAcked: {
+    backgroundColor: "#FFF3D6",
+    borderColor: "#F0C86B",
+  },
+  coverageResidentText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  coverageResidentTextActive: {
+    color: "#8B1E1E",
+  },
+  coverageResidentTextAcked: {
+    color: "#8A5A00",
+  },
+  coverageResidentRoom: {
+    fontSize: 12,
     color: C.textMuted,
     fontWeight: "600",
   },

@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
  * Central place for "who can do what" on medical-override records.
  *
  * The controller's @PreAuthorize clauses already gate on role (ADMIN,
- * CAREGIVER, KITCHEN_STAFF). This service adds row-level checks on top
+ * CAREGIVER, KITCHEN_STAFF / KITCHEN). This service adds row-level checks on top
  * of that:
  *
  *   Admin       — unrestricted.
@@ -37,7 +37,8 @@ public class OverrideAuthorizationService {
 
     public static final String ROLE_ADMIN = "ROLE_ADMIN";
     public static final String ROLE_CAREGIVER = "ROLE_CAREGIVER";
-    public static final String ROLE_KITCHEN = "ROLE_KITCHEN_STAFF";
+    public static final String ROLE_KITCHEN_STAFF = "ROLE_KITCHEN_STAFF";
+    public static final String ROLE_KITCHEN = "ROLE_KITCHEN";
 
     // ── Request creation ──────────────────────────────────────────
 
@@ -70,7 +71,7 @@ public class OverrideAuthorizationService {
         User actor = requireUser();
         String role = actor.getRole();
 
-        if (ROLE_ADMIN.equals(role) || ROLE_KITCHEN.equals(role)) return;
+        if (ROLE_ADMIN.equals(role) || ROLE_KITCHEN_STAFF.equals(role) || ROLE_KITCHEN.equals(role)) return;
 
         if (ROLE_CAREGIVER.equals(role)) {
             requireCaregiverOfResident(actor, residentId);

@@ -36,6 +36,20 @@ const COLORS = {
   warmBorder: '#E8DCC8',
 };
 
+const deriveMealOfDayFromCart = (
+  items: Array<{ meal_period?: string }>
+): string => {
+  const periods = items
+    .map((item) => item.meal_period)
+    .filter((period): period is string => Boolean(period && period !== 'Drinks' && period !== 'Sides'));
+  if (periods.length === 0) return 'Lunch';
+  const counts: Record<string, number> = {};
+  for (const period of periods) {
+    counts[period] = (counts[period] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+};
+
 const CartScreen = ({ navigation, route }: any) => {
   const { cart: cartItems, removeFromCart, placeOrder, replaceOrder, getTotalNutrition } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -91,7 +105,7 @@ const CartScreen = ({ navigation, route }: any) => {
       await createOverrideApi({
         residentId: ridNum,
         mealIds,
-        mealOfDay: undefined, // backend fills in from order context on placement
+        mealOfDay: deriveMealOfDayFromCart(cartItems),
         targetDate: today,
         reason: `Violations at request:\n${violationLines}`,
       });

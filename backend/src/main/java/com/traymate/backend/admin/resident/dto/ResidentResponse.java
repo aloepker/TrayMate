@@ -23,6 +23,7 @@ public class ResidentResponse {
     private String doctorPhone;
     private String medicalConditions;
     private String foodAllergies;
+    private String dietaryRestrictions;
     private String medications;
     private String roomNumber;
     private Long caregiverId; 
@@ -42,6 +43,7 @@ public class ResidentResponse {
         this.doctorPhone = resident.getDoctorPhone();
         this.medicalConditions = resident.getMedicalConditions();
         this.foodAllergies = resident.getFoodAllergies();
+        this.dietaryRestrictions = resident.getDietaryRestrictions();
         this.medications = resident.getMedications();
         this.roomNumber = resident.getRoomNumber();
         this.caregiverId = resident.getCaregiver() != null ? resident.getCaregiver().getId() : null;

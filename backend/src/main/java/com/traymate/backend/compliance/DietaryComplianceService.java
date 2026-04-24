@@ -100,10 +100,7 @@ public class DietaryComplianceService {
     public ComplianceResult validate(Resident resident, List<Meal> meals) {
         List<String> allergies    = splitList(resident.getFoodAllergies());
         List<String> conditions   = splitList(resident.getMedicalConditions());
-        // Resident entity doesn't have dedicated dietaryRestrictions yet;
-        // we currently fall back to scanning medical conditions for
-        // diet-style entries (e.g. "Vegetarian"). Harmless extra pass.
-        List<String> restrictions = splitList(resident.getMedicalConditions());
+        List<String> restrictions = splitList(resident.getDietaryRestrictions());
 
         List<MealComplianceResult> perMeal = meals.stream()
             .map(m -> checkMeal(m, allergies, restrictions, conditions))

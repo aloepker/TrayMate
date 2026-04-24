@@ -42,12 +42,12 @@ public class MenuController {
 
     /**
      * Kitchen-facing quick toggle for a meal's `available` flag.
-     * Gated to ROLE_ADMIN + ROLE_KITCHEN_STAFF via @PreAuthorize so the
+     * Gated to ROLE_ADMIN + kitchen roles via @PreAuthorize so the
      * kitchen dashboard can hide/show a dish globally without hitting the
      * admin-only /admin/** prefix. Body: { "available": true|false }
      */
     @PatchMapping("/{id}/availability")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_KITCHEN_STAFF')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_KITCHEN_STAFF','ROLE_KITCHEN')")
     public Meal setAvailability(
             @PathVariable Integer id,
             @RequestBody Map<String, Boolean> body) {

@@ -13,5 +13,6 @@ public class CaregiverResidentDto {
     private String roomNumber;
     private String medicalConditions;
     private String foodAllergies;
+    private String dietaryRestrictions;
     private String medications;
 }

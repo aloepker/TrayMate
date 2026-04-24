@@ -29,8 +29,8 @@ public class CreateResidentRequest {
 
     private String medicalConditions;
     private String foodAllergies;
+    private String dietaryRestrictions;
     private String medications;
 
     private String roomNumber;
 }
-

@@ -13,10 +13,9 @@ import java.util.List;
 /**
  * REST surface for the medical-override workflow.
  *
- * Anyone logged-in with a role that can act on behalf of a resident
- * (resident themselves, caregiver, kitchen staff, admin) can CREATE
- * a request. Only admins can APPROVE/DENY, and both admins + caregivers
- * can LIST pending so they can nudge the admin if needed.
+ * Admins and caregivers can CREATE a request. Only admins can
+ * APPROVE/DENY, and both admins + caregivers can LIST pending so they
+ * can nudge the admin if needed. Kitchen roles are read-only here.
  */
 @RestController
 @RequestMapping("/overrides")
@@ -39,7 +38,7 @@ public class MedicalOverrideController {
     }
 
     @GetMapping("/resident/{residentId}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF','ROLE_KITCHEN')")
     public List<OverrideRequestDto> listForResident(@PathVariable Integer residentId) {
         // Service enforces "caregiver must be assigned to this resident".
         return service.listForResident(residentId).stream().map(OverrideRequestDto::from).toList();

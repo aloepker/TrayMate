@@ -26,6 +26,7 @@ import MyOverridesScreen from './src/screens/MyOverridesScreen';
 import AIMealAssistantScreen from './src/screens/aiMealAssistantScreen';
 import AdminDashboardScreen from './src/screens/admin/adminDashboardScreen';
 import PendingOverridesScreen from './src/screens/admin/PendingOverridesScreen';
+import MealCoverageAlertsScreen from './src/screens/admin/MealCoverageAlertsScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboard';
 
 //Caregiver dashboard screen
@@ -57,6 +58,7 @@ export default function App() {
                   <Stack.Screen name="AIMealAssistant" component={AIMealAssistantScreen} />
                   <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
                   <Stack.Screen name="PendingOverrides" component={PendingOverridesScreen} />
+                  <Stack.Screen name="MealCoverageAlerts" component={MealCoverageAlertsScreen} />
                   <Stack.Screen name="CaregiverDashboard" component={CaregiverDashboardScreen} />
                   <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
                   <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />

@@ -19,7 +19,11 @@ public class ResidentQueryService {
                         r.getId(),
                         r.getFirstName() + " " + r.getLastName(),
                         r.getRoomNumber(),
+                        r.getDietaryRestrictions(),
                         r.getFoodAllergies()
+                        ,
+                        r.getMedicalConditions(),
+                        r.getMedications()
                 ))
                 .toList();
     }

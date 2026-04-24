@@ -9,5 +9,8 @@ public class ResidentCardDto {
     private Integer id;
     private String fullName;
     private String roomNumber;
+    private String dietaryRestrictions;
     private String foodAllergies;
+    private String medicalConditions;
+    private String medications;
 }

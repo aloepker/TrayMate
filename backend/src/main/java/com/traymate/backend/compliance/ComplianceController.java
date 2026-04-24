@@ -24,7 +24,7 @@ public class ComplianceController {
     private final OverrideAuthorizationService authz;
 
     @PostMapping("/check")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF')")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_CAREGIVER','ROLE_KITCHEN_STAFF','ROLE_KITCHEN')")
     public ComplianceResult check(@RequestBody ComplianceCheckRequest req) {
         if (req.getResidentId() == null) {
             throw new IllegalArgumentException("residentId is required");

@@ -1,7 +1,7 @@
 // DietaryAuditScreen.tsx
 //
 // Read-only timeline of every change made to a resident's dietary profile
-// (allergies, medical conditions, medications). Reached from Settings →
+// (allergies, dietary restrictions, medical conditions, medications). Reached from Settings →
 // Quick Actions → "Dietary History". Backed by GET /residents/:id/dietary-audit.
 //
 // Styling mirrors OrderHistoryScreen (same header / tab / card language) so
@@ -21,7 +21,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSettings } from './context/SettingsContext';
 import { getDietaryAuditLog, DietaryAuditEntry } from '../services/api';
 
-type FilterTab = 'all' | 'foodAllergies' | 'medicalConditions' | 'medications';
+type FilterTab = 'all' | 'foodAllergies' | 'dietaryRestrictions' | 'medicalConditions' | 'medications';
 
 // Human-readable labels + color for each tracked field.
 const FIELD_CONFIG: Record<string, { label: string; short: string; color: string; bg: string; icon: string }> = {
@@ -97,6 +97,7 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
   const TABS: { key: FilterTab; label: string; color: string }[] = [
     { key: 'all',               label: 'All',        color: '#717644' },
     { key: 'foodAllergies',     label: 'Allergies',  color: FIELD_CONFIG.foodAllergies.color },
+    { key: 'dietaryRestrictions', label: 'Dietary',  color: FIELD_CONFIG.dietaryRestrictions.color },
     { key: 'medicalConditions', label: 'Conditions', color: FIELD_CONFIG.medicalConditions.color },
     { key: 'medications',       label: 'Meds',       color: FIELD_CONFIG.medications.color },
   ];
@@ -174,7 +175,7 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
           </Text>
           <Text style={[styles.emptyDesc, { fontSize: scaled(13), color: theme.textSecondary }]}>
             {tab === 'all'
-              ? 'Once this resident\u2019s allergies, conditions, or medications are edited, every change will be listed here.'
+              ? 'Once this resident\u2019s allergies, dietary restrictions, conditions, or medications are edited, every change will be listed here.'
               : 'No changes recorded for this category yet.'}
           </Text>
         </View>
