@@ -1090,9 +1090,25 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       );
       const safeMeals = periodMeals.filter((m) => safeIds.has(String(m.id)));
 
-      // No safe options at all — let the UI show a clear "nothing matches" state.
+      // No safe options at all — give the UI a clear "nothing matches" card
+      // but still recommend something visible so the resident isn't left
+      // staring at a dead panel. Pick the first meal of the period with a
+      // caution note instead of an empty state.
       if (safeMeals.length === 0) {
-        setRecommendation(null);
+        if (periodMeals.length > 0) {
+          const first = periodMeals[0];
+          setRecommendation({
+            meal_name: first.name,
+            reason: "We couldn't find a meal that matches every restriction — please double-check the profile. You might consider the",
+            dietary_restrictions: [
+              ...(safetyResident.foodAllergies ?? []),
+              ...(safetyResident.dietaryRestrictions ?? []),
+            ],
+            targetPeriod: targetPeriod ?? undefined,
+          } as any);
+        } else {
+          setRecommendation(null);
+        }
         setRecLoading(false);
         return;
       }
@@ -1163,9 +1179,26 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         }
       }
 
+      // Final guard: if both Gemini and the rule-based fallback came up empty
+      // but we DO have safe meals, pick the first one so the card isn't dead.
+      // Ensures "No recommendation available" only shows when there's truly
+      // nothing on the menu for this period.
+      if (!rec && safeMeals.length > 0) {
+        const top = safeMeals[0];
+        rec = {
+          meal_name: top.name,
+          reason: `A safe option from today's ${targetPeriod?.toLowerCase() ?? 'menu'} — we recommend the`,
+          dietary_restrictions: [
+            ...(safetyResident.foodAllergies ?? []),
+            ...(safetyResident.dietaryRestrictions ?? []),
+          ],
+        };
+      }
+
       setRecommendation(rec ? { ...rec, targetPeriod: targetPeriod ?? undefined } : null);
       setRecLoading(false);
-    } catch {
+    } catch (err) {
+      console.warn('loadRecommendation failed:', err);
       setRecommendation(null);
       setRecLoading(false);
     }
