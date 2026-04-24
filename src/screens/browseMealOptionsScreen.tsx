@@ -1631,21 +1631,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
             activeOpacity={0.85}
           >
-            <Feather name="calendar" size={20} color={pt.tabActiveBg} />
+            <Feather name="calendar" size={26} color={pt.tabActiveBg} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={() => setShowBrowseSupport(true)}
             activeOpacity={0.85}
           >
-            <Feather name="help-circle" size={20} color={pt.tabActiveBg} />
+            <Feather name="help-circle" size={26} color={pt.tabActiveBg} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
             activeOpacity={0.85}
           >
-            <Feather name="settings" size={20} color={pt.tabActiveBg} />
+            <Feather name="settings" size={26} color={pt.tabActiveBg} />
           </TouchableOpacity>
         </View>
       </View>
@@ -2273,9 +2273,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerActionBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
