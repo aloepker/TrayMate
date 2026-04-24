@@ -23,6 +23,8 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {
@@ -119,16 +121,21 @@ export default function MyOverridesScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={10}>
-          <Feather name="chevron-left" size={22} color={COLORS.primary} />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={styles.title}>Override Requests</Text>
-          {residentName ? <Text style={styles.subtitle}>{residentName}</Text> : null}
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={10}>
+            <Feather name="chevron-left" size={22} color={COLORS.primary} />
+            <Text style={styles.backText}>Back</Text>
+          </Pressable>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.title} numberOfLines={1}>Override Requests</Text>
+            {residentName ? (
+              <Text style={styles.subtitle} numberOfLines={1}>{residentName}</Text>
+            ) : null}
+          </View>
+          <View style={styles.backBtn} />
         </View>
-        <View style={{ width: 64 }} />
       </View>
 
       {loading ? (
@@ -231,14 +238,26 @@ export default function MyOverridesScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    // Extra top padding on Android to clear the status bar (iOS handles
+    // this via SafeAreaView). 16 below accounts for inset on iPad too.
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16,
+    paddingBottom: 14,
+    paddingHorizontal: 16,
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', width: 64 },
-  backText: { color: COLORS.primary, fontWeight: '600', fontSize: 15 },
-  title: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  subtitle: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  backBtn: { flexDirection: 'row', alignItems: 'center', width: 72 },
+  backText: { color: COLORS.primary, fontWeight: '600', fontSize: 15, marginLeft: 2 },
+  headerTitleWrap: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  title: { fontSize: 20, fontWeight: '800', color: COLORS.text, letterSpacing: -0.2 },
+  subtitle: { fontSize: 13, color: COLORS.textMuted, marginTop: 3 },
   centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyHeader: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginTop: 12 },
   emptySub: { color: COLORS.textMuted, marginTop: 4, textAlign: 'center' },

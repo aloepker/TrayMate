@@ -16,6 +16,8 @@ import {
   ScrollView,
   SafeAreaView,
   ActivityIndicator,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useSettings } from './context/SettingsContext';
@@ -111,24 +113,33 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={theme.surface} />
       {/* ── Header ── */}
       <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={[styles.backBtn, { minHeight: touchTarget }]}
-        >
-          <Feather name="chevron-left" size={22} color="#717644" />
-          <Text style={[styles.backText, { fontSize: scaled(15) }]}>Back</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>
-            Dietary History
-          </Text>
-          <Text style={[styles.headerSub, { fontSize: scaled(12), color: theme.textSecondary }]}>
-            {residentName ?? 'Resident'} · audit log
-          </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backBtn, { minHeight: touchTarget }]}
+          >
+            <Feather name="chevron-left" size={22} color="#717644" />
+            <Text style={[styles.backText, { fontSize: scaled(15) }]}>Back</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text
+              style={[styles.headerTitle, { fontSize: scaled(20), color: theme.textPrimary }]}
+              numberOfLines={1}
+            >
+              Dietary History
+            </Text>
+            <Text
+              style={[styles.headerSub, { fontSize: scaled(13), color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {residentName ?? 'Resident'} · audit log
+            </Text>
+          </View>
+          <View style={{ width: 72 }} />
         </View>
-        <View style={{ width: 70 }} />
       </View>
 
       {/* ── Filter tabs ── */}
@@ -274,17 +285,24 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    // Extra top padding on Android to clear the status bar (iOS handles
+    // this via SafeAreaView). 16 below accounts for inset on iPad too.
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, width: 70 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, width: 72 },
   backText: { color: '#717644', fontWeight: '600' },
-  headerCenter: { flex: 1, alignItems: 'center' },
+  headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
   headerTitle: { fontWeight: '800', letterSpacing: -0.2 },
-  headerSub: { marginTop: 2 },
+  headerSub: { marginTop: 3 },
 
   // ── Tabs ──
   tabRow: {
