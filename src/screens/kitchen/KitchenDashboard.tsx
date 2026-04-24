@@ -19,7 +19,6 @@ import {
 import Feather from "react-native-vector-icons/Feather";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
-import { MealService } from "../../services/localDataService";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
 import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, setMealAvailability, listCoverageAlertsApi, type MealCoverageAlert } from "../../services/api";
 import MessagesModal from "../components/messaging/MessagesModal";

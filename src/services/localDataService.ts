@@ -478,34 +478,126 @@ export const MealService = {
 };
 
 // ==================== RESIDENT SERVICE ====================
+//
+// Backend-backed in-memory cache. Populated by primeResidentsCache() after
+// login (see App.tsx). Until that runs, the cache falls back to the small
+// RESIDENTS_DATABASE seed above so demo/offline flows still work.
+//
+// The sync getters preserved below match the signatures every screen has
+// always used — swapping to async would cascade through a dozen UI files.
+// Keeping the cache in module scope lets us stay sync without lying about
+// where the data comes from.
+
+let residentsCache: Resident[] = [];
+
+function activeResidents(): Resident[] {
+  const pool = residentsCache.length > 0 ? residentsCache : RESIDENTS_DATABASE;
+  return pool.filter((r) => r.isActive);
+}
+
+// Convert a backend Resident DTO (shape from api.ts) into the rich local
+// Resident type this app has always used internally.
+type BackendResident = {
+  id: string | number;
+  name?: string;
+  room?: string;
+  dietaryRestrictions?: string[];
+  foodAllergies?: string[];
+  medicalConditions?: string[];
+  medications?: string[];
+};
+
+function toLocalResident(b: BackendResident): Resident {
+  const full = (b.name ?? "").trim();
+  const parts = full.split(/\s+/);
+  const firstName = parts[0] ?? "";
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : "";
+
+  const allergies = (b.foodAllergies ?? []).map((name) => ({
+    type: "allergy" as const,
+    name,
+    severity: "severe" as const,
+  }));
+  const medical = (b.medicalConditions ?? []).map((name) => ({
+    type: "medical" as const,
+    name,
+    severity: "moderate" as const,
+  }));
+  const prefs = (b.dietaryRestrictions ?? []).map((name) => ({
+    type: "preference" as const,
+    name,
+    severity: "mild" as const,
+  }));
+
+  return {
+    id: String(b.id),
+    firstName,
+    lastName,
+    fullName: full,
+    email: "",
+    phone: "",
+    roomNumber: b.room ?? "",
+    role: "resident",
+    dietaryRestrictions: [...allergies, ...medical, ...prefs],
+    nutritionGoals: {
+      dailyCalories: { min: 0, max: 0 },
+      sodium: { max: 0 },
+      protein: { min: 0 },
+    } as any,
+    dislikedIngredients: [],
+    favoriteMealIds: [],
+    isActive: true,
+  };
+}
+
+// Called after login. Accepts the already-fetched backend list so callers
+// can pick the role-appropriate endpoint (admin vs caregiver) in one place.
+export function setResidentsCache(backendResidents: BackendResident[] | null | undefined): void {
+  if (!backendResidents || backendResidents.length === 0) {
+    residentsCache = [];
+    return;
+  }
+  residentsCache = backendResidents.map(toLocalResident);
+}
+
+export function clearResidentsCache(): void {
+  residentsCache = [];
+}
 
 export const ResidentService = {
   /**
    * Get all residents
    */
   getAllResidents: (): Resident[] => {
-    return RESIDENTS_DATABASE.filter(r => r.isActive);
+    return activeResidents();
   },
 
   /**
-   * Get resident by ID
+   * Get resident by ID — checks backend-backed cache first, then falls
+   * through to the demo seed. Accepts numeric backend ids as well as the
+   * legacy "resident_001" strings.
    */
   getResidentById: (id: string): Resident | undefined => {
-    return RESIDENTS_DATABASE.find(r => r.id === id);
+    const key = String(id);
+    const pool = residentsCache.length > 0 ? residentsCache : RESIDENTS_DATABASE;
+    return pool.find((r) => r.id === key);
   },
 
   /**
    * Get resident by room number
    */
   getResidentByRoom: (roomNumber: string): Resident | undefined => {
-    return RESIDENTS_DATABASE.find(r => r.roomNumber === roomNumber);
+    const pool = residentsCache.length > 0 ? residentsCache : RESIDENTS_DATABASE;
+    return pool.find((r) => r.roomNumber === roomNumber);
   },
 
   /**
-   * Get default resident (for demo purposes)
+   * Get default resident — first active record. Backed by the live cache
+   * once primed; falls back to the demo seed otherwise.
    */
   getDefaultResident: (): Resident => {
-    return RESIDENTS_DATABASE[0]; // Bobby Johnson
+    const pool = activeResidents();
+    return pool[0] ?? RESIDENTS_DATABASE[0];
   },
 
   /**

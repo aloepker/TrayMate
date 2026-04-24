@@ -1,4 +1,6 @@
 import { setAuth, setUserEmail } from "../services/storage";
+import { getResidents, getCaregiverResidents } from "../services/api";
+import { setResidentsCache } from "../services/localDataService";
 import React, { useState } from "react";
 import {
   View,
@@ -64,6 +66,23 @@ export default function Login({ navigation }: any) {
 
       await setAuth(data.token, data.role);
       await setUserEmail(email.trim().toLowerCase());
+
+      // Prime the local resident cache from the backend so every
+      // resident-facing screen reads real data instead of the demo seed.
+      // Pick the endpoint that matches the logged-in role; swallow errors
+      // because login itself has already succeeded.
+      try {
+        const list =
+          data.role === "ROLE_ADMIN"
+            ? await getResidents()
+            : data.role === "ROLE_CAREGIVER"
+            ? await getCaregiverResidents()
+            : [];
+        setResidentsCache(list as any);
+      } catch (e) {
+        console.warn("Failed to prime residents cache after login:", e);
+      }
+
       navigateByRole(data.role);
     } catch (err: any) {
       // Network unreachable — try mock credentials
