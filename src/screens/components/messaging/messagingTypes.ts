@@ -1,10 +1,9 @@
 // src/screens/components/messaging/messagingTypes.ts
-
 export type ChatPreview = {
   id: string;
   senderId: string;
   receiverId: string;
-  senderName: string;  
+  senderName: string;
   receiverName: string;
   content: string;
   createdAt: string;
