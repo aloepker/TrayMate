@@ -72,7 +72,10 @@ export default function MyOverridesScreen({ navigation, route }: any) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
-    if (residentId == null) {
+    // Guard: residentId must be a real positive integer. `Number(undefined)`
+    // upstream yields NaN, which would otherwise fetch `/overrides/resident/NaN`
+    // and surface Spring's raw 404.
+    if (residentId == null || !Number.isFinite(residentId) || residentId <= 0) {
       setError('Resident not specified.');
       setLoading(false);
       return;
@@ -83,7 +86,12 @@ export default function MyOverridesScreen({ navigation, route }: any) {
       setItems(list);
     } catch (err: any) {
       console.warn('Failed to load my overrides', err);
-      if (err?.status === 403) {
+      if (err?.status === 404) {
+        // No records for this resident yet (or the backend build doesn't
+        // know this route — either way, show the empty state rather than
+        // a scary "Not Found").
+        setItems([]);
+      } else if (err?.status === 403) {
         setError("You aren't authorized to view this resident's override history.");
       } else {
         setError(err?.message ?? 'Unable to load your requests.');

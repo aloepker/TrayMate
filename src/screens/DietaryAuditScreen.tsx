@@ -78,10 +78,17 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
       data.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
       setEntries(data);
     } catch (e: any) {
-      const msg = e?.message === 'Network request failed'
-        ? 'Server unreachable. It may be waking up — tap Retry in a moment.'
-        : e?.message ?? 'Could not load dietary history.';
-      setLoadError(msg);
+      // 404 → no audit entries yet (or stale backend that doesn't know the
+      // route). Either way, the empty state reads much better than a raw
+      // "Not Found" banner.
+      if (e?.status === 404) {
+        setEntries([]);
+      } else {
+        const msg = e?.message === 'Network request failed'
+          ? 'Server unreachable. It may be waking up — tap Retry in a moment.'
+          : e?.message ?? 'Could not load dietary history.';
+        setLoadError(msg);
+      }
     } finally {
       setLoading(false);
     }
