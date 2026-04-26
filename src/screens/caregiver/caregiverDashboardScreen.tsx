@@ -91,6 +91,10 @@ export default function CaregiverDashboardScreen({
     let myIdCache: string | null = null;
 
     const checkUnread = async () => {
+      // Don't fight the modal: while it's open it's actively marking
+      // threads as read, and clobbering setMsgUnread mid-flow makes the
+      // red badge flicker back on.
+      if (showMessagesModal) return;
       try {
         const chats = await getChats();
         if (!Array.isArray(chats)) return;
@@ -160,7 +164,7 @@ export default function CaregiverDashboardScreen({
     checkUnread();
     const iv = setInterval(checkUnread, 10000); // poll every 10s
     return () => clearInterval(iv);
-  }, []);
+  }, [showMessagesModal]);
 
   // -----------------------------
   // Main screen state
@@ -689,6 +693,24 @@ export default function CaregiverDashboardScreen({
                     <Feather name="shopping-cart" size={16} color="#FFFFFF" />
                     <Text style={styles.modalPrimaryText}>
                       Browse Meals & Place Order
+                    </Text>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  style={styles.modalSecondaryBtn}
+                  onPress={() => {
+                    closeResidentModal();
+                    navigation.navigate("DietaryAudit", {
+                      residentId: selectedResident.id,
+                      residentName: selectedResident.name,
+                    });
+                  }}
+                >
+                  <View style={styles.modalBtnRow}>
+                    <Feather name="file-text" size={16} color="#6D6B3B" />
+                    <Text style={styles.modalSecondaryText}>
+                      View Dietary History
                     </Text>
                   </View>
                 </Pressable>
@@ -1262,6 +1284,19 @@ const styles = StyleSheet.create({
   modalPrimaryText: {
     color: "#FFFFFF",
     fontWeight: "900",
+  },
+  modalSecondaryBtn: {
+    marginTop: 10,
+    backgroundColor: "#F0F1DC",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#D9DBC0",
+  },
+  modalSecondaryText: {
+    color: "#6D6B3B",
+    fontWeight: "800",
   },
   modalCancel: {
     marginTop: 12,

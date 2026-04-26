@@ -62,6 +62,9 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
   useEffect(() => {
     const checkUnread = async () => {
+      // Pause polling while the modal is open so the badge doesn't flicker
+      // back on while the modal marks threads read.
+      if (showMessagesModal) return;
       try {
         const chats = await getChats();
         if (!Array.isArray(chats)) return;
@@ -74,7 +77,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     checkUnread();
     const iv = setInterval(checkUnread, 30000);
     return () => clearInterval(iv);
-  }, []);
+  }, [showMessagesModal]);
 
   // Poll for meal-coverage alerts so the pill badge stays fresh even when
   // alerts are raised server-side (kitchen toggled a meal off, another
@@ -807,6 +810,18 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                   >
                     <Feather name="log-in" size={14} color="#FFFFFF" />
                     <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>
+                  </Pressable>
+
+                  {/* ── Dietary History (audit log) ── */}
+                  <Pressable
+                    style={styles.dietaryHistoryBtn}
+                    onPress={() => navigation.navigate("DietaryAudit", {
+                      residentId: r.id,
+                      residentName: r.name,
+                    })}
+                  >
+                    <Feather name="file-text" size={14} color="#6D6B3B" />
+                    <Text style={styles.dietaryHistoryBtnText}>View Dietary History</Text>
                   </Pressable>
                 </View>
               );
@@ -1680,6 +1695,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#FFFFFF",
+    letterSpacing: 0.2,
+  },
+  dietaryHistoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#F0F1DC",
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#D9DBC0",
+  },
+  dietaryHistoryBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6D6B3B",
     letterSpacing: 0.2,
   },
   msgKitchenBtn: {

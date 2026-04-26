@@ -53,6 +53,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
   const [conversationPreviews, setConversationPreviews] = useState<
     Record<string, { preview: string; createdAt: string; isUnread: boolean }>
   >({});
+  const [initError, setInitError] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -65,6 +66,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
   const init = async () => {
     setLoadingInit(true);
+    setInitError(null);
     try {
       const [meRes, usersRes, chatsRes] = await Promise.allSettled([
         getMe(),
@@ -74,6 +76,18 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
       const myId = meRes.status === "fulfilled" ? String(meRes.value.id) : null;
       setCurrentUserId(myId);
+
+      // Surface a real error instead of silently dropping to "No chats yet" —
+      // most of the time when the badge says "1" but the sidebar is empty,
+      // /messages/chats failed (network blip / cold backend / 401).
+      if (chatsRes.status === "rejected") {
+        const msg = (chatsRes.reason as any)?.message ?? "Could not load messages";
+        setInitError(
+          msg === "Network request failed"
+            ? "Server unreachable. Tap Retry in a moment — it may be waking up."
+            : msg
+        );
+      }
 
       const chatList: ChatPreview[] =
         chatsRes.status === "fulfilled" && Array.isArray(chatsRes.value)
@@ -126,8 +140,29 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
       if (uncovered.length > 0 && myId) {
         fetchMissingPreviews(uncovered.slice(0, 20), myId, previewMap);
       }
-    } catch (e) {
+
+      // Mark every unread thread as read on the backend by visiting it.
+      // Backend's GET /messages/conversation/{id} flips isRead=true for
+      // messages the current user received. Without this, the dashboard
+      // poll would re-set the badge to its prior value and the red "1"
+      // would never go away.
+      const unreadPartnerIds = Object.entries(previewMap)
+        .filter(([, p]) => p.isUnread)
+        .map(([id]) => id);
+      if (unreadPartnerIds.length > 0) {
+        await Promise.allSettled(unreadPartnerIds.map(id => getConversation(id)));
+        // Locally clear isUnread so the modal's own header count drops to 0.
+        setConversationPreviews(prev => {
+          const next = { ...prev };
+          for (const id of unreadPartnerIds) {
+            if (next[id]) next[id] = { ...next[id], isUnread: false };
+          }
+          return next;
+        });
+      }
+    } catch (e: any) {
       console.warn("MessagesModal init error:", e);
+      setInitError(e?.message ?? "Could not load messages");
     } finally {
       setLoadingInit(false);
     }
@@ -302,6 +337,18 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                 {loadingInit ? (
                   <View style={s.center}>
                     <ActivityIndicator color={OLIVE} />
+                  </View>
+                ) : initError ? (
+                  <View style={s.center}>
+                    <View style={s.emptyIconWrap}>
+                      <Feather name="wifi-off" size={26} color="#B45309" />
+                    </View>
+                    <Text style={s.emptyTitle}>Couldn't load messages</Text>
+                    <Text style={s.emptySub}>{initError}</Text>
+                    <Pressable style={s.retryBtn} onPress={init}>
+                      <Feather name="refresh-cw" size={13} color="#FFF" />
+                      <Text style={s.retryBtnText}>Retry</Text>
+                    </Pressable>
                   </View>
                 ) : sidebarList.length === 0 ? (
                   <View style={s.center}>
@@ -534,6 +581,8 @@ const s = StyleSheet.create({
   emptyIconWrap:{ width: 56, height: 56, borderRadius: 28, backgroundColor: OLIVE_BG, alignItems: "center", justifyContent: "center" },
   emptyTitle:   { fontSize: 14, fontWeight: "800", color: "#6B7280" },
   emptySub:     { fontSize: 12, color: "#C4C9D4", fontWeight: "600", textAlign: "center" },
+  retryBtn:     { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, backgroundColor: "#B45309", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  retryBtnText: { color: "#FFF", fontSize: 12, fontWeight: "800" },
 
   // Chat row
   chatRow:      { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, padding: 10, marginBottom: 4, position: "relative" },
