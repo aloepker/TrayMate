@@ -22,6 +22,17 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
         ORDER BY m.createdAt ASC
     """)
     List<Message> getConversation(Long userId, Long otherUserId);
+
+    //all messages this user is involved in (sent OR received) — used to
+    //build the chat-list sidebar. Previously getChats reused getConversation
+    //with userId on both sides, which only matched self-messages and left
+    //the sidebar empty for users who had real conversations with others.
+    @Query("""
+        SELECT m FROM Message m
+        WHERE m.senderId = :userId OR m.receiverId = :userId
+        ORDER BY m.createdAt DESC
+    """)
+    List<Message> findAllInvolvingUser(Long userId);
     
     //delete one specific message
     void deleteById(Long id);

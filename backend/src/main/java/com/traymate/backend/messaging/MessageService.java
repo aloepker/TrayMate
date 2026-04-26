@@ -64,8 +64,12 @@ public class MessageService {
         //new chat function
         public List<ChatResponse> getChats(Long userId) {
 
+                // Was: repository.getConversation(userId, userId) — that only
+                // returned self-messages, so the sidebar was empty for users
+                // with real conversations. Pull every message the user is
+                // involved in (sent or received) instead.
                 List<Message> allMessages =
-                        repository.getConversation(userId, userId);
+                        repository.findAllInvolvingUser(userId);
 
                 Map<Long, Message> latestChats = new HashMap<>();
 
@@ -75,7 +79,8 @@ public class MessageService {
                                 ? msg.getReceiverId()
                                 : msg.getSenderId();
 
-                        // keep only latest message per user
+                        // findAllInvolvingUser is sorted DESC, so the first
+                        // entry per partner is the newest — keep only that.
                         if (!latestChats.containsKey(otherUserId)) {
                         latestChats.put(otherUserId, msg);
                         }

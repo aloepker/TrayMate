@@ -86,6 +86,10 @@ export default function CaregiverDashboardScreen({
 
   // Track last-seen unread count so we only fire banner on genuinely new messages
   const lastUnreadRef = useRef<number | null>(null);
+  // Mirror showMessagesModal in a ref so async polling closures see the
+  // latest value without retriggering the polling effect.
+  const modalOpenRef = useRef(false);
+  useEffect(() => { modalOpenRef.current = showMessagesModal; }, [showMessagesModal]);
 
   useEffect(() => {
     let myIdCache: string | null = null;
@@ -93,10 +97,12 @@ export default function CaregiverDashboardScreen({
     const checkUnread = async () => {
       // Don't fight the modal: while it's open it's actively marking
       // threads as read, and clobbering setMsgUnread mid-flow makes the
-      // red badge flicker back on.
-      if (showMessagesModal) return;
+      // red badge flicker back on. Re-check after awaits so an in-flight
+      // poll started before the click also bails.
+      if (modalOpenRef.current) return;
       try {
         const chats = await getChats();
+        if (modalOpenRef.current) return;
         if (!Array.isArray(chats)) return;
 
         if (!myIdCache) {
@@ -104,9 +110,14 @@ export default function CaregiverDashboardScreen({
           myIdCache = String(me.id);
         }
 
-        // Only count messages where I am the receiver and they are unread
+        // Only count messages where I am the receiver and they are unread.
+        // Exclude self-messages (sender == receiver == me) — those are
+        // notes-to-self artefacts that the modal hides and would otherwise
+        // leave the red badge stuck at "1" with no thread to clear it from.
         const unreadChats = chats.filter(
-          c => !c.isRead && String(c.receiverId) === myIdCache
+          c => !c.isRead
+            && String(c.receiverId) === myIdCache
+            && String(c.senderId)   !== myIdCache
         );
         const count = unreadChats.length;
         setMsgUnread(count);
@@ -164,7 +175,7 @@ export default function CaregiverDashboardScreen({
     checkUnread();
     const iv = setInterval(checkUnread, 10000); // poll every 10s
     return () => clearInterval(iv);
-  }, [showMessagesModal]);
+  }, []);
 
   // -----------------------------
   // Main screen state

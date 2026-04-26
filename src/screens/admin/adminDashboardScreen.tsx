@@ -2,7 +2,7 @@
 
 import { getAuthToken } from "../../services/storage"; //new add
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -60,24 +60,37 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [msgUnread, setMsgUnread] = useState(0);
   const [alertActiveCount, setAlertActiveCount] = useState(0);
 
+  // Mirror modal-open state in a ref so async polling closures see the
+  // latest value without forcing the polling effect to retrigger.
+  const modalOpenRef = useRef(false);
+  useEffect(() => { modalOpenRef.current = showMessagesModal; }, [showMessagesModal]);
+
   useEffect(() => {
     const checkUnread = async () => {
-      // Pause polling while the modal is open so the badge doesn't flicker
-      // back on while the modal marks threads read.
-      if (showMessagesModal) return;
+      // Re-check after every await: a poll started before the user
+      // clicked Messages would otherwise complete and re-set the badge.
+      if (modalOpenRef.current) return;
       try {
         const chats = await getChats();
+        if (modalOpenRef.current) return;
         if (!Array.isArray(chats)) return;
         const me = await getMe();
+        if (modalOpenRef.current) return;
         const myId = String(me.id);
-        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+        // Exclude self-messages — they have no real partner thread the
+        // modal can mark read, so they would leave the badge stuck at "1".
+        const count = chats.filter(
+          c => !c.isRead
+            && String(c.receiverId) === myId
+            && String(c.senderId)   !== myId
+        ).length;
         setMsgUnread(count);
       } catch { /* ignore */ }
     };
     checkUnread();
     const iv = setInterval(checkUnread, 30000);
     return () => clearInterval(iv);
-  }, [showMessagesModal]);
+  }, []);
 
   // Poll for meal-coverage alerts so the pill badge stays fresh even when
   // alerts are raised server-side (kitchen toggled a meal off, another

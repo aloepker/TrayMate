@@ -59,12 +59,26 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
   const [initError, setInitError] = useState<string | null>(null);
   const [deleteMessageConfirm, setDeleteMessageConfirm] = useState<string | null>(null);
   const [deleteConvoConfirm, setDeleteConvoConfirm] = useState<string | null>(null);
+  // User picked via "New Chat" who hasn't yet sent a message. If they
+  // navigate away (pick someone else / close modal) without sending, this
+  // phantom entry is removed from the sidebar so it doesn't look like a
+  // real conversation.
+  const [pendingChatUserId, setPendingChatUserId] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    if (!visible) return;
-    init();
+    if (visible) {
+      init();
+      return;
+    }
+    // Modal closed: clear any unsent phantom chat so it doesn't reappear
+    // as a fake "conversation" the next time the modal opens.
+    if (pendingChatUserId) {
+      const abandoned = pendingChatUserId;
+      setPendingChatUserId(null);
+      setHistoryUsers((prev) => prev.filter((u) => u.id !== abandoned));
+    }
   }, [visible]);
 
   const init = async () => {
@@ -116,9 +130,14 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         }
       });
 
+      // Always coerce both sides to string before comparing — getMe returns
+      // a string id, but raw user objects from /messages/users may come
+      // back as numbers, which would make `u.id !== myId` always true and
+      // let the user pick themselves in the New Chat picker (creating a
+      // self-message that the badge then can't ever clear).
       const staff: MessageUser[] =
         usersRes.status === "fulfilled" && Array.isArray(usersRes.value)
-          ? usersRes.value.filter((u) => u.id !== myId)
+          ? usersRes.value.filter((u) => String(u.id) !== String(myId))
           : [];
       setAllStaffUsers(staff);
 
@@ -172,6 +191,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
           return next;
         });
       }
+
     } catch (e: any) {
       console.warn("MessagesModal init error:", e);
       setInitError(e?.message ?? "Could not load messages");
@@ -233,6 +253,9 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
   );
 
   const loadConversation = async (userId: string) => {
+    // Switching threads: if the previously-picked phantom user was
+    // abandoned without sending, drop them from the sidebar.
+    dropPendingIfAbandoned(userId);
     setSelectedUserId(userId);
     setLoadingConvo(true);
 
@@ -271,8 +294,28 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
   const handleSelectNewChatUser = async (user: MessageUser) => {
     setShowNewChat(false);
+    // If we abandoned a previous "new chat" pick, drop them now.
+    dropPendingIfAbandoned(user.id);
+
+    const alreadyHasHistory = !!conversationPreviews[user.id]?.createdAt;
     setHistoryUsers((prev) => (prev.find((u) => u.id === user.id) ? prev : [user, ...prev]));
+    // Only mark as pending if there's no real history yet — established
+    // threads should never disappear.
+    if (!alreadyHasHistory) setPendingChatUserId(user.id);
     await loadConversation(user.id);
+  };
+
+  // Remove a previously-pending picked user if they were abandoned without
+  // sending a message. Called whenever the active conversation changes or
+  // the modal closes. Skips if the same user is being re-selected.
+  const dropPendingIfAbandoned = (nextSelectedId: string | null) => {
+    if (!pendingChatUserId || pendingChatUserId === nextSelectedId) return;
+    const abandonedId = pendingChatUserId;
+    setPendingChatUserId(null);
+    // Only drop them if no real message ever landed for this thread.
+    const hasRealHistory = !!conversationPreviews[abandonedId]?.createdAt;
+    if (hasRealHistory) return;
+    setHistoryUsers((prev) => prev.filter((u) => u.id !== abandonedId));
   };
 
   const confirmDeleteMessage = (messageId: string) => {
@@ -340,6 +383,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
     try {
       await sendMessage(selectedUserId, text);
+      // First message sent — this is now a real conversation, not pending.
+      if (pendingChatUserId === selectedUserId) setPendingChatUserId(null);
       const updated = await getConversation(selectedUserId);
       const msgs = Array.isArray(updated) ? updated : [];
       setMessages(msgs);
