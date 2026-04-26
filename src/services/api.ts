@@ -1002,6 +1002,19 @@ export async function getMe(): Promise<{ id: string; fullName: string; role: str
   };
 }
 
+export async function deleteConversation(otherUserId: string): Promise<void> {
+  await request<void>(`/messages/conversation/${otherUserId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  await request<void>(`/messages/${messageId}`, {
+    method: "DELETE",
+  });
+}
+
+
 // ─── Menu management (kitchen/admin) ──────────────────────────────────────────
 
 export interface CreateMealPayload {
