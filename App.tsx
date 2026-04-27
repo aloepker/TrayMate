@@ -18,6 +18,7 @@ import HomeScreen from './src/screens/homeScreen';
 import BrowseMealOptionsScreen from './src/screens/browseMealOptionsScreen';
 import CartScreen from './src/screens/CartScreen';
 import LoginScreen from './src/screens/loginScreen';
+import SplashScreen from './src/screens/SplashScreen';
 import UpcomingMealsScreen from './src/screens/upcomingMealsScreen';
 import SettingsScreen from './src/screens/SettingsScreens';
 import OrderHistoryScreen from './src/screens/OrderHistoryScreen';
@@ -44,11 +45,12 @@ export default function App() {
             <CartProvider>
               <NavigationContainer>
                 <Stack.Navigator
-                  initialRouteName="Login"
+                  initialRouteName="Splash"
                   screenOptions={{
                     headerShown: false, // Hide default header for all screens
                   }}
                 >
+                  <Stack.Screen name="Splash" component={SplashScreen} />
                   <Stack.Screen name="Home" component={HomeScreen} />
                   <Stack.Screen name="BrowseMealOptions" component={BrowseMealOptionsScreen} />
                   <Stack.Screen name="Cart" component={CartScreen} />

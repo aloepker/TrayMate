@@ -26,6 +26,8 @@ import { getUserEmail, setResidentCaregivers, getResidentCaregivers, setCaregive
 import AddResidentModal from "../components/AddResidentModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import MessagesModal from "../components/messaging/MessagesModal";
+import ChipMultiSelect from "../components/ChipMultiSelect";
+import { COMMON_ALLERGENS, COMMON_MEDICAL_CONDITIONS } from "../../services/mealSafetyService";
 
 import {
   Caregiver,
@@ -142,13 +144,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [showAddResident, setShowAddResident] = useState(false);
 
   // ---- Edit Resident Modal State ----
+  // Allergies + medical conditions are arrays so the chip picker can drive
+  // them directly. They're joined to comma-separated strings on submit
+  // because the backend column is a single TEXT field.
   const [showEditResident, setShowEditResident] = useState(false);
   const [editingResident, setEditingResident] = useState<Resident | null>(null);
   const [editName, setEditName] = useState("");
   const [editRoom, setEditRoom] = useState("");
-  const [editFoodAllergies, setEditFoodAllergies] = useState("");
+  const [editFoodAllergies, setEditFoodAllergies] = useState<string[]>([]);
   const [editDietary, setEditDietary] = useState("");
-  const [editMedicalNeeds, setEditMedicalNeeds] = useState("");
+  const [editMedicalNeeds, setEditMedicalNeeds] = useState<string[]>([]);
   const [editMedications, setEditMedications] = useState("");
 
   // ---- Confirm Delete Modal State ----
@@ -472,10 +477,18 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     setEditingResident(r);
     setEditName(r.name ?? "");
     setEditRoom(r.room ?? "");
-    setEditFoodAllergies((r.foodAllergies ?? []).join(", "));
-    setEditDietary((r.dietaryRestrictions ?? []).join(", "));
-    setEditMedicalNeeds((r.medicalConditions ?? []).join(", "));
-    setEditMedications((r.medications ?? []).join(", "));
+    // Strip placeholder rows ("None" / "N/A" / blank) that legacy
+    // records sometimes have, so the chip picker doesn't pre-select
+    // them and the comma-string fields don't render as " None ".
+    const isPlaceholder = (s: string) =>
+      /^\s*(none|n\/?a|null|nil|—|-)\s*$/i.test(s);
+    const cleanArr = (arr: string[] | undefined) =>
+      (arr ?? []).filter((s) => typeof s === "string" && s.trim().length > 0 && !isPlaceholder(s));
+    // Chip pickers consume arrays directly.
+    setEditFoodAllergies(cleanArr(r.foodAllergies));
+    setEditMedicalNeeds(cleanArr(r.medicalConditions));
+    setEditDietary(cleanArr(r.dietaryRestrictions).join(", "));
+    setEditMedications(cleanArr(r.medications).join(", "));
     setShowEditResident(true);
   };
 
@@ -501,9 +514,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           body: JSON.stringify({
             name: editName.trim(),
             roomNumber: editRoom.trim(),
-            foodAllergies: editFoodAllergies.trim(),
+            // Backend stores allergies + medical conditions as TEXT, so
+            // flatten the chip arrays to comma-separated strings.
+            foodAllergies: editFoodAllergies.join(", "),
             dietaryRestrictions: editDietary.trim(),
-            medicalConditions: editMedicalNeeds.trim(),
+            medicalConditions: editMedicalNeeds.join(", "),
             medications: editMedications.trim(),
           }),
         }
@@ -709,11 +724,18 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               const assignedCaregiverObjects = assignedCgIds
                 .map(id => caregivers.find(c => String(c.id) === id))
                 .filter(Boolean) as Caregiver[];
+              // Strip placeholder values that legacy resident records may
+              // have saved as a literal string ("None" / "N/A" / "null"
+              // / blank). Without this filter the chip row would render a
+              // misleading "None" tag for residents who actually have
+              // no restrictions on file.
+              const isPlaceholder = (s: string) =>
+                /^\s*(none|n\/?a|null|nil|—|-)\s*$/i.test(s);
               const allTags = [
                 ...(r.dietaryRestrictions ?? []),
                 ...(r.foodAllergies ?? []),
                 ...(r.medicalConditions ?? []),
-              ];
+              ].filter((t) => typeof t === "string" && t.trim().length > 0 && !isPlaceholder(t));
               const isUnassigned = assignedCgIds.length === 0;
 
               return (
@@ -904,48 +926,57 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               </Pressable>
             </View>
 
-            <Text style={styles.modalLabel}>Name</Text>
-            <TextInput
-              value={editName}
-              onChangeText={setEditName}
-              style={styles.modalInput}
-            />
+            {/* Scrollable body — without this, expanding the chip pickers
+                pushes the Update button off-screen and the modal looks
+                frozen. Mirrors the layout in AddResidentModal. */}
+            <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalLabel}>Name</Text>
+              <TextInput
+                value={editName}
+                onChangeText={setEditName}
+                style={styles.modalInput}
+              />
 
-            <Text style={styles.modalLabel}>Room</Text>
-            <TextInput
-              value={editRoom}
-              onChangeText={setEditRoom}
-              style={styles.modalInput}
-              autoCapitalize="characters"
-            />
+              <Text style={styles.modalLabel}>Room</Text>
+              <TextInput
+                value={editRoom}
+                onChangeText={setEditRoom}
+                style={styles.modalInput}
+                autoCapitalize="characters"
+              />
 
-            <Text style={styles.modalLabel}>Food Allergies</Text>
-            <TextInput
-              value={editFoodAllergies}
-              onChangeText={setEditFoodAllergies}
-              style={styles.modalInput}
-            />
+              <ChipMultiSelect
+                label="Medical Conditions"
+                options={COMMON_MEDICAL_CONDITIONS}
+                selected={editMedicalNeeds}
+                onChange={setEditMedicalNeeds}
+              />
 
-            <Text style={styles.modalLabel}>Dietary Restrictions</Text>
-            <TextInput
-              value={editDietary}
-              onChangeText={setEditDietary}
-              style={styles.modalInput}
-            />
+              <ChipMultiSelect
+                label="Food Allergies"
+                required
+                options={COMMON_ALLERGENS}
+                selected={editFoodAllergies}
+                onChange={setEditFoodAllergies}
+                hint="Tap all that apply. Leave blank only if none confirmed."
+              />
 
-            <Text style={styles.modalLabel}>Medical Needs</Text>
-            <TextInput
-              value={editMedicalNeeds}
-              onChangeText={setEditMedicalNeeds}
-              style={styles.modalInput}
-            />
+              <Text style={styles.modalLabel}>Dietary Restrictions</Text>
+              <TextInput
+                value={editDietary}
+                onChangeText={setEditDietary}
+                style={styles.modalInput}
+                placeholder="e.g., Vegetarian, Low Sodium"
+                placeholderTextColor="#9CA3AF"
+              />
 
-            <Text style={styles.modalLabel}>Medications</Text>
-            <TextInput
-              value={editMedications}
-              onChangeText={setEditMedications}
-              style={styles.modalInput}
-            />
+              <Text style={styles.modalLabel}>Medications</Text>
+              <TextInput
+                value={editMedications}
+                onChangeText={setEditMedications}
+                style={styles.modalInput}
+              />
+            </ScrollView>
 
             <Pressable
               style={styles.modalPrimaryBtn}

@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { COMMON_ALLERGENS, COMMON_MEDICAL_CONDITIONS } from "../../services/mealSafetyService";
+import ChipMultiSelect from "./ChipMultiSelect";
 
 type Props = {
   visible: boolean;
@@ -440,119 +441,22 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 </View>
               </View>
 
-              {/* Medical Conditions — collapsed chip picker. Same pattern
-                  as Food Allergies above. Names matching getUnsafeReason
-                  (e.g. "Hypertension") auto-enforce safety rules. */}
-              {(() => {
-                const selectedConds = asStringArray(form.medicalConditions);
-                const count = selectedConds.length;
-                const preview = count
-                  ? selectedConds.slice(0, 3).join(", ") + (count > 3 ? `, +${count - 3} more` : "")
-                  : "None selected";
-                return (
-                  <>
-                    <Pressable
-                      onPress={() => setMedCondsOpen((v) => !v)}
-                      style={styles.dropdownHeader}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.modalLabel}>Medical Conditions</Text>
-                        <Text style={styles.dropdownPreview} numberOfLines={1}>
-                          {preview}
-                        </Text>
-                      </View>
-                      {count > 0 && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeText}>{count}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.chevron}>{medCondsOpen ? "▲" : "▼"}</Text>
-                    </Pressable>
-                    {medCondsOpen && (
-                      <>
-                        <Text style={styles.chipHint}>Tap all that apply.</Text>
-                        <View style={styles.chipWrap}>
-                          {COMMON_MEDICAL_CONDITIONS.map((cond) => {
-                            const selected = selectedConds.some(
-                              (c) => c.toLowerCase() === cond.toLowerCase()
-                            );
-                            return (
-                              <Pressable
-                                key={cond}
-                                onPress={() => toggleChip("medicalConditions", cond)}
-                                style={[styles.chip, selected && styles.chipSelected]}
-                              >
-                                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                                  {selected ? "✓ " : ""}{cond}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      </>
-                    )}
-                  </>
-                );
-              })()}
+              <ChipMultiSelect
+                label="Medical Conditions"
+                options={COMMON_MEDICAL_CONDITIONS}
+                selected={asStringArray(form.medicalConditions)}
+                onChange={(next) => update("medicalConditions", next)}
+              />
 
-              {/* Food Allergies — collapsed chip picker. Header shows
-                  selection count + preview; tap to expand the full grid. */}
-              {(() => {
-                const selectedAllergies = asStringArray(form.foodAllergies);
-                const count = selectedAllergies.length;
-                const preview = count
-                  ? selectedAllergies.slice(0, 3).join(", ") + (count > 3 ? `, +${count - 3} more` : "")
-                  : "None selected";
-                return (
-                  <>
-                    <Pressable
-                      onPress={() => setAllergiesOpen((v) => !v)}
-                      style={[
-                        styles.dropdownHeader,
-                        errors.includes("foodAllergies") && styles.dropdownHeaderError,
-                      ]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={labelStyle("foodAllergies")}>Food Allergies*</Text>
-                        <Text style={styles.dropdownPreview} numberOfLines={1}>
-                          {preview}
-                        </Text>
-                      </View>
-                      {count > 0 && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeText}>{count}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.chevron}>{allergiesOpen ? "▲" : "▼"}</Text>
-                    </Pressable>
-                    {allergiesOpen && (
-                      <>
-                        <Text style={styles.chipHint}>
-                          Tap all that apply. Leave blank only if none confirmed.
-                        </Text>
-                        <View style={styles.chipWrap}>
-                          {COMMON_ALLERGENS.map((allergen) => {
-                            const selected = selectedAllergies.some(
-                              (a) => a.toLowerCase() === allergen.toLowerCase()
-                            );
-                            return (
-                              <Pressable
-                                key={allergen}
-                                onPress={() => toggleAllergen(allergen)}
-                                style={[styles.chip, selected && styles.chipSelected]}
-                              >
-                                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                                  {selected ? "✓ " : ""}{allergen}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      </>
-                    )}
-                  </>
-                );
-              })()}
+              <ChipMultiSelect
+                label="Food Allergies"
+                required
+                error={errors.includes("foodAllergies")}
+                options={COMMON_ALLERGENS}
+                selected={asStringArray(form.foodAllergies)}
+                onChange={(next) => update("foodAllergies", next)}
+                hint="Tap all that apply. Leave blank only if none confirmed."
+              />
 
               <Text style={styles.modalLabel}>Dietary Restrictions</Text>
               <TextInput

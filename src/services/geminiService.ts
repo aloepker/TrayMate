@@ -17,6 +17,35 @@ import { MealService, ResidentService } from './localDataService';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+// ─── Quota / rate-limit handling ─────────────────────────────────────────
+// Each free-tier model has its own quota. When one returns 429 we mark it
+// "cool" for this many ms and skip it on the next call — both the chat path
+// and the recommendation card. After cooldown the model is tried again.
+const RATE_LIMIT_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+const rateLimitedUntil: Record<string, number> = {};
+
+const isModelCool = (modelName: string): boolean => {
+  const until = rateLimitedUntil[modelName];
+  if (!until) return false;
+  if (Date.now() >= until) {
+    delete rateLimitedUntil[modelName];
+    return false;
+  }
+  return true;
+};
+
+// ─── Recommendation result cache ─────────────────────────────────────────
+// AI picks for a given resident + meal period don't change minute-to-minute.
+// Re-using the cached pick for a few minutes drastically cuts API calls
+// (and 429s) while feeling instant in the UI.
+const REC_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+type CachedRec = { value: AIRecommendationResult; expires: number };
+const recCache: Record<string, CachedRec> = {};
+
+const recCacheKey = (residentName: string, period: string | null | undefined, candidateIds: (string | number)[]) =>
+  // Including candidate IDs invalidates the cache the moment the menu changes.
+  `${residentName}|${period ?? 'any'}|${candidateIds.slice().sort().join(',')}`;
+
 type GeminiMessage = {
   role: 'user' | 'model';
   parts: { text: string }[];
@@ -183,8 +212,19 @@ async function callGeminiModel(
   if (!resp.ok) {
     const status = resp.status;
     const message = data?.error?.message || data?._raw || `HTTP ${status}`;
-    console.error(`[GrannyGBT] ${modelName} error: [${status}] ${message}`);
-    throw new Error(`[${status}] ${message}`);
+    // 429 (free-tier quota exhausted) is expected and recoverable — we
+    // cool the model down for 10 minutes and the caller falls back to
+    // the next model or the rule-based recommender. Don't shout at the
+    // dev console for an expected condition; a quiet warn is enough.
+    if (status === 429) {
+      rateLimitedUntil[modelName] = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+      console.warn(`[GrannyGBT] ${modelName} hit free-tier quota, cooling down ${RATE_LIMIT_COOLDOWN_MS / 60000} min.`);
+    } else {
+      console.error(`[GrannyGBT] ${modelName} error: [${status}] ${message}`);
+    }
+    const err = new Error(`[${status}] ${message}`);
+    (err as any).status = status;
+    throw err;
   }
 
   // Extract text from candidates (standard Gemini response shape)
@@ -252,8 +292,9 @@ export class GeminiChatService {
 
     let lastError: Error | null = null;
 
-    // Try each model in order — retry on any failure
-    for (const modelName of GEMINI_CONFIG.models) {
+    // Try each model in order, skipping any that are still in 429 cooldown.
+    const models = GEMINI_CONFIG.models.filter((m) => !isModelCool(m));
+    for (const modelName of (models.length > 0 ? models : GEMINI_CONFIG.models)) {
       try {
         const responseText = await callGeminiModel(
           modelName,
@@ -308,8 +349,11 @@ export class GeminiChatService {
     if (!this.systemPrompt) return false;
 
     try {
-      // Try each model but do not mutate conversation history
-      for (const modelName of GEMINI_CONFIG.models) {
+      // Try each model but do not mutate conversation history.
+      // Skip models in 429 cooldown — but if every model is cool, fall
+      // through to the original list so we still attempt something.
+      const models = GEMINI_CONFIG.models.filter((m) => !isModelCool(m));
+      for (const modelName of (models.length > 0 ? models : GEMINI_CONFIG.models)) {
         try {
           const res = await callGeminiModel(modelName, this.systemPrompt, [], 'Say "ok"');
           if (res && res.length > 0) {
@@ -488,6 +532,13 @@ export async function getAIRecommendation(
 ): Promise<AIRecommendationResult | null> {
   if (!candidates || candidates.length === 0) return null;
 
+  // Same "None"/empty filter used below — defined early so the single-
+  // candidate shortcut path doesn't emit "None" in the dietary chips.
+  const earlyClean = (arr?: string[]) =>
+    (arr ?? [])
+      .map((s) => String(s).trim())
+      .filter((s) => s.length > 0 && !/^(none|n\/?a|null)$/i.test(s));
+
   // If only one candidate, skip the API call — nothing to pick from.
   if (candidates.length === 1) {
     const only = candidates[0];
@@ -495,8 +546,8 @@ export async function getAIRecommendation(
       meal_name: only.name,
       reason: `Only safe option in the current ${targetPeriod || 'menu'} — we recommend the`,
       dietary_restrictions: [
-        ...(resident.foodAllergies ?? []),
-        ...(resident.dietaryRestrictions ?? []),
+        ...earlyClean(resident.foodAllergies),
+        ...earlyClean(resident.dietaryRestrictions),
       ],
     };
   }
@@ -520,19 +571,26 @@ export async function getAIRecommendation(
     })
     .join('\n\n');
 
+  const allergies        = earlyClean(resident.foodAllergies);
+  const restrictions     = earlyClean(resident.dietaryRestrictions);
+  const medicalConditions = earlyClean(resident.medicalConditions);
+  const hasAnyRestriction = allergies.length + restrictions.length + medicalConditions.length > 0;
+
   const allergyLines: string[] = [];
-  if (resident.foodAllergies && resident.foodAllergies.length > 0) {
-    allergyLines.push(`Food allergies: ${resident.foodAllergies.join(', ')}`);
-  }
-  if (resident.dietaryRestrictions && resident.dietaryRestrictions.length > 0) {
-    allergyLines.push(`Dietary restrictions: ${resident.dietaryRestrictions.join(', ')}`);
-  }
-  if (resident.medicalConditions && resident.medicalConditions.length > 0) {
-    allergyLines.push(`Medical conditions: ${resident.medicalConditions.join(', ')}`);
-  }
-  const profileBlock = allergyLines.length > 0
+  if (allergies.length > 0)         allergyLines.push(`Food allergies: ${allergies.join(', ')}`);
+  if (restrictions.length > 0)      allergyLines.push(`Dietary restrictions: ${restrictions.join(', ')}`);
+  if (medicalConditions.length > 0) allergyLines.push(`Medical conditions: ${medicalConditions.join(', ')}`);
+
+  const profileBlock = hasAnyRestriction
     ? allergyLines.join('\n')
     : 'No allergies or restrictions on file.';
+
+  // Anti-hallucination phrasing rule depends on whether the resident has
+  // any restrictions at all. If none, the model must NOT say "free of …",
+  // "no …", "without …" — there's nothing to be free of.
+  const phrasingRule = hasAnyRestriction
+    ? `- If you mention "free of X" or "no X", X MUST be one of the resident's actual restrictions listed above. Never use "None" / "N/A" as a value.`
+    : `- The resident has NO allergies or restrictions on file. Do NOT use phrases like "free of …", "no …", or "without …" in your reason — there is nothing to be free of. Focus only on flavor, comfort, and balance.`;
 
   const systemPrompt = `You are GrannyGBT, a meal-planning assistant for a senior living facility.
 You pick exactly ONE meal from a short candidate list that has ALREADY been safety-filtered for the resident.
@@ -542,7 +600,8 @@ RULES:
 - Pick exactly one meal from the candidate list. Never invent meals.
 - The "meal_name" you return MUST match one of the candidate names verbatim.
 - Keep "reason" to one short warm sentence (max 20 words) explaining why it's a good pick.
-- Consider balance (not too high sodium, decent protein), flavor appeal, and the resident's profile.
+- Reference ONLY facts present in the candidate's listed ingredients, allergens, tags, and nutrition. Never invent properties.
+${phrasingRule}
 - Do NOT mention the candidates you did NOT pick.
 - Return ONLY valid JSON — no markdown, no commentary, no code fences.
 
@@ -554,15 +613,32 @@ Meal period: ${targetPeriod || 'current'}
 Profile:
 ${profileBlock}
 
-Candidate meals (all already safe for this resident):
+Candidate meals (all already safety-filtered as safe for this resident):
 ${candidateBlock}
 
 Pick the best single meal and return the required JSON only.`;
 
+  // ── Cache lookup ────────────────────────────────────────────────────
+  const cacheKey = recCacheKey(resident.name, targetPeriod, candidates.map((c) => c.id));
+  const cached = recCache[cacheKey];
+  if (cached && cached.expires > Date.now()) {
+    return cached.value;
+  }
+
   // Build a valid candidate-name set for hallucination guard (case-insensitive)
   const candidateNames = new Set(candidates.map((c) => c.name.toLowerCase()));
 
-  for (const modelName of GEMINI_CONFIG.models) {
+  // Skip any model currently in 429 cooldown so we don't burn fetches
+  // on a model we know will reject us.
+  const modelsToTry = GEMINI_CONFIG.models.filter((m) => !isModelCool(m));
+  if (modelsToTry.length === 0) {
+    // Every model is cooling down — skip the loop entirely and let the
+    // caller fall back to the rule-based recommender.
+    console.warn('[GrannyGBT] All Gemini models in cooldown, skipping AI pick.');
+    return null;
+  }
+
+  for (const modelName of modelsToTry) {
     try {
       const raw = await callGeminiModel(modelName, systemPrompt, [], userMessage);
       // Strip markdown fences if the model slipped any in
@@ -584,18 +660,44 @@ Pick the best single meal and return the required JSON only.`;
         continue;
       }
 
-      return {
+      // Final scrub: strip any "free of None" / "without None" / "no None"
+      // phrases the model slipped through despite the prompt rule. Cheap
+      // safety net so a hallucinated "None" never reaches the UI.
+      const scrubReason = (s: string): string => {
+        let out = s;
+        // "free of None", "free of N/A", "free of nothing"
+        out = out.replace(/\b(?:free of|without|no|free from|absent of)\s+(?:none|n\/?a|nothing|null)[,.\s]?/gi, '');
+        // ", and" / ", but" cleanup if scrubbing left a dangling comma
+        out = out.replace(/,\s*(?:and|but|with|plus)\s*,/gi, ',');
+        out = out.replace(/^\s*[,.;:!?]+\s*/, '');
+        out = out.replace(/\s{2,}/g, ' ').trim();
+        return out;
+      };
+
+      const cleanedReason = scrubReason(reason);
+
+      const result: AIRecommendationResult = {
         meal_name: pickedName,
-        reason: reason.trim().length > 0
-          ? `${reason.trim().replace(/[.!]$/, '')} — we recommend the`
+        reason: cleanedReason.length > 0
+          ? `${cleanedReason.replace(/[.!]$/, '')} — we recommend the`
           : `A great fit for your profile — we recommend the`,
         dietary_restrictions: [
-          ...(resident.foodAllergies ?? []),
-          ...(resident.dietaryRestrictions ?? []),
+          ...allergies,
+          ...restrictions,
         ],
       };
+
+      // Cache so navigating around / re-rendering the card doesn't
+      // re-hit the Gemini API for the same candidates and burn quota.
+      recCache[cacheKey] = { value: result, expires: Date.now() + REC_CACHE_TTL_MS };
+      return result;
     } catch (err: any) {
-      console.warn(`[GrannyGBT] getAIRecommendation ${modelName} failed: ${err.message}`);
+      // 429s already logged at the fetch layer with a softer "warn".
+      // Suppress the duplicate noise here and just continue to the
+      // next model.
+      if (err?.status !== 429) {
+        console.warn(`[GrannyGBT] getAIRecommendation ${modelName} failed: ${err.message}`);
+      }
       continue;
     }
   }

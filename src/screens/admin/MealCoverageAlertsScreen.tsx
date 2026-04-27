@@ -31,6 +31,8 @@ import {
   Alert,
   Pressable,
   RefreshControl,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import {
@@ -89,7 +91,19 @@ export default function MealCoverageAlertsScreen({ navigation }: any) {
       setItems(list);
     } catch (err: any) {
       console.warn('Failed to load coverage alerts', err);
-      setError(err?.message ?? 'Unable to load alerts.');
+      // 404 is the empty state — either no alerts exist yet, or the
+      // deployed backend predates the /coverage-alerts route. Either
+      // way show the empty card, not a "Not Found" / Retry banner.
+      if (err?.status === 404) {
+        setItems([]);
+      } else if (err?.status === 403) {
+        setError("You don't have permission to view coverage alerts.");
+      } else {
+        const msg = err?.message === 'Network request failed'
+          ? 'Server unreachable. It may be waking up — tap Retry in a moment.'
+          : err?.message ?? 'Unable to load alerts.';
+        setError(msg);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -143,13 +157,18 @@ export default function MealCoverageAlertsScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={10}>
-          <Feather name="chevron-left" size={22} color={COLORS.primary} />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-        <Text style={styles.title}>Meal Coverage Alerts</Text>
-        <View style={{ width: 64 }} />
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={10}>
+            <Feather name="chevron-left" size={22} color={COLORS.primary} />
+            <Text style={styles.backText}>Back</Text>
+          </Pressable>
+          <View style={styles.headerCenter}>
+            <Text style={styles.title} numberOfLines={1}>Meal Coverage Alerts</Text>
+          </View>
+          <View style={{ width: 72 }} />
+        </View>
       </View>
 
       {loading ? (
@@ -309,13 +328,21 @@ export default function MealCoverageAlertsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    paddingHorizontal: 16,
+    // Clear the Android status bar; iOS gets the inset via SafeAreaView.
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 16,
+    paddingBottom: 14,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center' },
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, width: 72 },
   backText: { color: COLORS.primary, fontWeight: '600', fontSize: 15 },
-  title: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  title: { fontSize: 20, fontWeight: '800', color: COLORS.text, letterSpacing: -0.2 },
   centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyBox: { alignItems: 'center', justifyContent: 'center', padding: 24, marginTop: 24 },
   emptyHeader: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginTop: 12 },

@@ -164,6 +164,36 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         });
       });
 
+      // FALLBACK: probe each known staff user with /messages/conversation
+      // to discover real conversation history when withHistory ends up
+      // empty. Triggers even when chatList is non-empty — the old broken
+      // backend's getChats sometimes returned only self-messages, which
+      // get filtered out of withHistory entirely. Without this trigger,
+      // caregivers + kitchen staff (who tend to receive self-messages
+      // from auto-order notifications) would still see "No chats yet".
+      if (withHistory.length === 0 && staff.length > 0 && myId) {
+        const probe = await Promise.allSettled(
+          staff.slice(0, 30).map(async (u) => {
+            const msgs = await getConversation(u.id);
+            return { user: u, msgs: Array.isArray(msgs) ? msgs : [] };
+          })
+        );
+        for (const r of probe) {
+          if (r.status !== "fulfilled" || r.value.msgs.length === 0) continue;
+          const { user, msgs } = r.value;
+          const last = msgs[msgs.length - 1];
+          previewMap[user.id] = {
+            preview: last.content || "",
+            createdAt: last.createdAt,
+            isUnread: String(last.senderId) !== myId && !last.isRead,
+          };
+          if (!seenIds.has(user.id)) {
+            seenIds.add(user.id);
+            withHistory.push(user);
+          }
+        }
+      }
+
       setHistoryUsers(withHistory);
       setConversationPreviews(previewMap);
 

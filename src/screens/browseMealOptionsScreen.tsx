@@ -60,7 +60,7 @@ import { getUnsafeReason, filterSafeMeals, SafetyResident } from "../services/me
 import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
-import { sendMessage as sendApiMessage } from '../services/api';
+import { sendMessage as sendApiMessage, createOverrideApi } from '../services/api';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1416,6 +1416,50 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     return getUnsafeReason(meal as any, residentSafetyProfile);
   };
 
+  /**
+   * Open a medical override request directly from the menu when the resident
+   * (or their caregiver) believes a flagged meal should be allowed. Posts to
+   * /overrides which surfaces in admin's Pending Overrides queue and on the
+   * resident's "My Overrides" screen.
+   */
+  const requestOverrideForMeal = async (meal: Meal, reason: string) => {
+    try {
+      const ridNum = Number(residentId);
+      const mealIdNum = Number(meal.id);
+      if (isNaN(ridNum) || isNaN(mealIdNum)) {
+        Alert.alert('Unable to request override', 'Resident or meal could not be identified.');
+        return;
+      }
+      await createOverrideApi({
+        residentId: ridNum,
+        mealIds:    [mealIdNum],
+        mealOfDay:  meal.meal_period,
+        targetDate: new Date().toISOString().slice(0, 10),
+        reason:     `Requested from menu — ${meal.name}: ${reason}`,
+      });
+      Alert.alert(
+        'Override requested',
+        `Your request for ${meal.name} has been sent to an administrator. You'll be able to order this meal once it's approved.`,
+        [{ text: 'OK' }],
+      );
+    } catch (err: any) {
+      console.warn('Failed to create override request from menu', err);
+      if (err?.status === 403) {
+        Alert.alert(
+          'Not authorized',
+          "You can only request overrides for residents you're assigned to. Ask an administrator for help.",
+        );
+      } else if (err?.status === 409) {
+        Alert.alert(
+          'Already requested',
+          "There's already a pending override for this meal. An administrator will review it shortly.",
+        );
+      } else {
+        Alert.alert('Could not request override', err?.message ?? 'Please try again.');
+      }
+    }
+  };
+
   // Add meal (and optional drink/side) to cart from detail modal.
   // STRICT: if the resident's profile bans this meal, we refuse to add.
   // There is no "Order Anyway" escape hatch — the kitchen substitute
@@ -1464,7 +1508,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Render individual meal item for FlatList
   const renderMeal = ({ item }: { item: Meal }) => {
     const ph = getMealPlaceholder(item.name);
-    const mealImg = !!item.imageUrl;
+    // Backend imageUrl is the single source of truth. If empty, show the
+    // grandma placeholder — no bundled-asset fallback per product call.
+    const remoteUri = item.imageUrl && item.imageUrl.trim().length > 0
+      ? item.imageUrl.trim()
+      : null;
+    const mealImg = !!remoteUri;
     // A meal is orderable if the kitchen hasn't disabled it AND we're either
     // within the time window OR within a breakfast pre-order window.
     const kitchenEnabled = item.isAvailable !== false;
@@ -1489,10 +1538,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         onPress={() => {
           if (!available) return;
           if (isUnsafe) {
+            // Offer the medical-override path right from the menu so
+            // residents/caregivers don't have to discover it via the cart.
+            // Approved overrides surface in admin's Pending Overrides queue
+            // and the resident's "My Overrides" list (poll every 15s).
             Alert.alert(
               'Not safe for this resident',
-              `${item.name} is blocked: ${unsafeReason}.\n\nPlease choose a safe alternative.`,
-              [{ text: 'OK' }],
+              `${item.name} is blocked: ${unsafeReason}.\n\nIf you believe this meal should be allowed, you can request a medical override. An administrator will review it.`,
+              [
+                { text: 'Choose another meal', style: 'cancel' },
+                {
+                  text: 'Request override',
+                  onPress: () => requestOverrideForMeal(item, unsafeReason ?? 'Unknown'),
+                },
+              ],
             );
             return;
           }
@@ -1538,7 +1597,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
           )} */}
           {mealImg ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.mealRealImage} resizeMode="cover" />
+            <Image source={{ uri: remoteUri! }} style={styles.mealRealImage} resizeMode="cover" />
           ) : (
             <Image source={require('../styles/pictures/grandma.png')} style={{ width: 60, height: 60, opacity: 0.3 }} resizeMode="contain" />
           )}
@@ -1977,8 +2036,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               >
             {selectedMeal && (() => {
               const ph = getMealPlaceholder(selectedMeal.name);
-              //const mealImg = getMealImage(selectedMeal.name);
-              const mealImg = !!selectedMeal.imageUrl;
+              // Backend imageUrl only — empty => grandma placeholder.
+              const detailRemoteUri = selectedMeal.imageUrl && selectedMeal.imageUrl.trim().length > 0
+                ? selectedMeal.imageUrl.trim()
+                : null;
+              const mealImg = !!detailRemoteUri;
               // Is this being customised during the breakfast pre-order window?
               // Drives the big "for tomorrow" banner + the kitchen note prefix.
               const detailIsPreorder = getAvailabilityStatus(
@@ -1996,7 +2058,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                       <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
                     )} */}
                     {mealImg ? (
-                      <Image source={{ uri: selectedMeal.imageUrl }} style={styles.detailRealImage} resizeMode="cover" />
+                      <Image source={{ uri: detailRemoteUri! }} style={styles.detailRealImage} resizeMode="cover" />
                     ) : (
                       <Image source={require('../styles/pictures/grandma.png')} style={{ width: 80, height: 80, opacity: 0.3 }} resizeMode="contain" />
                     )}
