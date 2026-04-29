@@ -30,6 +30,16 @@ import { getCaregiverResidentList } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
+const formatName = (name: string) => {
+  return String(name ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
 // Demo residents shown when backend is unreachable (Render down / offline).
 // Same spirit as MOCK_USERS in loginScreen: keep the app usable.
 const DEMO_RESIDENTS: Resident[] = [
@@ -184,6 +194,9 @@ export default function CaregiverDashboardScreen({
   // Residents assigned to the logged-in caregiver
   const [residents, setResidents] = useState<Resident[]>([]);
 
+  // Logged-in caregiver full name for the page heading
+  const [caregiverName, setCaregiverName] = useState("");
+
   // Notifications related to the caregiver's assigned residents
   const [notifications, setNotifications] = useState<KitchenNotification[]>([]);
 
@@ -246,6 +259,7 @@ export default function CaregiverDashboardScreen({
       try {
         const me = await callWithRetry(() => getMe());
         myId = String(me.id);
+        setCaregiverName(formatName(String(me.fullName ?? "")));
       } catch (e) {
         console.warn("[CaregiverDashboard] getMe failed:", e);
       }
@@ -327,6 +341,14 @@ export default function CaregiverDashboardScreen({
       activeAlerts: notifications.filter((n) => !n.read).length + kitchenUnread,
     };
   }, [residents, notifications, kitchenUnread]);
+
+  const caregiverHeading = useMemo(() => {
+    const name = caregiverName.trim();
+    if (!name) return "My Assigned Residents";
+
+    const possessive = name.toLowerCase().endsWith("s") ? `${name}'` : `${name}'s`;
+    return `${possessive} Assigned Residents`;
+  }, [caregiverName]);
 
   // -----------------------------
   // Group notifications by residentId
@@ -490,7 +512,7 @@ export default function CaregiverDashboardScreen({
           )}
 
           {/* Page intro */}
-          <Text style={styles.h1}>My Assigned Residents</Text>
+          <Text style={styles.h1}>{caregiverHeading}</Text>
           <Text style={styles.subtitle}>
             Review resident details, check food-related needs, and open meal
             ordering for assigned residents.
@@ -566,7 +588,7 @@ export default function CaregiverDashboardScreen({
                       <View style={styles.residentContent}>
                         <View style={styles.residentNameRow}>
                           <Feather name="user" size={16} color="#1A1A1A" />
-                          <Text style={styles.residentName}>{resident.name}</Text>
+                          <Text style={styles.residentName}>{formatName(resident.name)}</Text>
                         </View>
 
                         {/* Dietary restrictions preview */}
@@ -620,7 +642,7 @@ export default function CaregiverDashboardScreen({
             <View style={styles.modalHeaderRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>
-                  {selectedResident?.name ?? "Resident"}
+                  {selectedResident?.name ? formatName(selectedResident.name) : "Resident"}
                 </Text>
                 <Text style={styles.modalSubTitle}>
                   Room {selectedResident?.room ?? "--"}
