@@ -1,9 +1,19 @@
 import React from 'react';
 import 'react-native-gesture-handler';
+import { LogBox } from 'react-native';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+
+// Hide third-party deprecation noise we can't fix from our side.
+// @react-navigation/stack's Card.js still uses InteractionManager
+// internally; the warning comes through every screen transition and
+// drowns the dev console with a stack we can't act on. Suppress
+// only the exact prefix so genuine errors from our code still surface.
+LogBox.ignoreLogs([
+  'InteractionManager has been deprecated',
+]);
 
 // 1. Import your new Clock Provider
 import { ClockProvider } from './src/context/ClockContext';

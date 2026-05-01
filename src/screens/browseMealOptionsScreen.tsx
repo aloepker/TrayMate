@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from "react";
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -56,11 +57,11 @@ import {
 } from "../services/geminiService";
 
 import { geminiChat, getAIRecommendation } from "../services/geminiService";
-import { getUnsafeReason, filterSafeMeals, SafetyResident } from "../services/mealSafetyService";
+import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
-import { sendMessage as sendApiMessage, createOverrideApi } from '../services/api';
+import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi } from '../services/api';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -272,6 +273,21 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "seasonal", value: null },
 ];
 
+/**
+ * Pick the tab the user should land on based on the device clock:
+ *   - inside Breakfast / Lunch / Dinner window → that tab is open
+ *   - between meals or after Dinner closes → "All Day" so the resident
+ *     still sees something to order (and after 7 PM the All Day list
+ *     includes tomorrow's Breakfast as a pre-order — see loadMenu).
+ */
+function getInitialPeriodFromClock(): PeriodOption {
+  const current = getCurrentMealPeriod(new Date());
+  if (current === 'Breakfast') return PERIOD_KEYS[1];
+  if (current === 'Lunch')     return PERIOD_KEYS[2];
+  if (current === 'Dinner')    return PERIOD_KEYS[3];
+  return PERIOD_KEYS[0]; // All Day
+}
+
 // ---------- AI Chat Component ----------
 const AIAssistantChat = ({
   visible,
@@ -279,12 +295,16 @@ const AIAssistantChat = ({
   residentName,
   residentId,
   dietaryRestrictions = [],
+  foodAllergies = [],
+  medicalConditions = [],
 }: {
   visible: boolean;
   onClose: () => void;
   residentName: string;
   residentId: string;
   dietaryRestrictions?: string[];
+  foodAllergies?: string[];
+  medicalConditions?: string[];
 }) => {
   const { t, scaled, language } = useSettings();
     const [aiAvailable, setAiAvailable] = useState<boolean>(false);
@@ -363,12 +383,23 @@ const AIAssistantChat = ({
   useEffect(() => {
     if (visible && geminiChat.isConfigured()) {
       const resident = ResidentService.getResidentById(residentId);
-      const override = !resident ? { name: residentName, dietaryRestrictions } : undefined;
-      geminiChat.initialize(residentId, language, override)
-        .then(() => setAiAvailable(true))
-        .catch(() => setAiAvailable(false));
+      // Pull the resident's usual-order list from the server so GrannyGBT
+      // can personalise recommendations. Fail silent — the rest of the
+      // prompt still works without it.
+      (async () => {
+        let favoriteMealIds: number[] = [];
+        try {
+          favoriteMealIds = await getDefaultMealsApi(residentId);
+        } catch { /* no-op */ }
+        const override = !resident
+          ? { name: residentName, dietaryRestrictions, foodAllergies, medicalConditions, favoriteMealIds }
+          : undefined;
+        geminiChat.initialize(residentId, language, override, favoriteMealIds)
+          .then(() => setAiAvailable(true))
+          .catch(() => setAiAvailable(false));
+      })();
     }
-  }, [visible, residentId, language, residentName, dietaryRestrictions]);
+  }, [visible, residentId, language, residentName, dietaryRestrictions, foodAllergies, medicalConditions]);
 
   // Minimal fallback when ALL Gemini models are down
   const generateFallbackResponse = async (userMessage: string): Promise<string> => {
@@ -806,7 +837,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { currentTime } = useClock();
   const { addToCart, clearCart, getCartCount, orders, getOrdersForResident, fetchOrderHistory, placeOrder } = useCart();
 
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(PERIOD_KEYS[0]);
+  // Default tab follows the tablet clock: during a serving window the
+  // resident lands directly on Breakfast / Lunch / Dinner; between meals
+  // or after the kitchen closes they land on "All Day" (which includes
+  // tomorrow-breakfast pre-order after 7 PM — see loadMenu below).
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(getInitialPeriodFromClock);
+  // True when the user has tapped a tab themselves; suppresses clock-driven auto-advance.
+  const userPickedRef = useRef(false);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
@@ -828,6 +865,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
   const [autoPlaced, setAutoPlaced] = useState(false);            // whether we already auto-placed for this period
   const autoPlaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Re-pick the correct tab every time the screen comes into focus (handles
+  // the case where the screen stayed mounted in the background while time passed).
+  useFocusEffect(
+    useCallback(() => {
+      userPickedRef.current = false;
+      setSelectedPeriod(getInitialPeriodFromClock());
+    }, []),
+  );
+
+  // Auto-advance the tab when a new meal period starts while the screen is open,
+  // but only if the user hasn't manually chosen a different tab this visit.
+  useEffect(() => {
+    if (userPickedRef.current) return;
+    setSelectedPeriod(getInitialPeriodFromClock());
+  }, [currentTime.getHours()]);
 
   // derived (not hooks)
   const pt = PERIOD_THEMES[selectedPeriod.key] ?? PERIOD_THEMES.allDay;
@@ -926,45 +979,34 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         ? await MealService.getSeasonalMeals()
         : await MealService.getMealsByPeriod(period);
 
+      // After-kitchen-close behaviour: when the resident lands on the
+      // "All Day" tab past 7 PM (Breakfast pre-order window), pull in
+      // Breakfast meals too so they can pre-order tomorrow's tray
+      // without flipping tabs. Each meal's own time-range still drives
+      // the "Pre-order tomorrow" pill; we just expand the candidate set.
+      if (periodKey === 'allDay' && isBreakfastPreorderTime(currentTime)) {
+        try {
+          const breakfastMeals = await MealService.getMealsByPeriod('Breakfast');
+          // De-dupe by id (in case the backend already tags some breakfast
+          // meals with mealperiod="All Day").
+          const seenIds = new Set(serviceMeals.map((m) => m.id));
+          for (const bm of breakfastMeals) {
+            if (!seenIds.has(bm.id)) serviceMeals.push(bm);
+          }
+        } catch (e) {
+          console.warn('Failed to merge breakfast pre-order into All Day:', e);
+        }
+      }
+
       // Filter out meals that are unsafe for this resident — SAME safety source
       // of truth that drives the cart gate and GrannyGBT recommendation.
       // Works for both local and backend residents by building a SafetyResident.
       const resId = residentId || ResidentService.getDefaultResident().id;
       const resident = ResidentService.getResidentById(resId);
 
-      const cleanList = (arr: string[] | undefined) =>
-        (arr ?? []).map((s) => String(s).trim()).filter(Boolean);
-
-      const safetyResidentForMenu: SafetyResident = resident
-        ? {
-            foodAllergies: resident.dietaryRestrictions
-              .filter((r) => r.type === 'allergy')
-              .map((r) => r.name),
-            dietaryRestrictions: resident.dietaryRestrictions
-              .filter((r) => r.type !== 'allergy')
-              .map((r) => r.name),
-            medicalConditions: [],
-          }
-        : {
-            foodAllergies:        cleanList(route?.params?.foodAllergies as any),
-            dietaryRestrictions:  cleanList(route?.params?.dietaryRestrictions as any),
-            medicalConditions:    cleanList(route?.params?.medicalConditions as any),
-          };
-
-      const safetyInputs = serviceMeals.map((m) => ({
-        id: m.id,
-        name: m.name,
-        description: m.description,
-        tags: m.tags,
-        allergenInfo: m.allergenInfo,
-        ingredients: m.ingredients,
-        sodium: m.nutrition?.sodium,
-        meal_period: m.mealPeriod,
-      }));
-      const safeIdsForMenu = new Set(
-        filterSafeMeals(safetyInputs, safetyResidentForMenu).map((m) => String(m.id)),
-      );
-      serviceMeals = serviceMeals.filter((m) => safeIdsForMenu.has(String(m.id)));
+      // NOTE: We intentionally do NOT filter out restricted meals here.
+      // All meals are shown; unsafe ones are flagged per-card with a
+      // "Restricted" badge so residents/caregivers can request overrides.
 
       // mapServiceMeal imported from mealDisplayService.ts
       const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
@@ -1073,8 +1115,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         };
       }
 
-      // ── Step 3: safety-filter the menu through the SINGLE source of truth ──
-      // Map each ServiceMeal into the SafetyMeal shape the filter expects.
+      // Browse list shows ALL meals (with red restriction badges), but the AI
+      // recommendation picks from SAFE meals only — never suggest something
+      // unsafe even though it's visible in the list.
       const safetyInputs = periodMeals.map((m) => ({
         id: m.id,
         name: m.name,
@@ -1086,14 +1129,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         meal_period: m.mealPeriod,
       }));
       const safeIds = new Set(
-        filterSafeMeals(safetyInputs, safetyResident).map((m) => String(m.id)),
+        safetyInputs
+          .filter((sm) => isMealSafe(sm, safetyResident))
+          .map((sm) => String(sm.id)),
       );
       const safeMeals = periodMeals.filter((m) => safeIds.has(String(m.id)));
 
-      // No safe options at all — give the UI a clear "nothing matches" card
-      // but still recommend something visible so the resident isn't left
-      // staring at a dead panel. Pick the first meal of the period with a
-      // caution note instead of an empty state.
+      // No options at all — give the UI a clear "nothing available" state.
       if (safeMeals.length === 0) {
         if (periodMeals.length > 0) {
           const first = periodMeals[0];
@@ -1307,7 +1349,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     if (!suggestDessert) suggestDessert = safeSides[0];
 
     setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, isNow: next.isNow, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
-  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime.getHours(), currentTime.getMinutes()]);
 
   // Auto-place the suggested meal when the meal period starts and resident hasn't ordered.
   // When isNow is true (we're inside the period) and 15 min have passed without a manual order,
@@ -1333,18 +1376,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     if (minsSinceStart >= AUTO_PLACE_DELAY) {
       // Auto-place now
+      // Capture snapshot of autoSuggest now — state will be nulled before Alert fires
+      const snapshot = autoSuggest;
       const doAutoPlace = async () => {
         try {
           // Add items to cart then place order
-          const itemsToOrder = [autoSuggest.meal, autoSuggest.drink, autoSuggest.dessert].filter(Boolean) as Meal[];
+          const itemsToOrder = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
           clearCart();
           for (const item of itemsToOrder) {
             addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
           }
           // Small delay to let state update
           await new Promise<void>(r => setTimeout(r, 100));
-          const result = await placeOrder(residentId, autoSuggest.period);
+          const result = await placeOrder(residentId, snapshot.period);
           if (result.order) {
+            // Clear suggest state BEFORE showing alert so tapping OK has clean state
             setAutoPlaced(true);
             setAutoSuggestDismissed(true);
             setAutoSuggest(null);
@@ -1353,7 +1399,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             const rName = residentName || 'A resident';
             const rRoom = route?.params?.roomNumber || '';
             const itemNames = itemsToOrder.map(i => i.name).join(', ');
-            const msgBody = `Auto-order placed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${autoSuggest.period}: ${itemNames}. Please review and accept or cancel if needed.`;
+            const msgBody = `Auto-order placed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${snapshot.period}: ${itemNames}. Please review and accept or cancel if needed.`;
 
             for (const cg of assignedCaregivers) {
               try {
@@ -1363,8 +1409,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
             Alert.alert(
               'Order Auto-Placed',
-              `Your ${autoSuggest.period} has been placed automatically based on your favorites: ${itemNames}.\n\nYour caregiver has been notified.`,
-              [{ text: 'OK' }]
+              `Your ${snapshot.period} has been placed automatically based on your favorites: ${itemNames}.\n\nYour caregiver has been notified.`,
+              [{ text: 'OK', onPress: () => {} }]
             );
           }
         } catch (e) {
@@ -1373,7 +1419,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       };
       doAutoPlace();
     }
-  }, [autoSuggest, autoPlaced, residentId, currentTime]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSuggest, autoPlaced, residentId, currentTime.getHours(), currentTime.getMinutes()]);
 
   // Reset auto-placed flag when the meal period changes
   useEffect(() => {
@@ -1381,7 +1428,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     if (next && !next.isNow) {
       setAutoPlaced(false);
     }
-  }, [currentTime]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime.getHours(), currentTime.getMinutes()]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -1477,10 +1525,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       (sideReason  && { label: selectedSide!.name,  reason: sideReason });
 
     if (firstUnsafe) {
+      // Restricted — offer override request instead of hard-blocking
       Alert.alert(
-        'Not safe for this resident',
-        `${firstUnsafe.label} is blocked: ${firstUnsafe.reason}.\n\nPlease choose a safe alternative.`,
-        [{ text: 'OK', style: 'default' }],
+        'Restricted meal',
+        `${firstUnsafe.label} is flagged: ${firstUnsafe.reason}.\n\nYou can request a medical override and an administrator will review it. Once approved, the order will go through.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Request Override',
+            onPress: () => {
+              setShowMealDetail(false);
+              requestOverrideForMeal(selectedMeal!, firstUnsafe.reason);
+            },
+          },
+        ],
       );
       return;
     }
@@ -1513,7 +1571,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const remoteUri = item.imageUrl && item.imageUrl.trim().length > 0
       ? item.imageUrl.trim()
       : null;
-    const mealImg = !!remoteUri;
+    // Fall back to a bundled image (keyed by name) when the backend hasn't
+    // shipped a URL — covers the offline / fallback-data path where every
+    // meal has imageUrl="".
+    const localImg = remoteUri ? null : getMealImage(item.name);
     // A meal is orderable if the kitchen hasn't disabled it AND we're either
     // within the time window OR within a breakfast pre-order window.
     const kitchenEnabled = item.isAvailable !== false;
@@ -1525,7 +1586,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // profile bans this meal (allergies / dietary / medical rules).
     const unsafeReason = getMealUnsafeReason(item);
     const isUnsafe = unsafeReason !== null;
-    const canTap = available && !isUnsafe;
+    // Restricted meals are still tappable — tap opens the override request flow
+    const canTap = available;
     return (
       <TouchableOpacity
         style={[
@@ -1583,21 +1645,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         )}
         {isUnsafe && available && (
-          <View style={styles.unsafeOverlay}>
-            <Feather name="alert-triangle" size={14} color="#FFFFFF" />
-            <Text style={[styles.unsafeOverlayText, { fontSize: scaled(13) }]} numberOfLines={2}>
-              Not safe · {unsafeReason}
+          <View style={styles.unsafeChip}>
+            <Feather name="alert-triangle" size={11} color="#FFFFFF" />
+            <Text style={[styles.unsafeChipText, { fontSize: scaled(11) }]} numberOfLines={1}>
+              Restricted
             </Text>
           </View>
         )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
-          {/* {mealImg ? (
-            <Image source={mealImg} style={styles.mealRealImage} resizeMode="contain" />
-          ) : (
-            <Text style={styles.mealImageEmoji}>{ph.emoji}</Text>
-          )} */}
-          {mealImg ? (
-            <Image source={{ uri: remoteUri! }} style={styles.mealRealImage} resizeMode="cover" />
+          {remoteUri ? (
+            <Image source={{ uri: remoteUri }} style={styles.mealRealImage} resizeMode="cover" />
+          ) : localImg ? (
+            <Image source={localImg} style={styles.mealRealImage} resizeMode="cover" />
           ) : (
             <Image source={require('../styles/pictures/grandma.png')} style={{ width: 60, height: 60, opacity: 0.3 }} resizeMode="contain" />
           )}
@@ -1630,8 +1689,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </Text>
             {isUnsafe && (
               <View style={styles.restrictionBadge}>
-                <Feather name="alert-triangle" size={13} color="#DC2626" />
-                <Text style={[styles.restrictionBadgeText, { fontSize: scaled(12) }]}>Not safe</Text>
+                <Feather name="alert-triangle" size={11} color="#DC2626" />
+                <Text style={[styles.restrictionBadgeText, { fontSize: scaled(11) }]}>Restricted</Text>
               </View>
             )}
           </View>
@@ -1755,7 +1814,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 { backgroundColor: isActive ? pt.tabActiveBg : pt.tabInactiveBg },
                 isActive && { borderColor: pt.tabActiveBg },
               ]}
-              onPress={() => setSelectedPeriod(period)}
+              onPress={() => { userPickedRef.current = true; setSelectedPeriod(period); }}
             >
               <Text style={[
                 styles.tabText,
@@ -2040,7 +2099,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               const detailRemoteUri = selectedMeal.imageUrl && selectedMeal.imageUrl.trim().length > 0
                 ? selectedMeal.imageUrl.trim()
                 : null;
-              const mealImg = !!detailRemoteUri;
+              const detailLocalImg = detailRemoteUri ? null : getMealImage(selectedMeal.name);
               // Is this being customised during the breakfast pre-order window?
               // Drives the big "for tomorrow" banner + the kitchen note prefix.
               const detailIsPreorder = getAvailabilityStatus(
@@ -2052,13 +2111,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 <>
                   {/* Image */}
                   <View style={[styles.detailImageWrap, { backgroundColor: ph.bg }]}>
-                    {/* {mealImg ? (
-                      <Image source={mealImg} style={styles.detailRealImage} resizeMode="contain" />
-                    ) : (
-                      <Text style={styles.detailImageEmoji}>{ph.emoji}</Text>
-                    )} */}
-                    {mealImg ? (
-                      <Image source={{ uri: detailRemoteUri! }} style={styles.detailRealImage} resizeMode="cover" />
+                    {detailRemoteUri ? (
+                      <Image source={{ uri: detailRemoteUri }} style={styles.detailRealImage} resizeMode="cover" />
+                    ) : detailLocalImg ? (
+                      <Image source={detailLocalImg} style={styles.detailRealImage} resizeMode="cover" />
                     ) : (
                       <Image source={require('../styles/pictures/grandma.png')} style={{ width: 80, height: 80, opacity: 0.3 }} resizeMode="contain" />
                     )}
@@ -2211,13 +2267,40 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             })()}
               </ScrollView>
               <View style={styles.detailFooter}>
-                <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
-                  <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
-                    {selectedDrink || selectedSide
-                      ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
-                      : 'Add to Cart'}
-                  </Text>
-                </TouchableOpacity>
+                {(() => {
+                  const detailUnsafeReason = getMealUnsafeReason(selectedMeal);
+                  if (detailUnsafeReason) {
+                    return (
+                      <>
+                        <View style={styles.detailRestrictionBanner}>
+                          <Feather name="alert-triangle" size={15} color="#DC2626" />
+                          <Text style={[styles.detailRestrictionText, { fontSize: scaled(13) }]}>
+                            Restricted: {detailUnsafeReason}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.detailOverrideBtn}
+                          onPress={handleAddToCartFromModal}
+                          activeOpacity={0.85}
+                        >
+                          <Feather name="shield" size={16} color="#FFFFFF" />
+                          <Text style={[styles.detailAddBtnText, { fontSize: scaled(16) }]}>
+                            Request Override
+                          </Text>
+                        </TouchableOpacity>
+                      </>
+                    );
+                  }
+                  return (
+                    <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
+                      <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
+                        {selectedDrink || selectedSide
+                          ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
+                          : 'Add to Cart'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             </View>
           </KeyboardAvoidingView>
@@ -2230,10 +2313,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         onClose={() => setShowAIChat(false)}
         residentName={residentName}
         residentId={residentId || ResidentService.getDefaultResident().id}
-        dietaryRestrictions={[
-          ...(route?.params?.dietaryRestrictions ?? []),
-          ...(route?.params?.foodAllergies ?? []),
-        ]}
+        dietaryRestrictions={route?.params?.dietaryRestrictions ?? []}
+        foodAllergies={route?.params?.foodAllergies ?? []}
+        medicalConditions={route?.params?.medicalConditions ?? []}
       />
 
       {/* Browse Support Modal */}
@@ -2612,6 +2694,8 @@ const styles = StyleSheet.create({
     gap: 3,
     backgroundColor: '#FEE2E2',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
     paddingHorizontal: 6,
     paddingVertical: 3,
     marginBottom: 4,
@@ -2819,29 +2903,31 @@ const styles = StyleSheet.create({
     borderColor: '#DDD0B8',
     borderStyle: 'dashed',
   },
-  // Red-tinted card when this meal is unsafe for the resident's profile.
+  // Red border for restricted meals — clearly visible alert.
   cardUnsafe: {
-    borderColor: '#DC2626',
+    borderColor: '#EF4444',
     borderWidth: 2,
-    opacity: 0.92,
   },
-  // Top-ribbon overlay announcing exactly why a card is blocked.
-  unsafeOverlay: {
+  // Solid red pill chip — top-right corner of image, bold and clear.
+  unsafeChip: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    right: 10,
+    top: 8,
+    right: 8,
     zIndex: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#DC2626',
+    gap: 4,
+    backgroundColor: '#EF4444',
     paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    paddingHorizontal: 9,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  unsafeOverlayText: {
-    flex: 1,
+  unsafeChipText: {
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
@@ -3209,6 +3295,37 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  detailRestrictionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  detailRestrictionText: {
+    flex: 1,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  detailOverrideBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#DC2626',
+    borderRadius: 16,
+    paddingVertical: 14,
+    shadowColor: '#DC2626',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
 
   // Recommendation tappable highlight

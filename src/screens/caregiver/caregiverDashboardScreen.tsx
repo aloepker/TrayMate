@@ -14,7 +14,9 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
+  useWindowDimensions,
 } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import {
   Resident,
@@ -24,9 +26,9 @@ import {
 } from "../../services/api";
 import { useKitchenMessages } from "../context/KitchenMessageContext";
 import MessagesModal from "../components/messaging/MessagesModal";
-import { getChats, getMe, sendMessage, searchOrdersApi, deleteOrderApi } from "../../services/api";
+import { getChats, getMe, sendMessage } from "../../services/api";
 import InAppNotificationBanner from "../components/InAppNotificationBanner";
-import { getCaregiverResidentList } from "../../services/storage";
+import { clearAuth, getCaregiverResidentList } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -82,6 +84,9 @@ interface CaregiverDashboardProps {
 export default function CaregiverDashboardScreen({
   navigation,
 }: CaregiverDashboardProps) {
+  const { width: viewportWidth } = useWindowDimensions();
+  const useWideStatsLayout = viewportWidth >= 720;
+
   // Kitchen messages from context (sent by kitchen staff per order)
   const { messages: kitchenMessages, unreadCount: kitchenUnread } = useKitchenMessages();
 
@@ -209,9 +214,6 @@ export default function CaregiverDashboardScreen({
   // Inline retry banner shown when backend is unreachable (Render cold start)
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // True when we're rendering DEMO_RESIDENTS because the backend is down
-  const [isDemo, setIsDemo] = useState(false);
-
   // Selected resident for the popup modal
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
 
@@ -243,7 +245,7 @@ export default function CaregiverDashboardScreen({
         } catch (e: any) {
           lastErr = e;
           if (!isNetErr(e) || i === delays.length) break;
-          await new Promise((r) => setTimeout(r, delays[i]));
+          await new Promise<void>((resolve) => setTimeout(resolve, delays[i]));
         }
       }
       throw lastErr;
@@ -252,7 +254,6 @@ export default function CaregiverDashboardScreen({
     try {
       setLoading(true);
       setLoadError(null);
-      setIsDemo(false);
 
       // Get my ID for storage lookups
       let myId: string | null = null;
@@ -307,7 +308,6 @@ export default function CaregiverDashboardScreen({
       if (backendFailedNet && mergedMap.size === 0) {
         setResidents(DEMO_RESIDENTS);
         setNotifications([]);
-        setIsDemo(true);
         setLoadError("Server unreachable — showing demo residents. Tap Retry to try again.");
       } else {
         setResidents([...mergedMap.values()]);
@@ -318,7 +318,6 @@ export default function CaregiverDashboardScreen({
       if (isNetErr(e)) {
         setResidents(DEMO_RESIDENTS);
         setNotifications([]);
-        setIsDemo(true);
         setLoadError("Server unreachable — showing demo residents. Tap Retry to try again.");
       } else {
         setLoadError(e?.message ?? "Request failed.");
@@ -432,6 +431,11 @@ export default function CaregiverDashboardScreen({
     });
   };
 
+  const handleLogout = async () => {
+    await clearAuth();
+    navigation.replace("Login");
+  };
+
   return (
     <SafeAreaView style={styles.page}>
       {/* In-app notification banner — fires when resident sends a new message */}
@@ -483,7 +487,7 @@ export default function CaregiverDashboardScreen({
           )}
           <Pressable
             style={styles.logoutBtn}
-            onPress={() => navigation.replace("Login")}
+            onPress={handleLogout}
           >
             <Text style={styles.logoutText}>Logout</Text>
           </Pressable>
@@ -523,18 +527,26 @@ export default function CaregiverDashboardScreen({
              ----------------------------- */}
           <View style={styles.statsRow}>
             <StatCard
-              icon="👥"
+              iconName="users"
               label="Assigned Residents"
               value={stats.assignedResidents}
-              border="#D7D0A8"
-              iconBg="#6D6B3B"
+              accent="#6D6B3B"
+              style={useWideStatsLayout ? styles.assignedStatCard : undefined}
+              statusText={
+                stats.assignedResidents === 0
+                  ? "No residents yet"
+                  : `${stats.assignedResidents} active`
+              }
+              statusColor="#6D6B3B"
             />
             <StatCard
-              icon="🔔"
+              iconName={stats.activeAlerts > 0 ? "bell" : "check-circle"}
               label="Active Alerts"
               value={stats.activeAlerts}
-              border="#F2D57E"
-              iconBg="#D87000"
+              accent={stats.activeAlerts > 0 ? "#D87000" : "#3F8B57"}
+              style={useWideStatsLayout ? styles.alertStatCard : undefined}
+              statusText={stats.activeAlerts > 0 ? "Needs attention" : "All clear"}
+              statusColor={stats.activeAlerts > 0 ? "#D87000" : "#3F8B57"}
             />
           </View>
 
@@ -612,6 +624,22 @@ export default function CaregiverDashboardScreen({
                             resident.foodAllergies.map((item, i) => (
                               <View key={`${resident.id}-allergy-${i}`} style={styles.allergyChip}>
                                 <Text style={styles.allergyChipText}>{item}</Text>
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.mutedText}>None listed</Text>
+                          )}
+                        </View>
+
+                        {/* Medical conditions preview — same data the admin
+                            shows. Rendered last so the most safety-critical
+                            allergens stay near the name. */}
+                        <Text style={styles.infoLabel}>Medical Conditions</Text>
+                        <View style={styles.chipRow}>
+                          {(resident.medicalConditions ?? []).length ? (
+                            resident.medicalConditions.map((item, i) => (
+                              <View key={`${resident.id}-medical-${i}`} style={styles.medicalChip}>
+                                <Text style={styles.medicalChipText}>{item}</Text>
                               </View>
                             ))
                           ) : (
@@ -790,26 +818,41 @@ function SectionCard({
    Small reusable stat card
 ----------------------------- */
 function StatCard({
-  icon,
+  iconName,
   label,
   value,
-  border,
-  iconBg,
+  accent,
+  style,
+  statusText,
+  statusColor,
 }: {
-  icon: string;
+  iconName: string;
   label: string;
   value: number;
-  border: string;
-  iconBg: string;
+  accent: string;
+  style?: StyleProp<ViewStyle>;
+  statusText: string;
+  statusColor: string;
 }) {
   return (
-    <View style={[styles.statCard, { borderColor: border }]}>
-      <View style={[styles.statIcon, { backgroundColor: iconBg }]}>
-        <Text style={styles.statIconText}>{icon}</Text>
-      </View>
-      <View>
-        <Text style={styles.statLabel}>{label}</Text>
+    <View style={[styles.statCard, style]}>
+      {/* Coloured left accent strip — replaces the heavy 2px border so the
+          card stays neutral while still telegraphing role/status. */}
+      <View style={[styles.statAccent, { backgroundColor: accent }]} />
+      <View style={styles.statBody}>
+        <View style={styles.statHeader}>
+          <View style={[styles.statIcon, { backgroundColor: accent + "1A" }]}>
+            <Feather name={iconName as any} size={18} color={accent} />
+          </View>
+          <Text style={styles.statLabel} numberOfLines={1}>{label}</Text>
+        </View>
         <Text style={styles.statValue}>{value}</Text>
+        <View style={styles.statStatusRow}>
+          <View style={[styles.statStatusDot, { backgroundColor: statusColor }]} />
+          <Text style={[styles.statStatusText, { color: statusColor }]} numberOfLines={1}>
+            {statusText}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -1027,53 +1070,86 @@ const styles = StyleSheet.create({
   // Stats
   statsRow: {
     flexDirection: "row",
-    gap: 18,
+    gap: 14,
     marginTop: 18,
     flexWrap: "wrap",
   },
   statCard: {
-    minWidth: 280,
+    minWidth: 240,
     flex: 1,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#ECE6D2",
     flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
+    overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
       },
       android: {
-        elevation: 3,
+        elevation: 2,
       },
     }),
   },
+  assignedStatCard: {
+    flex: 0.86,
+  },
+  alertStatCard: {
+    flex: 1.14,
+  },
+  statAccent: {
+    width: 4,
+  },
+  statBody: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  statHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   statIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  statIconText: {
-    fontSize: 18,
-    color: "#FFFFFF",
-  },
   statLabel: {
-    fontSize: 13,
+    flex: 1,
+    fontSize: 11,
     color: "#6A6A6A",
-    fontWeight: "800",
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   statValue: {
-    marginTop: 3,
-    fontSize: 26,
-    fontWeight: "900",
+    fontSize: 32,
+    fontWeight: "800",
     color: "#121212",
+    lineHeight: 36,
+  },
+  statStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  statStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   // Section card
@@ -1104,17 +1180,17 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 14,
+    gap: 12,
   },
   residentCard: {
     flexGrow: 1,
-    flexBasis: 320,
+    flexBasis: 200,
+    minWidth: 200,
     backgroundColor: "#F8F8F8",
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     position: "relative",
-    flexDirection: "row",
-    gap: 14,
+    gap: 12,
   },
   cardBell: {
     position: "absolute",
@@ -1153,7 +1229,7 @@ const styles = StyleSheet.create({
   // Room pill
   roomBadge: {
     width: 76,
-    height: 76,
+    height: 70,
     borderRadius: 16,
     backgroundColor: "#6D6B3B",
     alignItems: "center",
@@ -1174,15 +1250,16 @@ const styles = StyleSheet.create({
 
   // Resident content
   residentContent: {
-    flex: 1,
-    paddingRight: 28,
+    width: "100%",
   },
   residentNameRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingRight: 34,
   },
   residentName: {
+    flex: 1,
     fontSize: 16,
     fontWeight: "900",
     color: "#1A1A1A",

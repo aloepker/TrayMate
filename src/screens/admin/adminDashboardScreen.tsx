@@ -1,7 +1,5 @@
 // src/screens/admin/adminDashboardScreen.tsx
 
-import { getAuthToken } from "../../services/storage"; //new add
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -19,7 +17,7 @@ import {
   StatusBar,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
-import { getUserEmail, setResidentCaregivers, getResidentCaregivers, setCaregiverResidentList, getCaregiverResidentList, StoredResident } from "../../services/storage";
+import { clearAuth, getAuthToken, setResidentCaregivers, getResidentCaregivers, setCaregiverResidentList, StoredResident } from "../../services/storage";
 /**
  * FILE PATHS
  */
@@ -66,6 +64,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   // latest value without forcing the polling effect to retrigger.
   const modalOpenRef = useRef(false);
   useEffect(() => { modalOpenRef.current = showMessagesModal; }, [showMessagesModal]);
+
+  const handleLogout = async () => {
+    await clearAuth();
+    navigation.replace("Login");
+  };
 
   useEffect(() => {
     const checkUnread = async () => {
@@ -120,11 +123,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
   // ---- Assign-caregiver picker modal ----
   const [assigningCaregiverToResidentId, setAssigningCaregiverToResidentId] = useState<string | null>(null);
-
-  const [adminEmail, setAdminEmail] = useState<string>('Admin');
-  useEffect(() => {
-    getUserEmail().then(e => { if (e) setAdminEmail(e); });
-  }, []);
 
   // ---- Add Caregiver Modal State ----
   const [showAddCaregiver, setShowAddCaregiver] = useState(false);
@@ -642,7 +640,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           </Pressable>
           <Pressable
             style={styles.logoutBtn}
-            onPress={() => navigation.replace("Login")}
+            onPress={handleLogout}
           >
             <Text style={styles.logoutText}>Logout</Text>
           </Pressable>

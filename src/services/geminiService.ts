@@ -14,6 +14,7 @@
 
 import { GEMINI_CONFIG } from '../config/geminiConfig';
 import { MealService, ResidentService } from './localDataService';
+import { isMealSafe, getUnsafeReason, SafetyResident, SafetyMeal } from './mealSafetyService';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -54,6 +55,14 @@ type GeminiMessage = {
 type ResidentOverride = {
   name: string;
   dietaryRestrictions?: string[];
+  foodAllergies?: string[];
+  medicalConditions?: string[];
+  /**
+   * Server-computed "usual order" — meal IDs the resident has ordered
+   * most often, fetched from GET /mealOrders/default/{id}. Empty when
+   * there's no order history.
+   */
+  favoriteMealIds?: number[];
 };
 
 /**
@@ -65,9 +74,61 @@ async function buildSystemPrompt(
   residentId: string,
   language: string = 'English',
   residentOverride?: ResidentOverride,
+  /**
+   * Server-fetched usual-favourite meal IDs (from /mealOrders/default/{id}).
+   * Passed separately so it works for both local and API-sourced residents
+   * — the local-resident branch builds its own residentContext but still
+   * benefits from personalisation.
+   */
+  favoriteMealIds?: number[],
 ): Promise<string> {
   const resident = ResidentService.getResidentById(residentId);
   const allMeals = await MealService.getAllMeals();
+
+  // Build a SafetyResident for the safety service. This drives the hard
+  // filter that hides restricted meals from the LLM entirely so it can
+  // never recommend something unsafe.
+  let safetyResident: SafetyResident | null = null;
+  if (resident) {
+    safetyResident = {
+      foodAllergies: resident.dietaryRestrictions
+        .filter((r) => r.type === 'allergy')
+        .map((r) => r.name),
+      dietaryRestrictions: resident.dietaryRestrictions
+        .filter((r) => r.type !== 'allergy')
+        .map((r) => r.name),
+      medicalConditions: [],
+    };
+  } else if (residentOverride) {
+    safetyResident = {
+      foodAllergies: residentOverride.foodAllergies ?? [],
+      dietaryRestrictions: residentOverride.dietaryRestrictions ?? [],
+      medicalConditions: residentOverride.medicalConditions ?? [],
+    };
+  }
+
+  // Map each meal to the SafetyMeal shape so the centralised checker can
+  // judge it against allergens, dietary rules, and medical conditions.
+  const toSafetyMeal = (m: typeof allMeals[number]): SafetyMeal => ({
+    id: m.id,
+    name: m.name,
+    description: m.description,
+    tags: m.tags,
+    allergenInfo: m.allergenInfo,
+    ingredients: m.ingredients,
+    sodium: m.nutrition?.sodium,
+    meal_period: m.mealPeriod,
+  });
+
+  // Split into safe vs restricted using the same source of truth as the
+  // browse screen. Restricted meals are excluded from the prompt so the LLM
+  // physically cannot recommend them — no reliance on prompt obedience.
+  const safeMeals = safetyResident
+    ? allMeals.filter((m) => isMealSafe(toSafetyMeal(m), safetyResident))
+    : allMeals;
+  const restrictedMeals = safetyResident
+    ? allMeals.filter((m) => !isMealSafe(toSafetyMeal(m), safetyResident))
+    : [];
 
   let residentContext: string;
 
@@ -119,7 +180,7 @@ DISLIKED INGREDIENTS: None specified
 `;
   }
 
-  const mealsContext = allMeals
+  const mealsContext = safeMeals
     .map(
       m =>
         `[ID:${m.id}] ${m.name} | ${m.mealPeriod} (${m.timeRange})
@@ -131,6 +192,69 @@ DISLIKED INGREDIENTS: None specified
     )
     .join('\n\n');
 
+  // Build an explicit "do not recommend" list so if the resident asks about
+  // a restricted meal by name, the LLM knows it's been excluded and can
+  // explain why instead of claiming ignorance.
+  const restrictedContext = restrictedMeals.length > 0
+    ? `\n\nEXCLUDED MEALS (DO NOT RECOMMEND — flagged unsafe for this resident):\n${restrictedMeals
+        .map((m) => {
+          const reason = safetyResident ? getUnsafeReason(toSafetyMeal(m), safetyResident) : null;
+          return `- ${m.name}: ${reason ?? 'restricted'}`;
+        })
+        .join('\n')}`
+    : '';
+
+  // ── Time-of-day awareness ─────────────────────────────────────
+  // The tablet's clock drives recommendations. If the resident asks
+  // "recommend a meal" without specifying a period, GrannyGBT should
+  // default to whatever's being served right now (or coming up next).
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const SCHEDULE = [
+    { label: 'Breakfast', start: 7 * 60,  end: 10 * 60 },
+    { label: 'Lunch',     start: 11 * 60, end: 14 * 60 },
+    { label: 'Dinner',    start: 16 * 60, end: 19 * 60 },
+  ];
+  const activePeriod = SCHEDULE.find((s) => mins >= s.start && mins <= s.end);
+  const upcomingPeriod = activePeriod ? null : SCHEDULE.find((s) => s.start > mins) ?? SCHEDULE[0];
+  const formatTime = (totalMins: number) => {
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return m === 0 ? `${h12}${ampm}` : `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+  };
+  const clockNow = formatTime(mins);
+  const timeContext = activePeriod
+    ? `CURRENT TIME ON TABLET: ${clockNow}
+ACTIVE MEAL PERIOD: ${activePeriod.label} (being served right now, ${formatTime(activePeriod.start)}–${formatTime(activePeriod.end)})
+DEFAULT RECOMMENDATION PERIOD: ${activePeriod.label} — when the user asks "recommend a meal" without specifying a period, recommend a ${activePeriod.label} meal.`
+    : upcomingPeriod
+      ? `CURRENT TIME ON TABLET: ${clockNow}
+ACTIVE MEAL PERIOD: None (between meals)
+NEXT MEAL PERIOD: ${upcomingPeriod.label} (starts at ${formatTime(upcomingPeriod.start)})
+DEFAULT RECOMMENDATION PERIOD: ${upcomingPeriod.label} — when the user asks "recommend a meal" without specifying a period, recommend a ${upcomingPeriod.label} meal (the next one coming up).`
+      : `CURRENT TIME ON TABLET: ${clockNow}`;
+
+  // ── Personalisation: resident's usual order ─────────────────────────
+  // Server returns meal IDs they order most. We resolve those IDs
+  // against the SAFE meal list (so we never surface a favourite that's
+  // also restricted) and feed the resulting names back as "usual picks"
+  // GrannyGBT can lean on for personal recommendations.
+  // Prefer the explicit favoriteMealIds param (works for any resident path),
+  // fall back to whatever's on the override.
+  const favoriteIds = favoriteMealIds && favoriteMealIds.length > 0
+    ? favoriteMealIds
+    : (residentOverride?.favoriteMealIds ?? []);
+  const favoriteMealNames = favoriteIds
+    .map((id) => safeMeals.find((m) => Number(m.id) === Number(id)))
+    .filter((m): m is typeof safeMeals[number] => Boolean(m))
+    .map((m) => `${m.name} (${m.mealPeriod})`);
+  const favoritesContext = favoriteMealNames.length > 0
+    ? `\n\nRESIDENT'S USUAL ORDERS (from their order history — prefer these when recommending if they fit the period):
+${favoriteMealNames.map((n) => `- ${n}`).join('\n')}`
+    : '';
+
   return `You are GrannyGBT, a friendly and knowledgeable meal planning assistant for a senior living facility called TrayMate.
 Your tone is warm, helpful, and conversational — like a smart friend who knows a lot about food and nutrition.
 DO NOT use grandma-style pet names like "dear", "sweetie", "honey", "sugar", "sweetheart", or "darling". Just talk naturally and friendly.
@@ -139,17 +263,26 @@ Use emojis sparingly — one or two per response max (like 🍽 or ✅), not eve
 Your primary role is to help staff and residents select safe, nutritious, and enjoyable meals.
 
 CRITICAL SAFETY RULES:
-1. NEVER suggest meals that contain allergens listed in this resident's dietary restrictions.
-2. For SEVERE allergies, always explicitly warn if a meal contains or may contain the allergen.
-3. Always cross-reference meal ingredients and allergenInfo against the resident's restrictions before recommending.
-4. Flag any meal that contains the resident's disliked ingredients.
-5. Consider the resident's nutrition goals when making recommendations.
-6. You can ONLY recommend meals from the AVAILABLE MEALS list below. Do not invent meals.
+1. The AVAILABLE MEALS list below has ALREADY been filtered to remove anything unsafe for this resident — every meal in it is safe to recommend.
+2. NEVER recommend any meal in the EXCLUDED MEALS list. If the resident asks about one, briefly explain why it's not suitable and suggest a safe alternative.
+3. You can ONLY recommend meals from the AVAILABLE MEALS list. Do not invent meals or recommend excluded ones.
+4. Consider the resident's nutrition goals when making recommendations.
+
+TIME-AWARE RECOMMENDATIONS:
+- When the resident asks for a meal recommendation WITHOUT specifying a meal period (e.g. "recommend a meal", "what should I eat", "I'm hungry"), pick from the DEFAULT RECOMMENDATION PERIOD below — match the current tablet clock.
+- If the resident DOES specify a period ("for lunch", "for dinner"), recommend from that period instead.
+- Drinks and Sides are not full meals — only recommend them as add-ons or when the resident asks for one specifically.
+
+PERSONALISATION:
+- If a USUAL ORDERS list is provided below, prefer those meals when recommending — but only if they match the requested period and are still safe. The list is already filtered to safe meals only.
+- A short personal touch is welcome ("you usually have X — want that today?") but don't overdo it; one mention max.
+
+${timeContext}
 
 ${residentContext}
 
 AVAILABLE MEALS:
-${mealsContext}
+${mealsContext}${restrictedContext}${favoritesContext}
 
 RESPONSE RULES — KEEP IT SHORT:
 - Max 2-3 sentences per response. Never write paragraphs.
@@ -219,6 +352,10 @@ async function callGeminiModel(
     if (status === 429) {
       rateLimitedUntil[modelName] = Date.now() + RATE_LIMIT_COOLDOWN_MS;
       console.warn(`[GrannyGBT] ${modelName} hit free-tier quota, cooling down ${RATE_LIMIT_COOLDOWN_MS / 60000} min.`);
+    } else if (status === 503) {
+      // Transient overload — cool down for 1 minute and fall back silently
+      rateLimitedUntil[modelName] = Date.now() + 60_000;
+      console.warn(`[GrannyGBT] ${modelName} overloaded (503), cooling down 1 min.`);
     } else {
       console.error(`[GrannyGBT] ${modelName} error: [${status}] ${message}`);
     }
@@ -267,9 +404,10 @@ export class GeminiChatService {
     residentId: string,
     language: string = 'English',
     residentOverride?: ResidentOverride,
+    favoriteMealIds?: number[],
   ): Promise<void> {
     this.initPromise = (async () => {
-      this.systemPrompt = await buildSystemPrompt(residentId, language, residentOverride);
+      this.systemPrompt = await buildSystemPrompt(residentId, language, residentOverride, favoriteMealIds);
       this.history = [];
       this.currentModel = GEMINI_CONFIG.models[0];
       console.log('[GrannyGBT] Chat initialized, system prompt length:', this.systemPrompt.length);
@@ -374,8 +512,13 @@ export class GeminiChatService {
   /**
    * Reset the chat session for a (possibly different) resident.
    */
-  reset(residentId: string, language: string = 'English', residentOverride?: ResidentOverride): void {
-    this.initialize(residentId, language, residentOverride);
+  reset(
+    residentId: string,
+    language: string = 'English',
+    residentOverride?: ResidentOverride,
+    favoriteMealIds?: number[],
+  ): void {
+    this.initialize(residentId, language, residentOverride, favoriteMealIds);
   }
 }
 

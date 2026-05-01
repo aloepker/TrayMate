@@ -37,6 +37,63 @@ function normalizeMealPeriod(value: string | null | undefined): Meal["mealPeriod
   return "All Day";
 }
 
+/**
+ * Authoritative name → period map. Used as a safety net when the
+ * backend row has a null/empty/garbage `mealperiod` and would
+ * otherwise default to "All Day", letting drinks/sides leak into
+ * the main tab. Mirrors the backend seeder's NAME_TO_PERIOD map.
+ */
+const KNOWN_NAME_TO_PERIOD: Record<string, Meal["mealPeriod"]> = {
+  "Banana-Chocolate Pancakes":  "Breakfast",
+  "Broccoli-Cheddar Quiche":    "Breakfast",
+  "Caesar Salad with Chicken":  "All Day",
+  "Citrus Butter Salmon":       "Dinner",
+  "Chicken Bruschetta":         "Dinner",
+  "Breakfast Banana Split":     "Breakfast",
+  "Herb Baked Chicken":         "Lunch",
+  "Garden Vegetable Medley":    "Lunch",
+  "Strawberry Belgian Waffle":  "Breakfast",
+  "Spring Menu Special":        "Dinner",
+  "Grilled Salmon Fillet":      "Dinner",
+  "Oatmeal Bowl":               "Breakfast",
+  "Fresh Orange Juice":         "Drinks",
+  "Hot Green Tea":              "Drinks",
+  "Hot Coffee":                 "Drinks",
+  "Mixed Berry Smoothie":       "Drinks",
+  "Warm Apple Cider":           "Drinks",
+  "Sparkling Water":            "Drinks",
+  "Whole Milk":                 "Drinks",
+  "Decaf Coffee":               "Drinks",
+  "Chamomile Tea":              "Drinks",
+  "Cranberry Juice":            "Drinks",
+  "Apple Juice":                "Drinks",
+  "Hot Cocoa":                  "Drinks",
+  "Chicken Noodle Soup":        "Sides",
+  "Garden Side Salad":          "Sides",
+  "Vanilla Ice Cream":          "Sides",
+  "Apple Pie Slice":            "Sides",
+  "Chocolate Chip Cookies":     "Sides",
+  "Fresh Fruit Cup":            "Sides",
+  "Tomato Basil Soup":          "Sides",
+  "Rice Pudding":               "Sides",
+};
+
+/**
+ * Resolve a meal's period: prefer the explicit backend value, but if
+ * normalisation would land on "All Day" AND the meal name is one we
+ * know better, use the known answer. Safer than overwriting backend
+ * data — anything genuinely intended as All Day still passes through.
+ */
+function resolvePeriodWithFallback(
+  apiMealPeriod: string | null | undefined,
+  name: string | null | undefined,
+): Meal["mealPeriod"] {
+  const normalized = normalizeMealPeriod(apiMealPeriod);
+  if (normalized !== "All Day") return normalized;
+  const known = name ? KNOWN_NAME_TO_PERIOD[name.trim()] : undefined;
+  return known ?? "All Day";
+}
+
 function parseNutrition(nutritionText: string | null | undefined): Nutrition {
   const text = nutritionText ?? "";
 
@@ -94,7 +151,9 @@ function apiMealToMeal(api: any): Meal {
     },
     description: api.description ?? "",
     imageUrl: String(api.imageUrl ?? "").trim(),    mealType: api.mealtype ?? "",
-    mealPeriod: normalizeMealPeriod(api.mealperiod),
+    // Use the name-aware fallback so drinks/sides whose backend
+    // mealperiod is null/garbage don't leak into the All Day tab.
+    mealPeriod: resolvePeriodWithFallback(api.mealperiod, api.name),
     timeRange: api.timeRange ?? "",
     allergenInfo: splitCommaList(api.allergenInfo),
     tags: splitCommaList(api.tags),
@@ -186,7 +245,7 @@ async function fetchSidesFromApi(): Promise<Meal[]> {
   }
 }
 // Fallback meals for when the API is unreachable
-const FALLBACK_MEALS: Meal[] = [
+export const FALLBACK_MEALS: Meal[] = [
   { id: 1, name: "Banana-Chocolate Pancakes", ingredients: ["Flour","Sugar","Baking Powder","Cinnamon","Milk","Banana","Egg","Vanilla","Chocolate Chips"], nutrition: { calories: 372, totalFat: "11g", cholesterol: "64mg", carbohydrate: "61g", fiber: "3.1g", sugar: "17g", sodium: "240mg", protein: "10g" }, description: "Pancakes topped with fresh sliced bananas and chocolate chips, served with scrambled eggs.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 10am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Contains Dairy","Contains Eggs"], isAvailable: true, isSeasonal: false },
   { id: 2, name: "Broccoli-Cheddar Quiche", ingredients: ["AP Flour","Sugar","Salt","Eggs","Butter","Garlic","Heavy Cream","Cheese","Pepper","Broccoli"], nutrition: { calories: 746, totalFat: "58g", saturatedFat: "34g", transFat: "1.1g", cholesterol: "411mg", carbohydrate: "37g", fiber: "1.2g", sugar: "3.2g", sodium: "680mg", protein: "22g" }, description: "Diced broccoli with cheddar and parmesan cheese in a traditional quiche.", imageUrl: "", mealType: "B", mealPeriod: "Breakfast", timeRange: "7am - 10am", allergenInfo: ["Eggs","Dairy","Gluten"], tags: ["Vegetarian","High Protein"], isAvailable: true, isSeasonal: false },
   { id: 3, name: "Caesar Salad with Chicken", ingredients: ["Croutons","Chicken","Parmesan Cheese","Caesar Dressing","Romaine Lettuce"], nutrition: { calories: 250, totalFat: "18g", cholesterol: "66mg", carbohydrate: "2g", fiber: "1g", sugar: "1g", sodium: "405mg", protein: "20g" }, description: "Fresh romaine, caesar dressing, shaved parmesan, and herb croutons.", imageUrl: "", mealType: "L, D", mealPeriod: "All Day", timeRange: "11am - 7pm", allergenInfo: ["Dairy","Gluten"], tags: ["High Protein","Low Carb"], isAvailable: true, isSeasonal: false },
@@ -419,8 +478,11 @@ export const MealService = {
     const meals = await fetchAvailableMealsFromApi();
 
     if (!period) {
+      // Drinks/Sides have their own tabs (Beverages, Desserts) — keep them
+      // out of All Day. Filter on mealPeriod since mealType codes are
+      // ambiguous ("D" is used for both Dinner and Drinks in fallback data).
       return meals.filter(
-        (m) => m.mealType !== "Beverage" && m.mealType !== "Side"
+        (m) => m.mealPeriod !== "Drinks" && m.mealPeriod !== "Sides"
       );
     }
 

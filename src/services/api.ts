@@ -1065,9 +1065,59 @@ export async function setMealAvailability(mealId: number, available: boolean): P
   });
 }
 
+/**
+ * Get the resident's "usual order" — server-computed list of their most
+ * frequently ordered meal IDs based on full order history. Returns the
+ * meal IDs as numbers, or [] if the resident has no order history yet.
+ *
+ * Backend response shapes:
+ *   - With history:    { recommendedItems: "3, 5, 6" }
+ *   - Without history: plain text "No order history found for this resident."
+ */
+export async function getDefaultMealsApi(residentId: string | number): Promise<number[]> {
+  try {
+    const res = await fetch(`${BASE_URL}/mealOrders/default/${residentId}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const text = await res.text();
+    // No history → plain text response, not JSON
+    if (text.trim().startsWith("{")) {
+      try {
+        const data = JSON.parse(text) as { recommendedItems?: string };
+        if (!data.recommendedItems) return [];
+        return data.recommendedItems
+          .split(",")
+          .map((s) => Number(s.trim()))
+          .filter((n) => !isNaN(n));
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getAllMenuMeals(): Promise<any[]> {
-  const data = await request<any>("/menu");
-  return Array.isArray(data) ? data : [];
+  // The backend currently 403s on `/menu` for the kitchen role and on
+  // anonymous reads alike. Try authenticated first; if anything fails or
+  // comes back empty, the caller falls back to the local seed list.
+  try {
+    const data = await request<any>("/menu");
+    if (Array.isArray(data) && data.length > 0) return data;
+  } catch { /* fall through to anonymous attempt */ }
+  try {
+    const res = await fetch(`${BASE_URL}/menu`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch { /* swallow — caller decides what to do with [] */ }
+  return [];
 }
 
 // ========================= DIETARY AUDIT LOG =========================

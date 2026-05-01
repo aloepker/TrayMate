@@ -79,7 +79,10 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
       setPendingChatUserId(null);
       setHistoryUsers((prev) => prev.filter((u) => u.id !== abandoned));
     }
-  }, [visible]);
+    // init intentionally stays out of the dependency list; this effect is
+    // keyed to modal visibility so Retry remains the explicit manual reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, pendingChatUserId]);
 
   const init = async () => {
     setLoadingInit(true);
@@ -98,9 +101,12 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
       // most of the time when the badge says "1" but the sidebar is empty,
       // /messages/chats failed (network blip / cold backend / 401).
       if (chatsRes.status === "rejected") {
+        const status = (chatsRes.reason as any)?.status;
         const msg = (chatsRes.reason as any)?.message ?? "Could not load messages";
         setInitError(
-          msg === "Network request failed"
+          status === 403
+            ? "Your saved session is not accepted for messages. Log out, then sign in again with a live backend login."
+            : msg === "Network request failed"
             ? "Server unreachable. Tap Retry in a moment — it may be waking up."
             : msg
         );

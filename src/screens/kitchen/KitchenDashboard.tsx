@@ -15,12 +15,15 @@ import {
   Switch,
   Platform,
   PermissionsAndroid,
+  Animated,
+  Easing,
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
 import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, setMealAvailability, listCoverageAlertsApi, type MealCoverageAlert } from "../../services/api";
+import { FALLBACK_MEALS } from "../../services/localDataService";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
@@ -195,6 +198,118 @@ function normalizePeriod(raw: string | null | undefined): string {
   if (v.includes("dinner")) return "Dinner";
   return "All Day";
 }
+
+// ─── Add-Meal Loading Overlay ────────────────────────────────────────────────
+// Shown while a newly-added meal is being saved to the backend AND translated
+// to ES / FR / ZH. The three-step list fills in as each phase completes so the
+// kitchen knows exactly what's happening.
+type AddMealStage = 'saving' | 'translating' | 'done' | 'error';
+interface AddMealOverlayProps {
+  visible: boolean;
+  stage: AddMealStage;
+  mealName: string;
+  errorMsg?: string;
+}
+const AddMealOverlay: React.FC<AddMealOverlayProps> = ({ visible, stage, mealName, errorMsg }) => {
+  const spin = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    const spinLoop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true,
+      }),
+    );
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    spinLoop.start(); pulseLoop.start();
+    return () => { spinLoop.stop(); pulseLoop.stop(); };
+  }, [visible, spin, pulse]);
+
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+
+  const isError = stage === 'error';
+  const isDone = stage === 'done';
+  const steps: { key: AddMealStage; label: string }[] = [
+    { key: 'saving',      label: 'Saving to menu' },
+    { key: 'translating', label: 'Translating to Español, Français, 中文' },
+    { key: 'done',        label: 'Ready for residents' },
+  ];
+  const stageIndex = isError ? -1 : steps.findIndex((s) => s.key === stage);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={overlay.backdrop}>
+        <View style={overlay.card}>
+          <Animated.View style={[overlay.iconWrap, { transform: [{ scale }] }]}>
+            {isError ? (
+              <Feather name="alert-circle" size={44} color={C.danger} />
+            ) : isDone ? (
+              <Feather name="check-circle" size={44} color={C.success} />
+            ) : (
+              <Animated.View style={{ transform: [{ rotate }] }}>
+                <Feather name="loader" size={44} color={C.primary} />
+              </Animated.View>
+            )}
+          </Animated.View>
+          <Text style={overlay.title} numberOfLines={2}>
+            {isError ? 'Could not save' : isDone ? 'Meal added!' : 'Adding meal'}
+          </Text>
+          <Text style={overlay.mealName} numberOfLines={1}>{mealName}</Text>
+
+          {isError ? (
+            <Text style={overlay.errorText} numberOfLines={3}>{errorMsg ?? 'Please try again.'}</Text>
+          ) : (
+            <View style={overlay.steps}>
+              {steps.map((s, i) => {
+                const done    = i < stageIndex || isDone;
+                const active  = !isDone && i === stageIndex;
+                const pending = !done && !active;
+                return (
+                  <View key={s.key} style={overlay.stepRow}>
+                    {done ? (
+                      <Feather name="check" size={16} color={C.success} />
+                    ) : active ? (
+                      <ActivityIndicator size="small" color={C.primary} />
+                    ) : (
+                      <Feather name="circle" size={16} color={C.border} />
+                    )}
+                    <Text style={[
+                      overlay.stepText,
+                      done && { color: C.success },
+                      active && { color: C.text, fontWeight: '600' },
+                      pending && { color: C.textMuted },
+                    ]} numberOfLines={2}>
+                      {s.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const overlay = StyleSheet.create({
+  backdrop:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card:       { width: '100%', maxWidth: 380, backgroundColor: C.surface, borderRadius: 18, paddingVertical: 28, paddingHorizontal: 24, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  iconWrap:   { width: 72, height: 72, borderRadius: 36, backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  title:      { fontSize: 20, fontWeight: '700', color: C.text, textAlign: 'center' },
+  mealName:   { fontSize: 14, color: C.textMuted, marginTop: 4, marginBottom: 18, textAlign: 'center', maxWidth: 280 },
+  steps:      { width: '100%', gap: 10 },
+  stepRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepText:   { fontSize: 14, flexShrink: 1 },
+  errorText:  { fontSize: 14, color: C.danger, textAlign: 'center', marginTop: 4 },
+});
 
 // ─── Seasonal Meal Modal (expanded with nutrition + dietary fields) ────────────
 interface SeasonalModalProps {
@@ -985,6 +1100,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     served:    orders.filter((o) => o.order.status === "served").length,
   };
 
+  // Multi-stage progress shown in the AddMealOverlay. The overlay itself drives
+  // the animation; we just bump the stage as each network step finishes.
+  const [addMealStage, setAddMealStage] = useState<
+    null | { stage: 'saving' | 'translating' | 'done' | 'error'; mealName: string; errorMsg?: string }
+  >(null);
+
   const addSeasonalMeal = async (meal: Omit<SeasonalEntry, "id"> & {
     calories?: number; sodium?: number; protein?: number;
     imageUrl?: string; seasonal: boolean;
@@ -993,11 +1114,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     const mealTypeMap: Record<string, string> = {
       Breakfast: "B", Lunch: "L", Dinner: "D", Sides: "Side", Drinks: "Beverage",
     };
-    const timeRangeMap: Record<string, string> = {
-      Breakfast: "7am - 10am", Lunch: "11am - 2pm", Dinner: "4pm - 7pm",
-      Sides: "All Day", Drinks: "All Day",
-    };
 
+    setAddMealStage({ stage: 'saving', mealName: meal.name });
+
+    let saved = false;
     try {
       const result = await createMeal({
         name: meal.name,
@@ -1012,40 +1132,45 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         seasonal: meal.seasonal,
         imageUrl: meal.imageUrl,
       });
-
-      // Add to local state with backend ID
       const newId = result?.id ? String(result.id) : `meal_${Date.now()}`;
       setSeasonalMeals((prev) => [...prev, { ...meal, id: newId }]);
-      Alert.alert("Meal Added", `"${meal.name}" has been added to the menu.`);
+      saved = true;
     } catch (e: any) {
-      // Still add locally even if backend fails
+      // Still add locally even if backend fails — keeps the UI usable
       setSeasonalMeals((prev) => [...prev, { ...meal, id: `local_${Date.now()}` }]);
-      Alert.alert("Added Locally", `"${meal.name}" was added locally but may not have saved to the database: ${e.message}`);
+      setAddMealStage({ stage: 'error', mealName: meal.name, errorMsg: e?.message ?? 'Network error' });
+      // Give the user a moment to see the error before dismissing
+      setTimeout(() => setAddMealStage(null), 2200);
+      return;
     }
 
-    // Fire-and-forget: translate
-    (async () => {
-      try {
-        const toTranslateNames: string[] = [];
-        const toTranslateDescs: string[] = [];
-        if (meal.name && !hasMealNameTranslation(meal.name)) {
-          toTranslateNames.push(meal.name);
-        }
-        if (meal.description && !hasMealDescriptionTranslation(meal.description)) {
-          toTranslateDescs.push(meal.description);
-        }
-        const [nameResults, descResults] = await Promise.all([
-          toTranslateNames.length > 0
-            ? translateMealNamesWithGemini(toTranslateNames)
-            : Promise.resolve({}),
-          toTranslateDescs.length > 0
-            ? translateMealDescriptionsWithGemini(toTranslateDescs)
-            : Promise.resolve({}),
-        ]);
-        if (Object.keys(nameResults).length > 0) setCachedMealTranslations(nameResults);
-        if (Object.keys(descResults).length > 0) setCachedDescriptionTranslations(descResults);
-      } catch { /* silent — translation is best-effort */ }
-    })();
+    // Translation — awaited so the loading screen reflects real progress.
+    // Errors here are swallowed because the meal itself already saved.
+    setAddMealStage({ stage: 'translating', mealName: meal.name });
+    try {
+      const toTranslateNames: string[] = [];
+      const toTranslateDescs: string[] = [];
+      if (meal.name && !hasMealNameTranslation(meal.name)) {
+        toTranslateNames.push(meal.name);
+      }
+      if (meal.description && !hasMealDescriptionTranslation(meal.description)) {
+        toTranslateDescs.push(meal.description);
+      }
+      const [nameResults, descResults] = await Promise.all([
+        toTranslateNames.length > 0
+          ? translateMealNamesWithGemini(toTranslateNames)
+          : Promise.resolve({}),
+        toTranslateDescs.length > 0
+          ? translateMealDescriptionsWithGemini(toTranslateDescs)
+          : Promise.resolve({}),
+      ]);
+      if (Object.keys(nameResults).length > 0) setCachedMealTranslations(nameResults);
+      if (Object.keys(descResults).length > 0) setCachedDescriptionTranslations(descResults);
+    } catch { /* silent — translation is best-effort */ }
+
+    setAddMealStage({ stage: 'done', mealName: meal.name });
+    setTimeout(() => setAddMealStage(null), 1100);
+    void saved;
   };
 
   const removeSeasonalMeal = (id: string) => {
@@ -1056,11 +1181,36 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const tabSeasonalMeals = seasonalMeals;
 
   // ── Manage Menu (load all meals from DB) ──
+  const [menuUsingFallback, setMenuUsingFallback] = useState(false);
   const loadMenuMeals = async () => {
     setMenuLoading(true);
     try {
       const meals = await getAllMenuMeals();
-      setMenuMeals(meals);
+      if (Array.isArray(meals) && meals.length > 0) {
+        setMenuMeals(meals);
+        setMenuUsingFallback(false);
+      } else {
+        // Backend returned empty (or 403 swallowed inside getAllMenuMeals).
+        // Show the bundled seed list so the kitchen sees something to work
+        // with, and flag it in the UI so they know edits won't persist.
+        setMenuMeals(FALLBACK_MEALS.map((m) => ({
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          mealperiod: m.mealPeriod,
+          mealtype: m.mealType,
+          calories: m.nutrition?.calories,
+          sodium: m.nutrition?.sodium,
+          protein: m.nutrition?.protein,
+          tags: Array.isArray(m.tags) ? m.tags.join(", ") : (m.tags ?? ""),
+          allergenInfo: Array.isArray(m.allergenInfo) ? m.allergenInfo.join(", ") : (m.allergenInfo ?? ""),
+          available: m.isAvailable,
+          seasonal: m.isSeasonal,
+          imageUrl: m.imageUrl,
+          _local: true,
+        })));
+        setMenuUsingFallback(true);
+      }
     } catch (e: any) {
       Alert.alert("Error", "Could not load menu: " + e.message);
     } finally {
@@ -1069,6 +1219,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   };
 
   const handleDeleteMeal = (meal: any) => {
+    if (meal._local) {
+      Alert.alert("Local sample", "This meal isn't in the database yet, so there's nothing to delete on the server. Add real meals using the Add Meal button.");
+      return;
+    }
     Alert.alert(
       "Remove Meal",
       `Are you sure you want to remove "${meal.name}" from the menu?`,
@@ -1497,7 +1651,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               <View key={item.order.id} style={s.card}>
                 {/* ── Period indicator strip on left ── */}
                 <View style={[s.cardPeriodStrip, { backgroundColor: pa.color }]} />
-
+hjvjh
                 {/* ── Top row: room + resident + period + status ── */}
                 <View style={s.cardTop}>
                   {/* Prominent ROOM badge — source of truth is backend admin
@@ -1614,10 +1768,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 {/* ── Meals ── */}
                 {item.meals.map((meal, idx) => {
                   const ph = getMealPlaceholder(meal.name);
+                  const localImg = meal.imageUrl ? null : getMealImage(meal.name);
                   return (
                     <View key={meal.id} style={[s.mealRow, idx > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
                       {meal.imageUrl ? (
                         <Image source={{ uri: meal.imageUrl }} style={s.mealThumb} />
+                      ) : localImg ? (
+                        <Image source={localImg} style={s.mealThumb} />
                       ) : (
                         <View style={[s.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
                           <Text style={{ fontSize: 24 }}>{ph.emoji}</Text>
@@ -1838,6 +1995,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         onAdd={addSeasonalMeal}
       />
 
+      {/* ── Add-Meal Loading Overlay (saving + translating) ── */}
+      <AddMealOverlay
+        visible={addMealStage !== null}
+        stage={addMealStage?.stage ?? 'saving'}
+        mealName={addMealStage?.mealName ?? ''}
+        errorMsg={addMealStage?.errorMsg}
+      />
+
       {/* ── Message Panel ── */}
       <MessagePanel
         visible={showMessages}
@@ -1881,6 +2046,17 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Backend-empty banner: shown when we couldn't reach the DB and
+              are showing the bundled seed list instead. */}
+          {menuUsingFallback && !menuLoading && (
+            <View style={manageMenu.fallbackBanner}>
+              <Feather name="wifi-off" size={16} color={C.warning} />
+              <Text style={manageMenu.fallbackBannerText} numberOfLines={2}>
+                Showing local sample meals — couldn&apos;t reach the database. Edits to these won&apos;t save until the server is back.
+              </Text>
+            </View>
+          )}
 
           {/* Period filter tabs */}
           <View style={manageMenu.tabBar}>
@@ -3351,6 +3527,22 @@ const manageMenu = StyleSheet.create({
     backgroundColor: C.inputBg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  fallbackBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: C.warningBg,
+    borderBottomWidth: 1,
+    borderBottomColor: "#fde68a",
+  },
+  fallbackBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: C.warning,
+    lineHeight: 18,
   },
   // Tabs
   tabBar: {

@@ -25,6 +25,7 @@ import {
   translateMealTimeRange,
 } from '../services/mealLocalization';
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
+import { getDefaultMealsApi } from '../services/api';
 import { useSettings } from './context/SettingsContext';
 
 // ---------- TrayMate Color Palette ----------
@@ -260,6 +261,8 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const resident = ResidentService.getResidentById(residentId);
   const residentName = route?.params?.residentName || resident?.fullName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions || [];
+  const foodAllergies: string[] = route?.params?.foodAllergies || [];
+  const medicalConditions: string[] = route?.params?.medicalConditions || [];
   const [allMeals, setAllMeals] = useState<ServiceMeal[]>([]);
 
   const chatServiceRef = useRef<GeminiChatService | null>(null);
@@ -286,18 +289,27 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
     chatServiceRef.current = service;
 
     if (service.isConfigured()) {
-      // Pass override data for API-sourced residents not in the local database
-      const override = !resident ? { name: residentName, dietaryRestrictions } : undefined;
-      console.log('[AIMealAssistant] Initializing Gemini chat service...');
-      service.initialize(residentId, language, override)
-        .then(() => {
-          console.log('[AIMealAssistant] Gemini initialized successfully');
-          setAiMode('ai');
-        })
-        .catch((err) => {
-          console.error('[AIMealAssistant] Gemini init failed:', err?.message || err);
-          setAiMode('offline');
-        });
+      // Pass override data for API-sourced residents not in the local database.
+      // Also fetch the resident's "usual order" so GrannyGBT can personalise.
+      (async () => {
+        let favoriteMealIds: number[] = [];
+        try {
+          favoriteMealIds = await getDefaultMealsApi(residentId);
+        } catch { /* no-op — recommendations still work without it */ }
+        const override = !resident
+          ? { name: residentName, dietaryRestrictions, foodAllergies, medicalConditions, favoriteMealIds }
+          : undefined;
+        console.log('[AIMealAssistant] Initializing Gemini chat service...');
+        service.initialize(residentId, language, override, favoriteMealIds)
+          .then(() => {
+            console.log('[AIMealAssistant] Gemini initialized successfully');
+            setAiMode('ai');
+          })
+          .catch((err) => {
+            console.error('[AIMealAssistant] Gemini init failed:', err?.message || err);
+            setAiMode('offline');
+          });
+      })();
     } else {
       console.warn('[AIMealAssistant] Gemini not configured (no API key)');
     }

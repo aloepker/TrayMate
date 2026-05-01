@@ -38,6 +38,52 @@ public class MealImageSeeder {
 
     private final MealRepository mealRepository;
 
+    /**
+     * Authoritative meal-name → period map used to backfill the
+     * <code>mealperiod</code> column on rows that came in null/empty.
+     * Without this fix drinks default to "All Day" on the frontend
+     * and clutter the main tab.
+     */
+    private static final Map<String, String> NAME_TO_PERIOD = Map.ofEntries(
+        // Meals
+        Map.entry("Banana-Chocolate Pancakes",  "Breakfast"),
+        Map.entry("Broccoli-Cheddar Quiche",    "Breakfast"),
+        Map.entry("Caesar Salad with Chicken",  "All Day"),
+        Map.entry("Citrus Butter Salmon",       "Dinner"),
+        Map.entry("Chicken Bruschetta",         "Dinner"),
+        Map.entry("Breakfast Banana Split",     "Breakfast"),
+        Map.entry("Herb Baked Chicken",         "Lunch"),
+        Map.entry("Garden Vegetable Medley",    "Lunch"),
+        Map.entry("Strawberry Belgian Waffle",  "Breakfast"),
+        Map.entry("Spring Menu Special",        "Dinner"),
+        Map.entry("Grilled Salmon Fillet",      "Dinner"),
+        Map.entry("Oatmeal Bowl",               "Breakfast"),
+
+        // Drinks
+        Map.entry("Fresh Orange Juice",   "Drinks"),
+        Map.entry("Hot Green Tea",        "Drinks"),
+        Map.entry("Hot Coffee",           "Drinks"),
+        Map.entry("Mixed Berry Smoothie", "Drinks"),
+        Map.entry("Warm Apple Cider",     "Drinks"),
+        Map.entry("Sparkling Water",      "Drinks"),
+        Map.entry("Whole Milk",           "Drinks"),
+        Map.entry("Decaf Coffee",         "Drinks"),
+        Map.entry("Chamomile Tea",        "Drinks"),
+        Map.entry("Cranberry Juice",      "Drinks"),
+        Map.entry("Apple Juice",          "Drinks"),
+        Map.entry("Hot Cocoa",            "Drinks"),
+
+        // Sides
+        Map.entry("Chicken Noodle Soup",      "Sides"),
+        Map.entry("Garden Side Salad",        "Sides"),
+        Map.entry("Vanilla Ice Cream",        "Sides"),
+        Map.entry("Apple Pie Slice",          "Sides"),
+        Map.entry("Chocolate Chip Cookies",   "Sides"),
+        Map.entry("Fresh Fruit Cup",          "Sides"),
+        Map.entry("Tomato Basil Soup",        "Sides"),
+        Map.entry("Rice Pudding",             "Sides")
+    );
+
     /** Mapping of meal name → bundled image filename (relative to REPO_RAW). */
     private static Map<String, String> buildImageMap() {
         Map<String, String> m = new HashMap<>();
@@ -84,32 +130,57 @@ public class MealImageSeeder {
         try {
             final Map<String, String> images = buildImageMap();
             final List<Meal> meals = mealRepository.findAll();
-            int patched = 0;
+            int imagesPatched = 0;
+            int periodsPatched = 0;
 
             for (Meal meal : meals) {
+                boolean dirty = false;
+
+                // ── image_url ───────────────────────────────────────────
                 final String currentUrl = meal.getImageUrl();
-                if (currentUrl != null && !currentUrl.trim().isEmpty()) {
-                    // Admin already set this — never overwrite.
-                    continue;
+                if (currentUrl == null || currentUrl.trim().isEmpty()) {
+                    final String relative = images.get(meal.getName());
+                    if (relative != null) {
+                        meal.setImageUrl(REPO_RAW + "/" + relative);
+                        imagesPatched++;
+                        dirty = true;
+                    }
                 }
-                final String relative = images.get(meal.getName());
-                if (relative == null) {
-                    // Unknown meal name — leave empty, frontend shows fallback art.
-                    continue;
+
+                // ── mealperiod ──────────────────────────────────────────
+                // If the row's mealperiod is null/blank or doesn't match a
+                // recognised value, the frontend defaults it to "All Day"
+                // and drinks/sides leak into the main tab. Backfill from
+                // the authoritative name → period map.
+                final String currentPeriod = meal.getMealperiod();
+                final String desiredPeriod = NAME_TO_PERIOD.get(meal.getName());
+                if (desiredPeriod != null) {
+                    final boolean periodMissing =
+                            currentPeriod == null || currentPeriod.trim().isEmpty();
+                    final boolean periodMismatch =
+                            currentPeriod != null && !currentPeriod.equalsIgnoreCase(desiredPeriod);
+                    if (periodMissing || periodMismatch) {
+                        meal.setMealperiod(desiredPeriod);
+                        periodsPatched++;
+                        dirty = true;
+                    }
                 }
-                meal.setImageUrl(REPO_RAW + "/" + relative);
-                patched++;
+                // dirty flag isn't used after this loop because saveAll
+                // saves the whole list — kept for readability if we later
+                // switch to per-row save() calls.
+                if (dirty) {
+                    // intentional no-op
+                }
             }
 
-            if (patched > 0) {
-                mealRepository.saveAll(meals);
-                log.info("[MealImageSeeder] Filled image_url on {} meal rows.", patched);
-            } else {
-                log.info("[MealImageSeeder] All meals already have image_url — nothing to do.");
-            }
+            mealRepository.saveAll(meals);
+            log.info(
+                "[MealImageSeeder] Backfill complete — imagesPatched={}, periodsPatched={}",
+                imagesPatched, periodsPatched
+            );
         } catch (Exception e) {
             // Never let a seeder failure crash the app — log and move on.
-            log.warn("[MealImageSeeder] Failed to backfill meal images: {}", e.getMessage());
+            log.warn("[MealImageSeeder] Failed to backfill meal data: {}", e.getMessage());
         }
     }
 }
