@@ -1034,21 +1034,24 @@ export interface CreateMealPayload {
 }
 
 export async function createMeal(payload: CreateMealPayload): Promise<any> {
-  return request<any>("/admin/menu", {
+  // Hits /menu (NOT /admin/menu) — backend gates this route to admin +
+  // kitchen roles via @PreAuthorize so kitchen staff can add meals from
+  // the kitchen dashboard without needing the admin role.
+  return request<any>("/menu", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function updateMeal(mealId: number, payload: Partial<CreateMealPayload>): Promise<any> {
-  return request<any>(`/admin/menu/${mealId}`, {
+  return request<any>(`/menu/${mealId}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 }
 
 export async function deleteMeal(mealId: number): Promise<void> {
-  return request<void>(`/admin/menu/${mealId}`, { method: "DELETE" });
+  return request<void>(`/menu/${mealId}`, { method: "DELETE" });
 }
 
 /**
