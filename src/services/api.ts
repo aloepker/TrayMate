@@ -913,6 +913,13 @@ export async function reEvaluateCoverageAlertsApi(): Promise<{ residentsEvaluate
   });
 }
 
+/** Admin-only: permanently delete an alert (hard-remove, not acknowledge). */
+export async function deleteCoverageAlertApi(alertId: number): Promise<void> {
+  await request<{ deleted: number }>(`/coverage-alerts/${alertId}`, {
+    method: "DELETE",
+  });
+}
+
 /**
  * 5) Get all orders for a given date and meal period.
  *    GET /mealOrders/search?mealOfDay=X&date=YYYY-MM-DD

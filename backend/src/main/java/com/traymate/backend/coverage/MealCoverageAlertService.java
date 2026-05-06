@@ -83,6 +83,20 @@ public class MealCoverageAlertService {
 
     // ── Admin acknowledge ──────────────────────────────────────────
 
+    /**
+     * Hard-delete an alert. Idempotent — silently no-ops when the row
+     * is already gone so concurrent admins clicking Delete don't trip
+     * a 500. Distinct from acknowledge(): this removes the row entirely
+     * rather than muting it.
+     */
+    @Transactional
+    public void deleteAlert(Integer id) {
+        if (id == null) return;
+        if (repo.existsById(id)) {
+            repo.deleteById(id);
+        }
+    }
+
     @Transactional
     public MealCoverageAlertDto acknowledge(Integer id) {
         MealCoverageAlert a = repo.findById(id)

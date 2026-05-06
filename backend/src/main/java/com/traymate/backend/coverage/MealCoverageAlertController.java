@@ -51,4 +51,17 @@ public class MealCoverageAlertController {
         int n = service.evaluateAllResidents();
         return Map.of("residentsEvaluated", n);
     }
+
+    /**
+     * Permanently remove an alert. Used when admin has handled the
+     * underlying issue (added a safe meal, fixed the dietary profile)
+     * and just wants the row gone — distinct from acknowledge which
+     * keeps the row visible but muted.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public Map<String, Object> delete(@PathVariable Integer id) {
+        service.deleteAlert(id);
+        return Map.of("deleted", id);
+    }
 }

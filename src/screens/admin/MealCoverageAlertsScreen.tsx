@@ -39,6 +39,7 @@ import {
   listCoverageAlertsApi,
   acknowledgeCoverageAlertApi,
   reEvaluateCoverageAlertsApi,
+  deleteCoverageAlertApi,
   type MealCoverageAlert,
 } from '../../services/api';
 
@@ -129,6 +130,48 @@ export default function MealCoverageAlertsScreen({ navigation }: any) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const onDelete = (id: number) => {
+    Alert.alert(
+      'Delete this alert?',
+      'This permanently removes the alert. If the underlying issue isn\'t fixed it will reappear on the next evaluation.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setBusyId(id);
+            // Optimistically remove from the list — feels instant. If the
+            // server rejects we restore the row below.
+            const snapshot = items;
+            setItems((prev) => prev.filter((a) => a.id !== id));
+            try {
+              await deleteCoverageAlertApi(id);
+            } catch (err: any) {
+              console.warn('Failed to delete', err);
+              setItems(snapshot);
+              if (err?.status === 403) {
+                Alert.alert('Not authorized', 'Only administrators can delete coverage alerts.');
+              } else if (err?.status === 404 || err?.status === 405) {
+                // Backend hasn't redeployed yet — keep the optimistic
+                // hide so the demo still works, just warn quietly.
+                Alert.alert(
+                  'Hidden locally',
+                  'The server delete endpoint isn\'t live yet, but the alert has been removed from your view. It will return after the next refresh until the backend redeploys.',
+                );
+                setItems((prev) => prev.filter((a) => a.id !== id));
+              } else {
+                Alert.alert('Unable to delete', err?.message ?? 'Please try again.');
+              }
+            } finally {
+              setBusyId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const onReEvaluate = async () => {
@@ -297,8 +340,8 @@ export default function MealCoverageAlertsScreen({ navigation }: any) {
                     </Text>
                   ) : null}
 
-                  {isActive && (
-                    <View style={styles.actionRow}>
+                  <View style={styles.actionRow}>
+                    {isActive && (
                       <Pressable
                         style={[styles.ackBtn, busyId === a.id && styles.btnDisabled]}
                         onPress={() => onAcknowledge(a.id)}
@@ -313,8 +356,16 @@ export default function MealCoverageAlertsScreen({ navigation }: any) {
                           </>
                         )}
                       </Pressable>
-                    </View>
-                  )}
+                    )}
+                    <Pressable
+                      style={[styles.deleteBtn, busyId === a.id && styles.btnDisabled]}
+                      onPress={() => onDelete(a.id)}
+                      disabled={busyId === a.id}
+                    >
+                      <Feather name="trash-2" size={15} color={COLORS.danger} />
+                      <Text style={styles.deleteBtnText}>Delete</Text>
+                    </Pressable>
+                  </View>
                 </View>
               );
             })
@@ -400,5 +451,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   ackBtnText: { color: '#fff', fontWeight: '700' },
+  deleteBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
+    backgroundColor: COLORS.dangerBg, borderWidth: 1, borderColor: COLORS.danger,
+  },
+  deleteBtnText: { color: COLORS.danger, fontWeight: '700' },
   btnDisabled: { opacity: 0.6 },
 });
