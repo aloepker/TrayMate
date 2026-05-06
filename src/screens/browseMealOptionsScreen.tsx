@@ -1845,10 +1845,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => {
-            // Same branching as the hardware back handler. Staff goes back
-            // to their dashboard; resident gets a logout confirmation.
+            // Both the in-app arrow and hardware back use the same flow:
+            // an explicit confirmation prompt. Even staff who opened the
+            // "view as resident" screen must confirm before navigating
+            // back, so a resident holding the tablet can't accidentally
+            // drop themselves into the admin dashboard with one tap.
             if (viewerRole === 'admin' || viewerRole === 'caregiver') {
-              navigation.goBack();
+              const dashLabel = viewerRole === 'admin' ? 'Admin Dashboard' : 'Caregiver Dashboard';
+              Alert.alert(
+                `Return to ${dashLabel}?`,
+                `You're viewing as a resident. Go back to the ${dashLabel.toLowerCase()}?`,
+                [
+                  { text: 'Stay Here', style: 'cancel' },
+                  { text: 'Return', onPress: () => navigation.goBack() },
+                ],
+              );
             } else {
               Alert.alert(
                 'Log Out?',
