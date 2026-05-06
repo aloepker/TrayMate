@@ -838,6 +838,10 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                         caregiverId: firstCgId,
                         caregiverName: firstCgName,
                         assignedCaregivers: caregiversArray,
+                        // Marks this navigation as "staff viewing as resident".
+                        // The browse screen reads this to switch the back-button
+                        // behaviour from "log out resident" to "return to admin".
+                        viewerRole: 'admin',
                       });
                     }}
                   >

@@ -17,6 +17,7 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  BackHandler,
 } from "react-native";
 import { StatusBar } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
@@ -59,7 +60,7 @@ import {
 import { geminiChat, getAIRecommendation } from "../services/geminiService";
 import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
-import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi } from '../services/api';
 
@@ -873,6 +874,57 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // combo, it can't fire again this app session. Cleared on Alert "Cancel"
   // (so we don't keep nagging) or on Alert "Confirm" failure (so retry works).
   const autoConfirmShownRef = useRef<Set<string>>(new Set());
+
+  // ── Hardware back button handling ─────────────────────────────────────
+  // Resident view is a "kiosk" — pressing the OS back button must NOT
+  // navigate to a previous (admin) screen. Behaviour depends on who
+  // navigated here:
+  //   • viewerRole 'admin'/'caregiver' → "Return to Dashboard?" prompt
+  //     (the explicit in-app back button still works the same way)
+  //   • no viewerRole → resident is the actual user → "Log out?" prompt
+  // Either way, we consume the event (return true) so the OS never pops
+  // the navigation stack on its own.
+  // ──────────────────────────────────────────────────────────────────────
+  const viewerRole = (route?.params as any)?.viewerRole as 'admin' | 'caregiver' | undefined;
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = (): boolean => {
+        if (viewerRole === 'admin' || viewerRole === 'caregiver') {
+          const dashLabel = viewerRole === 'admin' ? 'Admin Dashboard' : 'Caregiver Dashboard';
+          Alert.alert(
+            `Return to ${dashLabel}?`,
+            `You're viewing as a resident. Go back to the ${dashLabel.toLowerCase()}?`,
+            [
+              { text: 'Stay Here', style: 'cancel' },
+              { text: 'Return', onPress: () => navigation.goBack() },
+            ],
+          );
+        } else {
+          Alert.alert(
+            'Log Out?',
+            'Are you sure you want to log out?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Log Out',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await clearAuth();
+                  } catch { /* clearAuth may not exist on every platform — proceed anyway */ }
+                  navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
+                },
+              },
+            ],
+          );
+        }
+        // Consume the event so the OS doesn't also pop the stack.
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [viewerRole, navigation]),
+  );
 
   // Re-pick the correct tab every time the screen comes into focus (handles
   // the case where the screen stayed mounted in the background while time passed).
@@ -1792,7 +1844,29 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       {/* Back Button, Title & Header Actions */}
       <View style={styles.titleRow}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            // Same branching as the hardware back handler. Staff goes back
+            // to their dashboard; resident gets a logout confirmation.
+            if (viewerRole === 'admin' || viewerRole === 'caregiver') {
+              navigation.goBack();
+            } else {
+              Alert.alert(
+                'Log Out?',
+                'Are you sure you want to log out?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Log Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try { await clearAuth(); } catch {}
+                      navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
+                    },
+                  },
+                ],
+              );
+            }
+          }}
           style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
           <View style={styles.backArrow}>

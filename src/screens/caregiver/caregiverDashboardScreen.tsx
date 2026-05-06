@@ -428,6 +428,9 @@ export default function CaregiverDashboardScreen({
       residentName: resident.name,
       dietaryRestrictions: resident.dietaryRestrictions ?? [],
       foodAllergies: resident.foodAllergies ?? [],
+      // Marks this as "staff viewing as resident" — back button returns
+      // to caregiver dashboard instead of logging out.
+      viewerRole: 'caregiver',
     });
   };
 
