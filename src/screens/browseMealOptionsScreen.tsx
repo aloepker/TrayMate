@@ -863,8 +863,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
   const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; isNow: boolean; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
-  const [autoPlaced, setAutoPlaced] = useState(false);            // whether we already auto-placed for this period
-  const autoPlaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the resident manually placed via the auto-suggest banner —
+  // used to suppress the banner re-rendering after they've placed once this
+  // period (since `autoSuggestDismissed` already does this, this is mostly
+  // legacy but harmless to keep for the manual Place Order button below).
+  const [, setAutoPlaced] = useState(false);
 
   // Re-pick the correct tab every time the screen comes into focus (handles
   // the case where the screen stayed mounted in the background while time passed).
@@ -1352,84 +1355,16 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime.getHours(), currentTime.getMinutes()]);
 
-  // Auto-place the suggested meal when the meal period starts and resident hasn't ordered.
-  // When isNow is true (we're inside the period) and 15 min have passed without a manual order,
-  // auto-place the suggestion and notify the assigned caregiver.
-  useEffect(() => {
-    if (!autoSuggest || !autoSuggest.isNow || autoPlaced || !residentId) return;
-
-    // Check if resident already ordered for this period
-    const resOrders = getOrdersForResident(residentId);
-    const hasOrder = resOrders.some((o) =>
-      o.items.some((i) => i.meal_period === autoSuggest.period)
-    );
-    if (hasOrder) return;
-
-    // Wait 15 minutes into the meal period before auto-placing
-    // MEAL_SCHEDULE[period].end - minsUntil = current time within period
-    // We wait until 15 min after period start
-    const periodSched = MEAL_SCHEDULE.find(s => s.label === autoSuggest.period);
-    if (!periodSched) return;
-    const now = currentTime.getHours() * 60 + currentTime.getMinutes();
-    const minsSinceStart = now - periodSched.start;
-    const AUTO_PLACE_DELAY = 15; // minutes after period starts
-
-    if (minsSinceStart >= AUTO_PLACE_DELAY) {
-      // Auto-place now
-      // Capture snapshot of autoSuggest now — state will be nulled before Alert fires
-      const snapshot = autoSuggest;
-      const doAutoPlace = async () => {
-        try {
-          // Add items to cart then place order
-          const itemsToOrder = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
-          clearCart();
-          for (const item of itemsToOrder) {
-            addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
-          }
-          // Small delay to let state update
-          await new Promise<void>(r => setTimeout(r, 100));
-          const result = await placeOrder(residentId, snapshot.period);
-          if (result.order) {
-            // Clear suggest state BEFORE showing alert so tapping OK has clean state
-            setAutoPlaced(true);
-            setAutoSuggestDismissed(true);
-            setAutoSuggest(null);
-
-            // Notify assigned caregiver(s) via messaging
-            const rName = residentName || 'A resident';
-            const rRoom = route?.params?.roomNumber || '';
-            const itemNames = itemsToOrder.map(i => i.name).join(', ');
-            const msgBody = `Auto-order placed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${snapshot.period}: ${itemNames}. Please review and accept or cancel if needed.`;
-
-            for (const cg of assignedCaregivers) {
-              try {
-                await sendApiMessage(cg.caregiverId, msgBody);
-              } catch { /* non-blocking */ }
-            }
-
-            Alert.alert(
-              'Order Auto-Placed',
-              `Your ${snapshot.period} has been placed automatically based on your favorites: ${itemNames}.\n\nYour caregiver has been notified.`,
-              [{ text: 'OK', onPress: () => {} }]
-            );
-          }
-        } catch (e) {
-          console.warn('[AutoPlace] Failed:', e);
-        }
-      };
-      doAutoPlace();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSuggest, autoPlaced, residentId, currentTime.getHours(), currentTime.getMinutes()]);
-
-  // Reset auto-placed flag when the meal period changes
-  useEffect(() => {
-    const next = getNextMealPeriod(currentTime);
-    if (next && !next.isNow) {
-      setAutoPlaced(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTime.getHours(), currentTime.getMinutes()]);
+  // ── Auto-PLACE removed entirely ───────────────────────────────────
+  // The auto-place mechanism (firing 15 min into a meal period) was
+  // creating cluster orders due to:
+  //   1. Effect re-running every minute via currentTime.getMinutes() dep
+  //   2. Cold-start network requests >60s racing the next tick
+  //   3. The reset effect bouncing autoPlaced back to false on cross-period
+  // Auto-SUGGEST (the visible banner) is the correct pattern: the resident
+  // (or caregiver) sees the suggestion and taps "Place Order" themselves.
+  // Care facilities shouldn't be silently placing orders for residents.
+  // ──────────────────────────────────────────────────────────────────
 
   // Handle refresh
   const onRefresh = useCallback(async () => {

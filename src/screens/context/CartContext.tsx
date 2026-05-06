@@ -270,14 +270,28 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         date: entry.order.date,
       }));
 
-      // Merge: keep local-only orders (no backendId) + replace backend orders
-      // Use String() compare to handle numeric vs string ID mismatch
-      setOrders((prev) => [
-        ...prev.filter((o) => String(o.residentId) !== String(userId)),
-        ...backendOrders,
-        // Preserve local-only orders for this resident that have no backend record yet
-        ...prev.filter((o) => String(o.residentId) === String(userId) && !o.backendId),
-      ]);
+      // Merge: keep local-only orders (no backendId) + replace backend orders.
+      // De-dupe by backendId so the same backend order can never appear twice
+      // even if fetchOrderHistory races itself (focus events can fire faster
+      // than network round-trips, and cluster-orders from the old auto-place
+      // bug also produced visible duplicates here).
+      setOrders((prev) => {
+        const otherResidents = prev.filter((o) => String(o.residentId) !== String(userId));
+        const localOnlyForThisResident = prev.filter(
+          (o) => String(o.residentId) === String(userId) && !o.backendId,
+        );
+        // Map keyed by backendId so duplicates collapse — last write wins
+        // (which is fine; the backend payload is the source of truth).
+        const seen = new Map<string, typeof backendOrders[number]>();
+        for (const o of backendOrders) {
+          if (o.backendId != null) seen.set(String(o.backendId), o);
+        }
+        return [
+          ...otherResidents,
+          ...Array.from(seen.values()),
+          ...localOnlyForThisResident,
+        ];
+      });
     } catch (err: any) {
       console.warn('Failed to fetch order history:', err?.message);
     }
