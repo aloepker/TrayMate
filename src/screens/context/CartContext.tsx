@@ -98,11 +98,28 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   /** Determine the dominant meal period from cart items */
   const deriveMealOfDay = (): string => {
     const periods = cart.map((m) => m.meal_period).filter((p) => p !== 'Drinks' && p !== 'Sides');
-    if (periods.length === 0) return 'Lunch'; // default
-    // Most frequent period wins
-    const counts: Record<string, number> = {};
-    periods.forEach((p) => { counts[p] = (counts[p] || 0) + 1; });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    if (periods.length > 0) {
+      // Most frequent main-meal period wins
+      const counts: Record<string, number> = {};
+      periods.forEach((p) => { counts[p] = (counts[p] || 0) + 1; });
+      return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+    // No main meal in the cart — happens when the main is unavailable/
+    // restricted and the resident only added a drink and/or side. Fall
+    // back to the actual clock time so the order gets filed under the
+    // current meal window (and, importantly, NOT silently shoved into
+    // 'Lunch' at 8am or 7pm).
+    const mins = new Date().getHours() * 60 + new Date().getMinutes();
+    if (mins >= 7 * 60  && mins <= 10 * 60) return 'Breakfast';
+    if (mins >= 11 * 60 && mins <= 14 * 60) return 'Lunch';
+    if (mins >= 16 * 60 && mins <= 19 * 60) return 'Dinner';
+    // Outside any serving window — pick the next upcoming period so the
+    // order is queued for the right tray run rather than landing in the
+    // wrong bucket.
+    if (mins < 7 * 60)  return 'Breakfast';
+    if (mins < 11 * 60) return 'Lunch';
+    if (mins < 16 * 60) return 'Dinner';
+    return 'Breakfast'; // after 7pm → tomorrow's breakfast
   };
 
   /** Build a local Order object from cart state */
