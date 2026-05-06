@@ -875,55 +875,36 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // (so we don't keep nagging) or on Alert "Confirm" failure (so retry works).
   const autoConfirmShownRef = useRef<Set<string>>(new Set());
 
-  // ── Hardware back button handling ─────────────────────────────────────
-  // Resident view is a "kiosk" — pressing the OS back button must NOT
-  // navigate to a previous (admin) screen. Behaviour depends on who
-  // navigated here:
-  //   • viewerRole 'admin'/'caregiver' → "Return to Dashboard?" prompt
-  //     (the explicit in-app back button still works the same way)
-  //   • no viewerRole → resident is the actual user → "Log out?" prompt
-  // Either way, we consume the event (return true) so the OS never pops
-  // the navigation stack on its own.
+  // ── Hardware back button → always log out ────────────────────────────
+  // The iPad lives in the resident's room. Even when admin opened the
+  // "view as resident" screen, pressing back means we're done with the
+  // session — clear auth so the next person at the tablet has to log in
+  // again. Never silently navigate back into a privileged dashboard.
   // ──────────────────────────────────────────────────────────────────────
-  const viewerRole = (route?.params as any)?.viewerRole as 'admin' | 'caregiver' | undefined;
   useFocusEffect(
     useCallback(() => {
       const onBackPress = (): boolean => {
-        if (viewerRole === 'admin' || viewerRole === 'caregiver') {
-          const dashLabel = viewerRole === 'admin' ? 'Admin Dashboard' : 'Caregiver Dashboard';
-          Alert.alert(
-            `Return to ${dashLabel}?`,
-            `You're viewing as a resident. Go back to the ${dashLabel.toLowerCase()}?`,
-            [
-              { text: 'Stay Here', style: 'cancel' },
-              { text: 'Return', onPress: () => navigation.goBack() },
-            ],
-          );
-        } else {
-          Alert.alert(
-            'Log Out?',
-            'Are you sure you want to log out?',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Log Out',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    await clearAuth();
-                  } catch { /* clearAuth may not exist on every platform — proceed anyway */ }
-                  navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-                },
+        Alert.alert(
+          'Log Out?',
+          'This will end the current session. Continue?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Log Out',
+              style: 'destructive',
+              onPress: async () => {
+                try { await clearAuth(); } catch { /* proceed regardless */ }
+                navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
               },
-            ],
-          );
-        }
+            },
+          ],
+        );
         // Consume the event so the OS doesn't also pop the stack.
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
-    }, [viewerRole, navigation]),
+    }, [navigation]),
   );
 
   // Re-pick the correct tab every time the screen comes into focus (handles
@@ -1845,38 +1826,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => {
-            // Both the in-app arrow and hardware back use the same flow:
-            // an explicit confirmation prompt. Even staff who opened the
-            // "view as resident" screen must confirm before navigating
-            // back, so a resident holding the tablet can't accidentally
-            // drop themselves into the admin dashboard with one tap.
-            if (viewerRole === 'admin' || viewerRole === 'caregiver') {
-              const dashLabel = viewerRole === 'admin' ? 'Admin Dashboard' : 'Caregiver Dashboard';
-              Alert.alert(
-                `Return to ${dashLabel}?`,
-                `You're viewing as a resident. Go back to the ${dashLabel.toLowerCase()}?`,
-                [
-                  { text: 'Stay Here', style: 'cancel' },
-                  { text: 'Return', onPress: () => navigation.goBack() },
-                ],
-              );
-            } else {
-              Alert.alert(
-                'Log Out?',
-                'Are you sure you want to log out?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Log Out',
-                    style: 'destructive',
-                    onPress: async () => {
-                      try { await clearAuth(); } catch {}
-                      navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-                    },
+            // Always log out — iPads stay in resident rooms, so back
+            // means "end this session", never "return to admin".
+            Alert.alert(
+              'Log Out?',
+              'This will end the current session. Continue?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Log Out',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try { await clearAuth(); } catch {}
+                    navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
                   },
-                ],
-              );
-            }
+                },
+              ],
+            );
           }}
           style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
