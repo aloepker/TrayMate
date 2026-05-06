@@ -41,9 +41,11 @@ import {
   createKitchenStaff,
   deleteEntity,
   getChats,
+  sendMessage,
   getMe,
   listCoverageAlertsApi,
 } from "../../services/api";
+import { decodePendingAutoOrder, confirmPendingAutoOrder } from "../../services/autoOrderRequest";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
 
@@ -88,6 +90,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }, []),
   );
 
+  // Tracks the unread count from the previous poll so we only pop the
+  // auto-order Alert once per *new* incoming message — not every 30s.
+  const lastUnreadRef = useRef<number | null>(null);
+  // Locks alert presentation per messageId so two near-simultaneous polls
+  // can't double-pop the same approval dialog.
+  const handledAlertsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const checkUnread = async () => {
       // Re-check after every await: a poll started before the user
@@ -102,12 +111,64 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
         const myId = String(me.id);
         // Exclude self-messages — they have no real partner thread the
         // modal can mark read, so they would leave the badge stuck at "1".
-        const count = chats.filter(
+        const unreadChats = chats.filter(
           c => !c.isRead
             && String(c.receiverId) === myId
             && String(c.senderId)   !== myId
-        ).length;
+        );
+        const count = unreadChats.length;
         setMsgUnread(count);
+
+        // If we have *new* unread messages since the last poll, scan them
+        // for pending auto-order requests and surface the Approve/Deny
+        // Alert. Caregivers do the same on their dashboard — both can act.
+        if (lastUnreadRef.current !== null && count > lastUnreadRef.current) {
+          const newest = [...unreadChats]
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+          if (newest && !handledAlertsRef.current.has(String(newest.id))) {
+            const pending = decodePendingAutoOrder(newest.content || '');
+            if (pending) {
+              handledAlertsRef.current.add(String(newest.id));
+              const itemList = pending.items.map((i) => `• ${i.name}`).join('\n');
+              Alert.alert(
+                'Auto-Order Approval Needed',
+                `${pending.residentName} hasn't ordered ${pending.period} yet.\n\n${itemList}\n\nApprove to place this order, or deny to skip.`,
+                [
+                  {
+                    text: 'Deny',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await sendMessage(
+                          newest.senderId,
+                          `Your ${pending.period} auto-order was reviewed and not placed. Please order manually if you'd still like a meal.`,
+                        );
+                      } catch { /* ignore */ }
+                    },
+                  },
+                  {
+                    text: 'Approve',
+                    onPress: async () => {
+                      try {
+                        await confirmPendingAutoOrder(pending);
+                        await sendMessage(
+                          newest.senderId,
+                          `Your ${pending.period} order has been approved and placed: ${pending.items.map((i) => i.name).join(', ')}.`,
+                        );
+                        Alert.alert('Order Placed', `${pending.residentName} — ${pending.period} confirmed.`);
+                      } catch (e: any) {
+                        // Failure → release the per-message lock so retry works
+                        handledAlertsRef.current.delete(String(newest.id));
+                        Alert.alert('Could not place order', e?.message ?? 'Please try again.');
+                      }
+                    },
+                  },
+                ],
+              );
+            }
+          }
+        }
+        lastUnreadRef.current = count;
       } catch { /* ignore */ }
     };
     checkUnread();

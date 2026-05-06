@@ -29,6 +29,7 @@ import {
 import { useKitchenMessages } from "../context/KitchenMessageContext";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { getChats, getMe, sendMessage } from "../../services/api";
+import { decodePendingAutoOrder, confirmPendingAutoOrder } from "../../services/autoOrderRequest";
 import InAppNotificationBanner from "../components/InAppNotificationBanner";
 import { clearAuth, getCaregiverResidentList } from "../../services/storage";
 
@@ -146,36 +147,60 @@ export default function CaregiverDashboardScreen({
           )[0];
           if (newest) {
             const content = newest.content || "";
-            const isAutoOrder = content.includes("Auto-order placed") || content.includes("placed an order");
+            // Try the new structured pending-auto-order format first.
+            const pending = decodePendingAutoOrder(content);
 
-            if (isAutoOrder) {
-              // Show accept/deny alert for auto-placed orders
+            if (pending) {
+              // Approve actually places the order via the backend on the
+              // resident's behalf — no manual navigation required.
+              const itemList = pending.items.map((i) => `• ${i.name}`).join('\n');
+              Alert.alert(
+                'Auto-Order Approval Needed',
+                `${pending.residentName} hasn't ordered ${pending.period} yet.\n\n${itemList}\n\nApprove to place this order, or deny to skip.`,
+                [
+                  {
+                    text: 'Deny',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await sendMessage(
+                          newest.senderId,
+                          `Your ${pending.period} auto-order was reviewed and not placed. Please order manually if you'd still like a meal.`,
+                        );
+                      } catch { /* ignore */ }
+                    },
+                  },
+                  {
+                    text: 'Approve',
+                    style: 'default',
+                    onPress: async () => {
+                      try {
+                        await confirmPendingAutoOrder(pending);
+                        await sendMessage(
+                          newest.senderId,
+                          `Your ${pending.period} order has been approved and placed: ${pending.items.map((i) => i.name).join(', ')}.`,
+                        );
+                        Alert.alert('Order Placed', `${pending.residentName} — ${pending.period} confirmed.`);
+                      } catch (e: any) {
+                        Alert.alert('Could not place order', e?.message ?? 'Please try again.');
+                      }
+                    },
+                  },
+                ],
+              );
+            } else if (content.includes("Auto-order placed") || content.includes("placed an order")) {
+              // Legacy "already placed" notification — keep simple ack flow
               Alert.alert(
                 "New Order",
                 `${newest.senderName || "A resident"}: ${content}`,
                 [
-                  {
-                    text: "Deny",
-                    style: "destructive",
-                    onPress: async () => {
-                      try {
-                        // Reply to resident that order was denied
-                        await sendMessage(newest.senderId, "Your auto-placed order has been reviewed and cancelled by your caregiver. Please place a new order manually.");
-                        Alert.alert("Order Denied", "The resident has been notified.");
-                      } catch { /* ignore */ }
-                    },
-                  },
-                  {
-                    text: "Accept",
-                    style: "default",
-                    onPress: async () => {
-                      try {
-                        await sendMessage(newest.senderId, "Your order has been confirmed by your caregiver!");
-                        Alert.alert("Order Accepted", "The resident has been notified.");
-                      } catch { /* ignore */ }
-                    },
-                  },
-                ]
+                  { text: "Deny", style: "destructive", onPress: async () => {
+                    try { await sendMessage(newest.senderId, "Your auto-placed order has been reviewed and cancelled by your caregiver. Please place a new order manually."); } catch {}
+                  }},
+                  { text: "Accept", onPress: async () => {
+                    try { await sendMessage(newest.senderId, "Your order has been confirmed by your caregiver!"); } catch {}
+                  }},
+                ],
               );
             } else {
               setBannerSender(newest.senderName || "A resident");

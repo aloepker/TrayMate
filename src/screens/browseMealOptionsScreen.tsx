@@ -63,6 +63,7 @@ import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi } from '../services/api';
+import { broadcastPendingAutoOrder } from '../services/autoOrderRequest';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -1439,6 +1440,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const items = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
     const itemNames = items.map((i) => i.name).join(', ');
     const itemBullets = items.map((i) => `• ${i.name}`).join('\n');
+
+    // Broadcast a pending-order alert to all assigned caregivers + every
+    // admin user so they can confirm/deny from their dashboards. The
+    // resident's local Alert below is the third confirmation path.
+    broadcastPendingAutoOrder(
+      {
+        residentId,
+        residentName: residentName || 'Resident',
+        period: snapshot.period,
+        date: today,
+        items: items.map((i) => ({ id: i.id, name: i.name, mealPeriod: i.meal_period })),
+      },
+      assignedCaregivers.map((cg) => cg.caregiverId),
+    ).catch(() => { /* non-blocking — local Alert still works */ });
 
     Alert.alert(
       'Confirm Auto-Order',
