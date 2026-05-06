@@ -1663,7 +1663,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               <View key={item.order.id} style={s.card}>
                 {/* ── Period indicator strip on left ── */}
                 <View style={[s.cardPeriodStrip, { backgroundColor: pa.color }]} />
-hjvjh
+
                 {/* ── Top row: room + resident + period + status ── */}
                 <View style={s.cardTop}>
                   {/* Prominent ROOM badge — source of truth is backend admin
