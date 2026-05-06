@@ -17,7 +17,9 @@ import {
   PermissionsAndroid,
   Animated,
   Easing,
+  BackHandler,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import Feather from "react-native-vector-icons/Feather";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
@@ -1006,6 +1008,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       }},
     ]);
   };
+
+  // Hardware back on dashboard → reuse the logout confirmation flow.
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = (): boolean => { handleLogout(); return true; };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
 
   // ── fetch ALL orders for today (every meal period) ──
   const fetchAllOrders = async () => {

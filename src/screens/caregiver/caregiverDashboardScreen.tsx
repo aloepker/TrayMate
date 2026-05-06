@@ -1,6 +1,6 @@
 // src/screens/caregiver/caregiverDashboardScreen.tsx
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,9 @@ import {
   SafeAreaView,
   StatusBar,
   useWindowDimensions,
+  BackHandler,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import type { StyleProp, ViewStyle } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import {
@@ -438,6 +440,22 @@ export default function CaregiverDashboardScreen({
     await clearAuth();
     navigation.replace("Login");
   };
+
+  // Hardware back on dashboard → confirm logout (don't pop stack to Login).
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = (): boolean => {
+        Alert.alert('Log Out?', 'Are you sure you want to log out?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log Out', style: 'destructive', onPress: handleLogout },
+        ]);
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
 
   return (
     <SafeAreaView style={styles.page}>
