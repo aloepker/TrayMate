@@ -1520,8 +1520,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                     <View style={s.coverageResidentRow}>
                       {alerts.map((alert) => {
                         const isActive = alert.status === "ACTIVE";
-                        const residentLabel = alert.residentName || `Resident #${alert.residentId}`;
-                        const roomLabel = alert.residentRoom ? `Room ${alert.residentRoom}` : "Room unknown";
+                        // Privacy: show room only, never the resident's name.
+                        const roomLabel = alert.residentRoom
+                          ? `Room ${alert.residentRoom}`
+                          : "Room —";
                         return (
                           <View
                             key={alert.id}
@@ -1533,7 +1535,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                             <Feather
                               name={isActive ? "alert-circle" : "eye"}
                               size={12}
-                              color={isActive ? C.danger : C.warning}
+                              color={isActive ? C.danger : C.textMuted}
                             />
                             <Text
                               style={[
@@ -1541,9 +1543,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                                 isActive ? s.coverageResidentTextActive : s.coverageResidentTextAcked,
                               ]}
                             >
-                              {residentLabel}
+                              {roomLabel}
                             </Text>
-                            <Text style={s.coverageResidentRoom}>{roomLabel}</Text>
                           </View>
                         );
                       })}
@@ -1636,7 +1637,17 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const dietary   = resident?.dietaryRestrictions ?? [];
             const medical   = resident?.medicalConditions ?? [];
             const residentDisplayName = resident?.name?.trim() || "";
-            const roomDisplay = resident?.room?.trim() || "—";
+            // Room display falls back to the coverage-alert payload when
+            // the resident cache hasn't hydrated this user yet — alerts
+            // arrive with residentRoom embedded, so they fill the gap
+            // until /admin/residents finishes loading.
+            const coverageAlertForUser = coverageAlerts.find(
+              (a) => String(a.residentId) === String(item.order.userId),
+            );
+            const roomDisplay =
+              resident?.room?.trim() ||
+              coverageAlertForUser?.residentRoom?.trim() ||
+              "—";
             const initials  = (resident?.name ?? "?").slice(0, 2).toUpperCase();
             const orderPeriod = item.order.mealOfDay || "Breakfast";
             const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
@@ -2456,10 +2467,12 @@ const s = StyleSheet.create({
   },
 
   coverageBanner: {
-    backgroundColor: "#FFF9ED",
-    borderRadius: 18,
+    backgroundColor: C.surface,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#F6D78B",
+    borderColor: C.border,
+    borderLeftWidth: 4,
+    borderLeftColor: C.accent,
     padding: 16,
     marginBottom: 20,
     gap: 14,
@@ -2477,22 +2490,22 @@ const s = StyleSheet.create({
     gap: 12,
   },
   coverageBannerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#FEF3C7",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.primaryLight,
     alignItems: "center",
     justifyContent: "center",
   },
   coverageBannerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "800",
     color: C.text,
   },
   coverageBannerSub: {
     fontSize: 13,
     lineHeight: 18,
-    color: "#7C5A12",
+    color: C.textMuted,
     marginTop: 3,
   },
   coverageBannerCta: {
@@ -2501,15 +2514,15 @@ const s = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    borderRadius: 12,
-    backgroundColor: "#FFF3D6",
+    borderRadius: 10,
+    backgroundColor: C.primaryLight,
     borderWidth: 1,
-    borderColor: "#F0C86B",
+    borderColor: C.border,
   },
   coverageBannerCtaText: {
     fontSize: 13,
     fontWeight: "700",
-    color: C.warning,
+    color: C.primary,
   },
   coverageGroup: {
     gap: 10,
@@ -2547,28 +2560,29 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 7,
+    backgroundColor: C.background,
   },
   coverageResidentChipActive: {
-    backgroundColor: C.dangerBg,
-    borderColor: "#F7B5B5",
+    borderColor: C.danger,
   },
   coverageResidentChipAcked: {
-    backgroundColor: "#FFF3D6",
-    borderColor: "#F0C86B",
+    borderColor: C.warmBorder,
+    opacity: 0.7,
   },
   coverageResidentText: {
     fontSize: 13,
     fontWeight: "700",
+    color: C.text,
   },
   coverageResidentTextActive: {
-    color: "#8B1E1E",
+    color: C.danger,
   },
   coverageResidentTextAcked: {
-    color: "#8A5A00",
+    color: C.textMuted,
   },
   coverageResidentRoom: {
     fontSize: 12,
