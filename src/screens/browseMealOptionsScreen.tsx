@@ -868,6 +868,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // period (since `autoSuggestDismissed` already does this, this is mostly
   // legacy but harmless to keep for the manual Place Order button below).
   const [, setAutoPlaced] = useState(false);
+  // In-session lock for the auto-confirm Alert. Keyed by
+  // `${residentId}|${period}|${YYYY-MM-DD}` — once an alert fires for that
+  // combo, it can't fire again this app session. Cleared on Alert "Cancel"
+  // (so we don't keep nagging) or on Alert "Confirm" failure (so retry works).
+  const autoConfirmShownRef = useRef<Set<string>>(new Set());
 
   // Re-pick the correct tab every time the screen comes into focus (handles
   // the case where the screen stayed mounted in the background while time passed).
@@ -1355,16 +1360,117 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime.getHours(), currentTime.getMinutes()]);
 
-  // ── Auto-PLACE removed entirely ───────────────────────────────────
-  // The auto-place mechanism (firing 15 min into a meal period) was
-  // creating cluster orders due to:
-  //   1. Effect re-running every minute via currentTime.getMinutes() dep
-  //   2. Cold-start network requests >60s racing the next tick
-  //   3. The reset effect bouncing autoPlaced back to false on cross-period
-  // Auto-SUGGEST (the visible banner) is the correct pattern: the resident
-  // (or caregiver) sees the suggestion and taps "Place Order" themselves.
-  // Care facilities shouldn't be silently placing orders for residents.
-  // ──────────────────────────────────────────────────────────────────
+  // ── Auto-confirm prompt (replaces the old silent auto-place) ─────────
+  // 15 minutes into the meal period, if the resident still hasn't ordered,
+  // pop a confirmation Alert. Admin/caregiver (or whoever is using the
+  // tablet) must tap "Confirm & Place Order" — no silent ordering, ever.
+  //
+  // Multi-layer guard against the cluster-order bug that killed v1:
+  //   1. autoConfirmShownRef (in-session): once the alert fires, the same
+  //      (residentId, period, date) key is locked for this app session, so
+  //      the minute-tick can't re-fire it.
+  //   2. hasOrderForPeriod check: if any order already exists for this
+  //      period, we skip — handles app-restart case where someone already
+  //      placed.
+  //   3. Single placeOrder call gated behind the user's tap, not state.
+  // ─────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!autoSuggest || !autoSuggest.isNow || !residentId) return;
+    if (autoSuggestDismissed) return;
+
+    // Skip if resident already has an order for this period (covers
+    // restart / cluster-deletion scenarios)
+    const resOrders = getOrdersForResident(residentId);
+    const hasOrderForPeriod = resOrders.some((o) =>
+      o.items.some((i) => i.meal_period === autoSuggest.period),
+    );
+    if (hasOrderForPeriod) return;
+
+    // 15 minutes into the period
+    const periodSched = MEAL_SCHEDULE.find((s) => s.label === autoSuggest.period);
+    if (!periodSched) return;
+    const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+    const minsSinceStart = nowMins - periodSched.start;
+    const AUTO_CONFIRM_DELAY = 15;
+    if (minsSinceStart < AUTO_CONFIRM_DELAY) return;
+
+    // In-session lock — once shown, do not re-show this session for the
+    // same (resident, period, date) combo, no matter how many minute
+    // ticks fire.
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `${residentId}|${autoSuggest.period}|${today}`;
+    if (autoConfirmShownRef.current.has(key)) return;
+    autoConfirmShownRef.current.add(key);
+
+    const snapshot = autoSuggest;
+    const items = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
+    const itemNames = items.map((i) => i.name).join(', ');
+    const itemBullets = items.map((i) => `• ${i.name}`).join('\n');
+
+    Alert.alert(
+      'Confirm Auto-Order',
+      `${residentName || 'Resident'} hasn't ordered ${snapshot.period} yet.\n\n${itemBullets}\n\nAdmin or caregiver approval required to place this order.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          // No state change — autoConfirmShownRef already locks the alert
+          // for this session. Banner stays visible so manual placement is
+          // still possible. User can dismiss the banner with its X button.
+          onPress: () => {},
+        },
+        {
+          text: 'Confirm & Place',
+          onPress: async () => {
+            try {
+              clearCart();
+              for (const item of items) {
+                addToCart({
+                  id: Number(item.id),
+                  name: item.name,
+                  meal_period: item.meal_period as any,
+                  description: item.description,
+                  kcal: item.kcal,
+                  sodium_mg: item.sodium_mg,
+                  protein_g: item.protein_g,
+                  tags: item.tags,
+                });
+              }
+              await new Promise<void>((r) => setTimeout(r, 100));
+              const result = await placeOrder(residentId, snapshot.period);
+              if (result.order) {
+                setAutoSuggestDismissed(true);
+                setAutoSuggest(null);
+
+                // Notify caregivers
+                const rName = residentName || 'A resident';
+                const rRoom = route?.params?.roomNumber || '';
+                const msgBody = `Auto-order confirmed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${snapshot.period}: ${itemNames}.`;
+                for (const cg of assignedCaregivers) {
+                  try {
+                    await sendApiMessage(cg.caregiverId, msgBody);
+                  } catch { /* non-blocking */ }
+                }
+
+                Alert.alert('Order Placed', `${snapshot.period}: ${itemNames}`, [{ text: 'OK' }]);
+              } else {
+                // Backend rejected — release the in-session lock so the
+                // user can try again on the next minute tick.
+                autoConfirmShownRef.current.delete(key);
+                Alert.alert('Order Failed', 'The order could not be placed. Please try again or order manually.');
+              }
+            } catch (e: any) {
+              autoConfirmShownRef.current.delete(key);
+              console.warn('[AutoConfirm] placeOrder failed:', e?.message ?? e);
+              Alert.alert('Order Failed', e?.message ?? 'Network error. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: false },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSuggest, autoSuggestDismissed, residentId, currentTime.getHours(), currentTime.getMinutes()]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
