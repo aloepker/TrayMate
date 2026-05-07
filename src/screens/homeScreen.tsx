@@ -306,7 +306,7 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Feather name="message-circle" size={24} color="#FFFFFF" />
             </View>
             <View style={styles.actionTextBlock}>
-              <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.grannyGBT}</Text>
+              <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.grannyBT}</Text>
               <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.aiMealAssistant}</Text>
             </View>
             <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>

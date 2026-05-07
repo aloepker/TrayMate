@@ -290,7 +290,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
 
     if (service.isConfigured()) {
       // Pass override data for API-sourced residents not in the local database.
-      // Also fetch the resident's "usual order" so GrannyGBT can personalise.
+      // Also fetch the resident's "usual order" so Granny BT can personalise.
       (async () => {
         let favoriteMealIds: number[] = [];
         try {
@@ -475,7 +475,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <View style={styles.headerTitleRow}>
-            <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.grannyGBT}</Text>
+            <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.grannyBT}</Text>
             <View style={[styles.aiBadge, aiMode === 'ai' ? styles.aiBadgeOn : aiMode === 'offline' ? styles.aiBadgeOff : styles.aiBadgeConnecting]}>
               <Text style={[styles.aiBadgeText, { fontSize: scaled(11) }]}>
                 {aiMode === 'ai' ? 'AI' : aiMode === 'offline' ? 'Offline' : '...'}
@@ -505,7 +505,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
                 <View style={styles.assistantAvatar}>
                   <Image source={require('../styles/pictures/grandma.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
                 </View>
-                <Text style={[styles.assistantLabel, { fontSize: scaled(14) }]}>{t.grannyGBT}</Text>
+                <Text style={[styles.assistantLabel, { fontSize: scaled(14) }]}>{t.grannyBT}</Text>
               </View>
             )}
             <View
@@ -544,7 +544,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
               <View style={styles.assistantAvatar}>
                 <Image source={require('../styles/pictures/grandma.png')} style={{ width: 22, height: 22 }} resizeMode="contain" />
               </View>
-              <Text style={[styles.assistantLabel, { fontSize: scaled(14) }]}>{t.grannyGBT}</Text>
+              <Text style={[styles.assistantLabel, { fontSize: scaled(14) }]}>{t.grannyBT}</Text>
             </View>
             <View style={[styles.messageBubble, styles.assistantBubble]}>
               <Text style={[styles.typingText, { fontSize: scaled(16) }]}>{t.thinking}</Text>

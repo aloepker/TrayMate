@@ -385,7 +385,7 @@ const AIAssistantChat = ({
   useEffect(() => {
     if (visible && geminiChat.isConfigured()) {
       const resident = ResidentService.getResidentById(residentId);
-      // Pull the resident's usual-order list from the server so GrannyGBT
+      // Pull the resident's usual-order list from the server so Granny BT
       // can personalise recommendations. Fail silent — the rest of the
       // prompt still works without it.
       (async () => {
@@ -401,7 +401,7 @@ const AIAssistantChat = ({
         // where the model fallback chain handles outages.
         setAiAvailable(true);
         geminiChat.initialize(residentId, language, override, favoriteMealIds)
-          .catch((err) => console.warn('[GrannyGBT] init issue, continuing optimistically:', err?.message ?? err));
+          .catch((err) => console.warn('[Granny BT] init issue, continuing optimistically:', err?.message ?? err));
       })();
     }
   }, [visible, residentId, language, residentName, dietaryRestrictions, foodAllergies, medicalConditions]);
@@ -595,7 +595,7 @@ const AIAssistantChat = ({
             </View>
             <View style={chatStyles.headerText}>
               <View style={chatStyles.headerTitleRow}>
-                <Text style={[chatStyles.headerTitle, { fontSize: scaled(19) }]}>{t.grannyGBT}</Text>
+                <Text style={[chatStyles.headerTitle, { fontSize: scaled(19) }]}>{t.grannyBT}</Text>
                 <View style={[chatStyles.statusPill, aiAvailable ? chatStyles.aiOn : chatStyles.aiOff]}>
                   <Text style={[chatStyles.statusText, { fontSize: scaled(11) }]}>
                     {aiAvailable ? '✦ AI' : '○ Offline'}
@@ -1054,7 +1054,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       }
 
       // Filter out meals that are unsafe for this resident — SAME safety source
-      // of truth that drives the cart gate and GrannyGBT recommendation.
+      // of truth that drives the cart gate and Granny BT recommendation.
       // Works for both local and backend residents by building a SafetyResident.
       const resId = residentId || ResidentService.getDefaultResident().id;
       const resident = ResidentService.getResidentById(resId);
@@ -1961,7 +1961,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         {/* Recommendation row */}
         <View>
           <Text style={[styles.bottomCardLabel, { fontSize: scaled(13) }]}>
-            GrannyGBT · {residentName}
+            Granny BT · {residentName}
           </Text>
           {recLoading ? (
             <ActivityIndicator color="#4A5C2A" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />

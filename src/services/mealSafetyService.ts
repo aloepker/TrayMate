@@ -3,7 +3,7 @@
  * ------------------------------------------------------------------
  * Single source of truth for deciding whether a meal is safe for a
  * resident given their allergies, dietary restrictions, and medical
- * conditions. EVERY meal-choosing surface (cart, browse, GrannyGBT,
+ * conditions. EVERY meal-choosing surface (cart, browse, Granny BT,
  * kitchen substitute picker) should funnel through these functions so
  * nothing leaks past the safety net.
  *
@@ -14,7 +14,7 @@
  *   isMealSafe(meal, resident)          → boolean (any violation)
  *   filterSafeMeals(meals, resident)    → only the safe ones
  *   getSafeAlternatives(...)            → same-period, safe substitutes
- *   collectUnsafeMealNames(...)         → list for GrannyGBT hard prompt
+ *   collectUnsafeMealNames(...)         → list for Granny BT hard prompt
  */
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ export function getSafeAlternatives<T extends SafetyMeal>(
 }
 
 /**
- * Helper for GrannyGBT / AI prompts: returns the names of all meals in
+ * Helper for Granny BT / AI prompts: returns the names of all meals in
  * `allMeals` that are UNSAFE for this resident, so they can be injected
  * as a hard "never recommend" list in the system prompt.
  */

@@ -62,7 +62,7 @@ export type TranslationKeys = {
   mealsAvailable: string;
   upcomingMeals: string;
   activeOrders: string;
-  grannyGBT: string;
+  grannyBT: string;
   aiMealAssistant: string;
   myCart: string;
   itemsReady: string;
@@ -183,7 +183,7 @@ const EN: TranslationKeys = {
   mealsAvailable: 'meals available today',
   upcomingMeals: 'Upcoming Meals',
   activeOrders: 'active orders',
-  grannyGBT: 'GrannyGBT',
+  grannyBT: 'Granny BT',
   aiMealAssistant: 'AI meal assistant',
   myCart: 'My Cart',
   itemsReady: 'items ready to order',
@@ -253,8 +253,8 @@ const EN: TranslationKeys = {
   viewTodaysMeals: "View today's meals",
   seeTopPicks: 'See top picks',
   tryAgainMoment: 'Or try again in a moment!',
-  grannyWelcome: "Hey! 👋 I'm GrannyGBT, your meal planning assistant. I've got {name}'s dietary profile loaded up — allergies, nutrition goals, the works.\n\nWhat can I help you with?",
-  grannyWelcomeShort: "Hey! 👋 I'm GrannyGBT, your meal planning assistant for {name}. I've got their dietary needs covered.\n\nWhat can I help with?",
+  grannyWelcome: "Hey! 👋 I'm Granny BT, your meal planning assistant. I've got {name}'s dietary profile loaded up — allergies, nutrition goals, the works.\n\nWhat can I help you with?",
+  grannyWelcomeShort: "Hey! 👋 I'm Granny BT, your meal planning assistant for {name}. I've got their dietary needs covered.\n\nWhat can I help with?",
   noRecommendation: 'No recommendation available.',
 };
 
@@ -297,7 +297,7 @@ const ES: TranslationKeys = {
   mealsAvailable: 'comidas disponibles hoy',
   upcomingMeals: 'Próximas Comidas',
   activeOrders: 'pedidos activos',
-  grannyGBT: 'GrannyGBT',
+  grannyBT: 'Granny BT',
   aiMealAssistant: 'Asistente de comidas IA',
   myCart: 'Mi Carrito',
   itemsReady: 'artículos listos para pedir',
@@ -367,8 +367,8 @@ const ES: TranslationKeys = {
   viewTodaysMeals: 'Ver las comidas de hoy',
   seeTopPicks: 'Ver mejores opciones',
   tryAgainMoment: '¡O inténtalo de nuevo en un momento!',
-  grannyWelcome: '¡Hola! 👋 Soy GrannyGBT, tu asistente de planificación de comidas. Tengo el perfil dietético de {name} cargado — alergias, objetivos nutricionales, todo.\n\n¿En qué puedo ayudarte?',
-  grannyWelcomeShort: '¡Hola! 👋 Soy GrannyGBT, tu asistente de comidas para {name}. Tengo sus necesidades dietéticas cubiertas.\n\n¿En qué puedo ayudar?',
+  grannyWelcome: '¡Hola! 👋 Soy Granny BT, tu asistente de planificación de comidas. Tengo el perfil dietético de {name} cargado — alergias, objetivos nutricionales, todo.\n\n¿En qué puedo ayudarte?',
+  grannyWelcomeShort: '¡Hola! 👋 Soy Granny BT, tu asistente de comidas para {name}. Tengo sus necesidades dietéticas cubiertas.\n\n¿En qué puedo ayudar?',
   noRecommendation: 'No hay recomendación disponible.',
 };
 
@@ -411,7 +411,7 @@ const FR: TranslationKeys = {
   mealsAvailable: 'repas disponibles',
   upcomingMeals: 'Repas à Venir',
   activeOrders: 'commandes actives',
-  grannyGBT: 'GrannyGBT',
+  grannyBT: 'Granny BT',
   aiMealAssistant: 'Assistant repas IA',
   myCart: 'Mon Panier',
   itemsReady: 'articles prêts à commander',
@@ -481,8 +481,8 @@ const FR: TranslationKeys = {
   viewTodaysMeals: "Voir les repas d'aujourd'hui",
   seeTopPicks: 'Voir les meilleurs choix',
   tryAgainMoment: 'Ou réessayez dans un instant !',
-  grannyWelcome: "Salut ! 👋 Je suis GrannyGBT, votre assistant de planification des repas. J'ai le profil diététique de {name} — allergies, objectifs nutritionnels, tout.\n\nComment puis-je vous aider ?",
-  grannyWelcomeShort: "Salut ! 👋 Je suis GrannyGBT, votre assistant repas pour {name}. Ses besoins alimentaires sont pris en charge.\n\nComment puis-je aider ?",
+  grannyWelcome: "Salut ! 👋 Je suis Granny BT, votre assistant de planification des repas. J'ai le profil diététique de {name} — allergies, objectifs nutritionnels, tout.\n\nComment puis-je vous aider ?",
+  grannyWelcomeShort: "Salut ! 👋 Je suis Granny BT, votre assistant repas pour {name}. Ses besoins alimentaires sont pris en charge.\n\nComment puis-je aider ?",
   noRecommendation: 'Aucune recommandation disponible.',
 };
 
@@ -525,7 +525,7 @@ const ZH: TranslationKeys = {
   mealsAvailable: '道菜品可供选择',
   upcomingMeals: '即将到来的餐食',
   activeOrders: '个活动订单',
-  grannyGBT: 'GrannyGBT',
+  grannyBT: 'Granny BT',
   aiMealAssistant: 'AI 餐食助手',
   myCart: '我的购物车',
   itemsReady: '项准备下单',
@@ -595,8 +595,8 @@ const ZH: TranslationKeys = {
   viewTodaysMeals: '查看今日餐食',
   seeTopPicks: '查看最佳推荐',
   tryAgainMoment: '或稍后再试！',
-  grannyWelcome: '你好！👋 我是GrannyGBT，您的餐食规划助手。我已经加载了{name}的饮食档案——过敏信息、营养目标，一应俱全。\n\n有什么可以帮您的？',
-  grannyWelcomeShort: '你好！👋 我是GrannyGBT，{name}的餐食助手。他们的饮食需求已覆盖。\n\n有什么可以帮忙的？',
+  grannyWelcome: '你好！👋 我是Granny BT，您的餐食规划助手。我已经加载了{name}的饮食档案——过敏信息、营养目标，一应俱全。\n\n有什么可以帮您的？',
+  grannyWelcomeShort: '你好！👋 我是Granny BT，{name}的餐食助手。他们的饮食需求已覆盖。\n\n有什么可以帮忙的？',
   noRecommendation: '暂无推荐。',
 };
 

@@ -206,7 +206,7 @@ DISLIKED INGREDIENTS: None specified
 
   // ── Time-of-day awareness ─────────────────────────────────────
   // The tablet's clock drives recommendations. If the resident asks
-  // "recommend a meal" without specifying a period, GrannyGBT should
+  // "recommend a meal" without specifying a period, Granny BT should
   // default to whatever's being served right now (or coming up next).
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -240,7 +240,7 @@ DEFAULT RECOMMENDATION PERIOD: ${upcomingPeriod.label} — when the user asks "r
   // Server returns meal IDs they order most. We resolve those IDs
   // against the SAFE meal list (so we never surface a favourite that's
   // also restricted) and feed the resulting names back as "usual picks"
-  // GrannyGBT can lean on for personal recommendations.
+  // Granny BT can lean on for personal recommendations.
   // Prefer the explicit favoriteMealIds param (works for any resident path),
   // fall back to whatever's on the override.
   const favoriteIds = favoriteMealIds && favoriteMealIds.length > 0
@@ -255,7 +255,7 @@ DEFAULT RECOMMENDATION PERIOD: ${upcomingPeriod.label} — when the user asks "r
 ${favoriteMealNames.map((n) => `- ${n}`).join('\n')}`
     : '';
 
-  return `You are GrannyGBT, a friendly and knowledgeable meal planning assistant for a senior living facility called TrayMate.
+  return `You are Granny BT, a friendly and knowledgeable meal planning assistant for a senior living facility called TrayMate.
 Your tone is warm, helpful, and conversational — like a smart friend who knows a lot about food and nutrition.
 DO NOT use grandma-style pet names like "dear", "sweetie", "honey", "sugar", "sweetheart", or "darling". Just talk naturally and friendly.
 Use emojis sparingly — one or two per response max (like 🍽 or ✅), not every sentence.
@@ -309,7 +309,7 @@ async function callGeminiModel(
   userMessage: string,
 ): Promise<string> {
   const url = `${BASE_URL}/${modelName}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
-  console.log(`[GrannyGBT] Calling ${modelName}, key starts with: ${GEMINI_CONFIG.apiKey.substring(0, 10)}...`);
+  console.log(`[Granny BT] Calling ${modelName}, key starts with: ${GEMINI_CONFIG.apiKey.substring(0, 10)}...`);
 
   // Build contents array: conversation history followed by current message
   const contents: GeminiMessage[] = [...history, { role: 'user', parts: [{ text: userMessage }] }];
@@ -328,11 +328,11 @@ async function callGeminiModel(
       body: JSON.stringify(body),
     });
   } catch (fetchErr: any) {
-    console.error(`[GrannyGBT] fetch() threw: ${fetchErr.message}`);
+    console.error(`[Granny BT] fetch() threw: ${fetchErr.message}`);
     throw new Error(`Network error: ${fetchErr.message}`);
   }
 
-  console.log(`[GrannyGBT] ${modelName} response status: ${resp.status}`);
+  console.log(`[Granny BT] ${modelName} response status: ${resp.status}`);
 
   const text = await resp.text().catch(() => '');
   let data: any = {};
@@ -351,13 +351,13 @@ async function callGeminiModel(
     // dev console for an expected condition; a quiet warn is enough.
     if (status === 429) {
       rateLimitedUntil[modelName] = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-      console.warn(`[GrannyGBT] ${modelName} hit free-tier quota, cooling down ${RATE_LIMIT_COOLDOWN_MS / 60000} min.`);
+      console.warn(`[Granny BT] ${modelName} hit free-tier quota, cooling down ${RATE_LIMIT_COOLDOWN_MS / 60000} min.`);
     } else if (status === 503) {
       // Transient overload — cool down for 1 minute and fall back silently
       rateLimitedUntil[modelName] = Date.now() + 60_000;
-      console.warn(`[GrannyGBT] ${modelName} overloaded (503), cooling down 1 min.`);
+      console.warn(`[Granny BT] ${modelName} overloaded (503), cooling down 1 min.`);
     } else {
-      console.error(`[GrannyGBT] ${modelName} error: [${status}] ${message}`);
+      console.error(`[Granny BT] ${modelName} error: [${status}] ${message}`);
     }
     const err = new Error(`[${status}] ${message}`);
     (err as any).status = status;
@@ -410,7 +410,7 @@ export class GeminiChatService {
       this.systemPrompt = await buildSystemPrompt(residentId, language, residentOverride, favoriteMealIds);
       this.history = [];
       this.currentModel = GEMINI_CONFIG.models[0];
-      console.log('[GrannyGBT] Chat initialized, system prompt length:', this.systemPrompt.length);
+      console.log('[Granny BT] Chat initialized, system prompt length:', this.systemPrompt.length);
     })();
     return this.initPromise;
   }
@@ -457,12 +457,12 @@ export class GeminiChatService {
         }
 
         this.currentModel = modelName;
-        console.log(`[GrannyGBT] Response from ${modelName}`);
+        console.log(`[Granny BT] Response from ${modelName}`);
         return responseText;
       } catch (error: any) {
         lastError = error;
         console.warn(
-          `[GrannyGBT] ${modelName} failed: ${error.message}, trying next model...`,
+          `[Granny BT] ${modelName} failed: ${error.message}, trying next model...`,
         );
         continue; // Try next model
       }
@@ -735,7 +735,7 @@ export async function getAIRecommendation(
     ? `- If you mention "free of X" or "no X", X MUST be one of the resident's actual restrictions listed above. Never use "None" / "N/A" as a value.`
     : `- The resident has NO allergies or restrictions on file. Do NOT use phrases like "free of …", "no …", or "without …" in your reason — there is nothing to be free of. Focus only on flavor, comfort, and balance.`;
 
-  const systemPrompt = `You are GrannyGBT, a meal-planning assistant for a senior living facility.
+  const systemPrompt = `You are Granny BT, a meal-planning assistant for a senior living facility.
 You pick exactly ONE meal from a short candidate list that has ALREADY been safety-filtered for the resident.
 Your job is to pick the most appealing and nutritionally balanced option for THIS meal period.
 
@@ -777,7 +777,7 @@ Pick the best single meal and return the required JSON only.`;
   if (modelsToTry.length === 0) {
     // Every model is cooling down — skip the loop entirely and let the
     // caller fall back to the rule-based recommender.
-    console.warn('[GrannyGBT] All Gemini models in cooldown, skipping AI pick.');
+    console.warn('[Granny BT] All Gemini models in cooldown, skipping AI pick.');
     return null;
   }
 
@@ -799,7 +799,7 @@ Pick the best single meal and return the required JSON only.`;
 
       // Hallucination guard — the pick must exist in the candidate list.
       if (!candidateNames.has(pickedName.toLowerCase())) {
-        console.warn(`[GrannyGBT] Model picked "${pickedName}" not in candidates, retrying next model...`);
+        console.warn(`[Granny BT] Model picked "${pickedName}" not in candidates, retrying next model...`);
         continue;
       }
 
@@ -839,7 +839,7 @@ Pick the best single meal and return the required JSON only.`;
       // Suppress the duplicate noise here and just continue to the
       // next model.
       if (err?.status !== 429) {
-        console.warn(`[GrannyGBT] getAIRecommendation ${modelName} failed: ${err.message}`);
+        console.warn(`[Granny BT] getAIRecommendation ${modelName} failed: ${err.message}`);
       }
       continue;
     }
