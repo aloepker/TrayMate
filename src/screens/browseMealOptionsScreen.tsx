@@ -896,6 +896,16 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // combo, it can't fire again this app session. Cleared on Alert "Cancel"
   // (so we don't keep nagging) or on Alert "Confirm" failure (so retry works).
   const autoConfirmShownRef = useRef<Set<string>>(new Set());
+  // Pending auto-order surfaced as a notification bell (top-right of header)
+  // instead of a blocking Alert. Holds the same shape as `autoSuggest` plus
+  // a stable lock-key so we can release the in-session lock on Deny.
+  type PendingAuto = {
+    period: string;
+    items: Meal[];
+    lockKey: string;
+  };
+  const [pendingAutoOrder, setPendingAutoOrder] = useState<PendingAuto | null>(null);
+  const [showAutoOrderPanel, setShowAutoOrderPanel] = useState(false);
 
   // ── Hardware back button → always log out ────────────────────────────
   // The iPad lives in the resident's room. Even when admin opened the
@@ -1486,68 +1496,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       assignedCaregivers.map((cg) => cg.caregiverId),
     ).catch(() => { /* non-blocking — local Alert still works */ });
 
-    Alert.alert(
-      'Confirm Auto-Order',
-      `${residentName || 'Resident'} hasn't ordered ${snapshot.period} yet.\n\n${itemBullets}\n\nAdmin or caregiver approval required to place this order.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          // No state change — autoConfirmShownRef already locks the alert
-          // for this session. Banner stays visible so manual placement is
-          // still possible. User can dismiss the banner with its X button.
-          onPress: () => {},
-        },
-        {
-          text: 'Confirm & Place',
-          onPress: async () => {
-            try {
-              clearCart();
-              for (const item of items) {
-                addToCart({
-                  id: Number(item.id),
-                  name: item.name,
-                  meal_period: item.meal_period as any,
-                  description: item.description,
-                  kcal: item.kcal,
-                  sodium_mg: item.sodium_mg,
-                  protein_g: item.protein_g,
-                  tags: item.tags,
-                });
-              }
-              await new Promise<void>((r) => setTimeout(r, 100));
-              const result = await placeOrder(residentId, snapshot.period);
-              if (result.order) {
-                setAutoSuggestDismissed(true);
-                setAutoSuggest(null);
-
-                // Notify caregivers
-                const rName = residentName || 'A resident';
-                const rRoom = route?.params?.roomNumber || '';
-                const msgBody = `Auto-order confirmed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${snapshot.period}: ${itemNames}.`;
-                for (const cg of assignedCaregivers) {
-                  try {
-                    await sendApiMessage(cg.caregiverId, msgBody);
-                  } catch { /* non-blocking */ }
-                }
-
-                Alert.alert('Order Placed', `${snapshot.period}: ${itemNames}`, [{ text: 'OK' }]);
-              } else {
-                // Backend rejected — release the in-session lock so the
-                // user can try again on the next minute tick.
-                autoConfirmShownRef.current.delete(key);
-                Alert.alert('Order Failed', 'The order could not be placed. Please try again or order manually.');
-              }
-            } catch (e: any) {
-              autoConfirmShownRef.current.delete(key);
-              console.warn('[AutoConfirm] placeOrder failed:', e?.message ?? e);
-              Alert.alert('Order Failed', e?.message ?? 'Network error. Please try again.');
-            }
-          },
-        },
-      ],
-      { cancelable: false },
-    );
+    // Surface as a notification bell instead of a blocking Alert. The
+    // bell pulses in the header until the user taps it; the panel that
+    // opens shows actual meal pictures + Approve/Deny buttons.
+    void itemBullets; void itemNames; // formatted strings still used by msg below
+    setPendingAutoOrder({
+      period: snapshot.period,
+      items,
+      lockKey: key,
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSuggest, autoSuggestDismissed, residentId, currentTime.getHours(), currentTime.getMinutes()]);
 
@@ -1566,6 +1523,62 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setSelectedDrink(null);
     setSelectedSide(null);
     setShowMealDetail(true);
+  };
+
+  // ── Pending auto-order: approve / deny handlers ──────────────────
+  // Approve places the order via existing cart + placeOrder pipeline
+  // and notifies caregivers. Deny just dismisses (releases the lock so
+  // the bell can be re-raised later if conditions warrant it).
+  const handleApprovePendingAuto = async () => {
+    if (!pendingAutoOrder) return;
+    const { period, items, lockKey } = pendingAutoOrder;
+    const itemNames = items.map((i) => i.name).join(', ');
+    try {
+      clearCart();
+      for (const item of items) {
+        addToCart({
+          id: Number(item.id),
+          name: item.name,
+          meal_period: item.meal_period as any,
+          description: item.description,
+          kcal: item.kcal,
+          sodium_mg: item.sodium_mg,
+          protein_g: item.protein_g,
+          tags: item.tags,
+        });
+      }
+      await new Promise<void>((r) => setTimeout(r, 100));
+      const result = await placeOrder(residentId, period);
+      if (result.order) {
+        setAutoSuggestDismissed(true);
+        setAutoSuggest(null);
+        setPendingAutoOrder(null);
+        setShowAutoOrderPanel(false);
+
+        const rName = residentName || 'A resident';
+        const rRoom = (route?.params as any)?.roomNumber || '';
+        const msgBody = `Auto-order confirmed for ${rName}${rRoom ? ` (Room ${rRoom})` : ''} — ${period}: ${itemNames}.`;
+        for (const cg of assignedCaregivers) {
+          try { await sendApiMessage(cg.caregiverId, msgBody); } catch {}
+        }
+        Alert.alert('Order Placed', `${period}: ${itemNames}`, [{ text: 'OK' }]);
+      } else {
+        // Backend rejected — keep the bell visible, release the lock
+        autoConfirmShownRef.current.delete(lockKey);
+        Alert.alert('Order Failed', 'The order could not be placed. Please try again or order manually.');
+      }
+    } catch (e: any) {
+      autoConfirmShownRef.current.delete(lockKey);
+      console.warn('[AutoConfirm] placeOrder failed:', e?.message ?? e);
+      Alert.alert('Order Failed', e?.message ?? 'Network error. Please try again.');
+    }
+  };
+
+  const handleDenyPendingAuto = () => {
+    setPendingAutoOrder(null);
+    setShowAutoOrderPanel(false);
+    // The lockKey stays in autoConfirmShownRef so the bell doesn't
+    // immediately re-raise for the same period+date in this session.
   };
 
   // Check if a meal conflicts with the resident's dietary profile
@@ -1922,6 +1935,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="calendar" size={26} color={pt.tabActiveBg} />
           </TouchableOpacity>
+          {/* Pending auto-order bell. Only renders while there's a
+              suggestion waiting for approval — disappears once the
+              user (or caregiver/admin) approves or denies. */}
+          {pendingAutoOrder && (
+            <TouchableOpacity
+              style={[
+                styles.headerActionBtn,
+                { backgroundColor: pt.buttonBg, borderColor: '#DC2626', borderWidth: 1.5 },
+              ]}
+              onPress={() => setShowAutoOrderPanel(true)}
+              activeOpacity={0.85}
+            >
+              <Feather name="bell" size={26} color="#DC2626" />
+              <View style={styles.bellBadge} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={() => setShowBrowseSupport(true)}
@@ -2456,6 +2485,85 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         medicalConditions={route?.params?.medicalConditions ?? []}
       />
 
+      {/* Pending Auto-Order Panel — opens from the bell in the header */}
+      <Modal
+        visible={showAutoOrderPanel && !!pendingAutoOrder}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAutoOrderPanel(false)}
+      >
+        <View style={styles.autoOrderBackdrop}>
+          <View style={styles.autoOrderCard}>
+            <View style={styles.autoOrderHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.autoOrderTitle, { fontSize: scaled(20) }]}>
+                  Confirm Auto-Order
+                </Text>
+                <Text style={[styles.autoOrderSub, { fontSize: scaled(14) }]}>
+                  {(residentName || 'Resident')} hasn't ordered {pendingAutoOrder?.period?.toLowerCase()} yet
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowAutoOrderPanel(false)} hitSlop={10}>
+                <Feather name="x" size={22} color="#1A1A1A" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ paddingBottom: 8 }}>
+              {pendingAutoOrder?.items.map((item) => {
+                const remoteUri = item.imageUrl && item.imageUrl.trim().length > 0 ? item.imageUrl.trim() : null;
+                const localImg = remoteUri ? null : getMealImage(item.name);
+                return (
+                  <View key={String(item.id)} style={styles.autoOrderItem}>
+                    <View style={styles.autoOrderItemImg}>
+                      {remoteUri ? (
+                        <Image source={{ uri: remoteUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      ) : localImg ? (
+                        <Image source={localImg} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      ) : (
+                        <Image source={require('../styles/pictures/grandma.png')} style={{ width: 40, height: 40, opacity: 0.3 }} resizeMode="contain" />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.autoOrderItemName, { fontSize: scaled(15) }]} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {item.description ? (
+                        <Text style={[styles.autoOrderItemDesc, { fontSize: scaled(12) }]} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={[styles.autoOrderApprovalNote, { fontSize: scaled(12) }]}>
+              Admin or caregiver approval required.
+            </Text>
+
+            <View style={styles.autoOrderActions}>
+              <TouchableOpacity
+                style={[styles.autoOrderBtn, styles.autoOrderBtnDeny]}
+                onPress={handleDenyPendingAuto}
+                activeOpacity={0.85}
+              >
+                <Feather name="x-circle" size={16} color="#DC2626" />
+                <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(14) }]}>Deny</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.autoOrderBtn, styles.autoOrderBtnApprove]}
+                onPress={handleApprovePendingAuto}
+                activeOpacity={0.85}
+              >
+                <Feather name="check-circle" size={16} color="#FFFFFF" />
+                <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(14) }]}>Approve & Place</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Browse Support Modal */}
       <Modal visible={showBrowseSupport} transparent animationType="fade" onRequestClose={() => setShowBrowseSupport(false)}>
         <View style={styles.supportBackdrop}>
@@ -2594,6 +2702,113 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#DC2626',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  // ── Pending auto-order panel (opens from the bell) ─────────────
+  autoOrderBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  autoOrderCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  autoOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  autoOrderTitle: {
+    fontWeight: '800',
+    color: '#1A1A1A',
+  },
+  autoOrderSub: {
+    color: '#5C5C5C',
+    marginTop: 4,
+  },
+  autoOrderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  autoOrderItemImg: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoOrderItemName: {
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  autoOrderItemDesc: {
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  autoOrderApprovalNote: {
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 14,
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  autoOrderActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  autoOrderBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
+  autoOrderBtnDeny: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#DC2626',
+  },
+  autoOrderBtnDenyText: {
+    color: '#DC2626',
+    fontWeight: '700',
+  },
+  autoOrderBtnApprove: {
+    backgroundColor: '#717644',
+  },
+  autoOrderBtnApproveText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   title: {
     fontSize: 32,
