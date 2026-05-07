@@ -62,7 +62,13 @@ const HomeScreen = ({ navigation, route }: any) => {
     route?.params?.residentName ||
     (residentId && ResidentService.getResidentById(residentId)?.fullName) ||
     'Resident';
+  // All three restriction fields — Home forwards them downstream so
+  // BrowseMealOptions / Cart / AI screens see the full safety profile.
+  // Without medicalConditions, conditions like Hypertension/Diabetes
+  // wouldn't apply to the auto-suggest filter or AI recommendations.
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions ?? [];
+  const foodAllergies: string[] = (route?.params as any)?.foodAllergies ?? [];
+  const medicalConditions: string[] = (route?.params as any)?.medicalConditions ?? [];
 
   // Build avatar initials from resident name
   const initials = useMemo(() => {
@@ -105,12 +111,16 @@ const HomeScreen = ({ navigation, route }: any) => {
   const greeting =
     hour < 12 ? t.goodMorning : hour < 17 ? t.goodAfternoon : t.goodEvening;
 
-  // Navigation helper — passes resident info to all child screens
+  // Navigation helper — passes resident info to all child screens.
+  // Forwards ALL three restriction fields so safety filters and AI
+  // get the complete profile (allergies AND medical conditions).
   const navWithResident = (screen: string, extra?: Record<string, any>) => {
     navigation.navigate(screen, {
       residentId,
       residentName,
       dietaryRestrictions,
+      foodAllergies,
+      medicalConditions,
       ...extra,
     });
   };

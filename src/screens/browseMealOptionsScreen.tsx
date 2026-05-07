@@ -62,7 +62,7 @@ import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSaf
 import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
-import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi } from '../services/api';
+import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi, getResidentById } from '../services/api';
 import { broadcastPendingAutoOrder } from '../services/autoOrderRequest';
 
 
@@ -948,6 +948,59 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }, []),
   );
 
+  // ── Refresh resident profile on focus ──────────────────────────
+  // Pulls the latest restrictions from the backend so admin edits
+  // (new allergy, condition, etc.) flow through to the auto-suggest
+  // and AI without requiring the user to log out and back in. Stores
+  // them back into navigation params so all the existing read sites
+  // (route?.params?.foodAllergies etc.) pick up the new values.
+  useFocusEffect(
+    useCallback(() => {
+      // Read residentId directly from params — this hook runs before
+      // the local `residentId` const is declared further down.
+      const ridFromParams = (route?.params as any)?.residentId as string | undefined;
+      if (!ridFromParams) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const fresh = await getResidentById(ridFromParams);
+          if (cancelled || !fresh) return;
+          // Only update if something actually changed to avoid pointless re-renders
+          const current = {
+            dietary: (route?.params as any)?.dietaryRestrictions ?? [],
+            allergies: (route?.params as any)?.foodAllergies ?? [],
+            medical: (route?.params as any)?.medicalConditions ?? [],
+          };
+          const incoming = {
+            dietary: fresh.dietaryRestrictions ?? [],
+            allergies: fresh.foodAllergies ?? [],
+            medical: fresh.medicalConditions ?? [],
+          };
+          const eq = (a: string[], b: string[]) =>
+            a.length === b.length && a.every((v, i) => v === b[i]);
+          if (
+            eq(current.dietary, incoming.dietary) &&
+            eq(current.allergies, incoming.allergies) &&
+            eq(current.medical, incoming.medical)
+          ) {
+            return;
+          }
+          navigation.setParams({
+            dietaryRestrictions: incoming.dietary,
+            foodAllergies:       incoming.allergies,
+            medicalConditions:   incoming.medical,
+          } as any);
+          // Reset auto-suggest gate so the bell can re-evaluate against
+          // the new restrictions (e.g. a previously-suggested meal that
+          // is now flagged should be re-checked).
+          autoConfirmShownRef.current.clear();
+        } catch { /* network blip — keep stale params */ }
+      })();
+      return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [(route?.params as any)?.residentId, navigation]),
+  );
+
   // Auto-advance the tab when a new meal period starts while the screen is open,
   // but only if the user hasn't manually chosen a different tab this visit.
   useEffect(() => {
@@ -1360,19 +1413,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     const allPastItems = resOrders.flatMap((o) => o.items);
 
-    // Resident dietary restrictions — used to filter auto-suggest candidates
-    const allRestrictions: string[] = [
-      ...(route?.params?.dietaryRestrictions ?? []),
-      ...(route?.params?.foodAllergies ?? []),
-    ].map((r: string) => r.toLowerCase());
-
-    const isSafeForResident = (m: Meal): boolean => {
-      if (allRestrictions.length === 0) return true;
-      const allergens = (m.allergens ?? []).map((a: string) => a.toLowerCase());
-      return !allRestrictions.some(r =>
-        allergens.some(a => a.includes(r) || r.includes(a))
-      );
+    // Use the centralised safety service so the auto-suggest filter
+    // matches what the menu cards show. Critically, this also applies
+    // medical-condition rules (e.g. sodium cap for hypertension, sugar
+    // cap for diabetes) — the old inline check only saw allergies.
+    const safetyResidentForAuto: SafetyResident = {
+      foodAllergies:        (route?.params?.foodAllergies as string[]) ?? [],
+      dietaryRestrictions:  (route?.params?.dietaryRestrictions as string[]) ?? [],
+      medicalConditions:    (route?.params?.medicalConditions as string[]) ?? [],
     };
+    const isSafeForResident = (m: Meal): boolean =>
+      isMealSafe(m as any, safetyResidentForAuto);
 
     // Helper: count frequency of each item name in history for a given period
     const getFrequencyRanked = (period: string): Map<string, number> => {
@@ -1402,6 +1453,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     if (!mainMeal) {
       const periodMeals = meals.filter((m) => m.meal_period === upcoming.label && isSafeForResident(m));
       mainMeal = periodMeals[0] ?? null;
+    }
+    // Final fallback: if no SAFE meal exists for this period (resident
+    // has restrictions blocking everything), still suggest the first
+    // available period meal so the bell fires. The Approve button then
+    // gets blocked by the backend compliance check, which surfaces the
+    // override flow — better than silently never alerting anyone.
+    if (!mainMeal) {
+      const anyPeriodMeals = meals.filter((m) => m.meal_period === upcoming.label);
+      mainMeal = anyPeriodMeals[0] ?? null;
     }
     if (!mainMeal) return;
 
