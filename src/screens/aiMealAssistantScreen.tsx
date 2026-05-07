@@ -28,6 +28,7 @@ import {
 } from '../services/mealLocalization';
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
 import { getDefaultMealsApi } from '../services/api';
+import { getMealImage } from '../services/mealDisplayService';
 import { useSettings } from './context/SettingsContext';
 
 // ---------- TrayMate Color Palette ----------
@@ -106,12 +107,19 @@ const RichText = ({
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
+          // Real bundled meal image (matches the menu screen) — falls back
+          // to emoji if no asset is available for this meal name.
+          const realImg = getMealImage(matchedMeal.name);
           // Extract reasoning text after **name** (e.g. " — Free of: Dairy | Low sodium")
           const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
             <View key={lineIdx} style={richStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
               <View style={[richStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                <Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>
+                {realImg ? (
+                  <Image source={realImg} style={richStyles.mealCardRealImage} resizeMode="cover" />
+                ) : (
+                  <Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>
+                )}
               </View>
               <View style={richStyles.mealCardInfo}>
                 <Text style={[richStyles.mealCardName, { fontSize: scaled(17) }]}>
@@ -219,20 +227,33 @@ const richStyles = StyleSheet.create({
   },
   mealCard: {
     flexDirection: 'row',
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
-    marginVertical: 8,
+    marginVertical: 10,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.border,
+    // shadow keeps the card visually distinct from the surrounding
+    // assistant bubble so timestamps below can't appear to overlap it
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   mealCardImage: {
-    width: 72,
+    width: 96,
+    height: 96,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  mealCardRealImage: {
+    width: 96,
+    height: 96,
   },
   mealCardEmoji: {
-    fontSize: 34,
+    fontSize: 40,
   },
   mealCardInfo: {
     flex: 1,
