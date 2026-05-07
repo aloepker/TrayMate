@@ -704,16 +704,30 @@ const AIAssistantChat = ({
 };
 
 // ── Time-range availability check ────────────────────────────────────────────
+/**
+ * Parse "11am", "2:30 pm", "11:30AM", "noon", "midnight" etc. into minutes
+ * past midnight. Returns NaN when the string has no recognizable time so
+ * callers can fall back to "always available" (better than silently saying
+ * a meal is closed because of an unparseable time string).
+ */
 function parseTimeToMinutes(s: string): number {
   const cleaned = s.trim().toLowerCase().replace(/\s/g, '');
+  if (!cleaned) return NaN;
+  if (cleaned === 'noon')     return 12 * 60;
+  if (cleaned === 'midnight') return 0;
   const isPm = cleaned.includes('pm');
   const isAm = cleaned.includes('am');
-  const num = parseInt(cleaned.replace(/[^0-9]/g, ''), 10);
-  if (isNaN(num)) return 0;
-  let hours = num;
+  // Match "11", "11:30", "2:00" — capture hours and (optional) minutes
+  // *separately* so "11:30am" doesn't get mashed into the int 1130.
+  const m = cleaned.match(/^(\d{1,2})(?::(\d{2}))?/);
+  if (!m) return NaN;
+  let hours = parseInt(m[1], 10);
+  const mins = m[2] ? parseInt(m[2], 10) : 0;
+  if (isNaN(hours) || isNaN(mins)) return NaN;
+  // Normalize to 24h: "12am" → 0, "12pm" → 12, "1pm" → 13, etc.
   if (isPm && hours !== 12) hours += 12;
   if (isAm && hours === 12) hours = 0;
-  return hours * 60;
+  return hours * 60 + mins;
 }
 
 function isWithinTimeRange(timeRange: string, period?: string, now: Date = new Date()): boolean {
@@ -727,6 +741,9 @@ function isWithinTimeRange(timeRange: string, period?: string, now: Date = new D
   if (parts.length < 2) return true;
   const start = parseTimeToMinutes(parts[0]);
   const end   = parseTimeToMinutes(parts[1]);
+  // Fail-OPEN: if either bound can't be parsed, treat the meal as
+  // always available rather than silently locking residents out.
+  if (isNaN(start) || isNaN(end)) return true;
   return currentMins >= start && currentMins <= end;
 }
 
@@ -735,7 +752,8 @@ function timeRangeStartMinutes(timeRange: string): number {
   if (!timeRange) return 0;
   const normalized = timeRange.replace(/[–—]/g, '-');
   const first = normalized.split('-')[0]?.trim() ?? '';
-  return parseTimeToMinutes(first);
+  const parsed = parseTimeToMinutes(first);
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 /**
