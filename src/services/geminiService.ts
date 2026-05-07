@@ -180,17 +180,59 @@ DISLIKED INGREDIENTS: None specified
 `;
   }
 
-  const mealsContext = safeMeals
-    .map(
-      m =>
-        `[ID:${m.id}] ${m.name} | ${m.mealPeriod} (${m.timeRange})
+  // Helper: parse "7am - 10am" / "11:00 am – 2:00 pm" into start/end minutes
+  // so we can tell Granny BT which meals are available *right now*. Returns
+  // null if the format is unrecognised (older fallback meals etc.) — those
+  // get treated as "always available" and listed without a time tag.
+  const parseTimeRange = (range: string | undefined): { start: number; end: number } | null => {
+    if (!range) return null;
+    const m = range.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+    if (!m) return null;
+    const to24 = (h: string, mm: string | undefined, ap: string) => {
+      let hh = parseInt(h, 10) % 12;
+      if (ap.toLowerCase() === 'pm') hh += 12;
+      return hh * 60 + (mm ? parseInt(mm, 10) : 0);
+    };
+    return { start: to24(m[1], m[2], m[3]), end: to24(m[4], m[5], m[6]) };
+  };
+
+  // Group meals into "available now" vs "available later" using the
+  // wall clock. Granny BT can then phrase recommendations correctly:
+  // "you can order this for breakfast tomorrow" vs "this is being
+  // served right now".
+  const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+  const formatMealLine = (m: typeof safeMeals[number], availability: string) =>
+    `[ID:${m.id}] ${m.name} | ${m.mealPeriod} (${m.timeRange}) — ${availability}
   Ingredients: ${m.ingredients.join(', ')}
   Allergens: ${m.allergenInfo.length > 0 ? m.allergenInfo.join(', ') : 'None'}
   Nutrition: ${m.nutrition.calories} cal, ${m.nutrition.sodium} sodium, ${m.nutrition.protein} protein
   Tags: ${m.tags.join(', ')}
-  Description: ${m.description}`,
-    )
-    .join('\n\n');
+  Description: ${m.description}`;
+
+  const availableNow: string[] = [];
+  const availableLater: string[] = [];
+  for (const m of safeMeals) {
+    const tr = parseTimeRange(m.timeRange);
+    if (!tr) {
+      // Unknown time range — assume always orderable
+      availableNow.push(formatMealLine(m, 'available'));
+      continue;
+    }
+    if (nowMins >= tr.start && nowMins <= tr.end) {
+      availableNow.push(formatMealLine(m, 'AVAILABLE NOW (being served)'));
+    } else {
+      const minsUntil = tr.start > nowMins ? tr.start - nowMins : (24 * 60 - nowMins) + tr.start;
+      const hoursUntil = Math.floor(minsUntil / 60);
+      const minsRem = minsUntil % 60;
+      const wait = hoursUntil > 0 ? `${hoursUntil}h ${minsRem}m` : `${minsRem}m`;
+      availableLater.push(formatMealLine(m, `available in ${wait} (pre-order ok)`));
+    }
+  }
+
+  const mealsContext = [
+    availableNow.length > 0 ? `── AVAILABLE NOW (being served right now) ──\n${availableNow.join('\n\n')}` : '',
+    availableLater.length > 0 ? `\n\n── AVAILABLE LATER (pre-order for an upcoming meal period) ──\n${availableLater.join('\n\n')}` : '',
+  ].filter(Boolean).join('');
 
   // Build an explicit "do not recommend" list so if the resident asks about
   // a restricted meal by name, the LLM knows it's been excluded and can
@@ -272,6 +314,8 @@ TIME-AWARE RECOMMENDATIONS:
 - When the resident asks for a meal recommendation WITHOUT specifying a meal period (e.g. "recommend a meal", "what should I eat", "I'm hungry"), pick from the DEFAULT RECOMMENDATION PERIOD below — match the current tablet clock.
 - If the resident DOES specify a period ("for lunch", "for dinner"), recommend from that period instead.
 - Drinks and Sides are not full meals — only recommend them as add-ons or when the resident asks for one specifically.
+- Each meal in the AVAILABLE MEALS list is tagged "AVAILABLE NOW" (being served right now), "available in Xh Ym" (pre-orderable for an upcoming period), or "available" (no time restriction). Mention this when it's relevant, e.g. "this is being served right now" or "you can pre-order it for breakfast tomorrow".
+- If a resident asks about ordering a meal that's in the LATER list, confirm it's pre-order and mention when it'll be ready.
 
 PERSONALISATION:
 - If a USUAL ORDERS list is provided below, prefer those meals when recommending — but only if they match the requested period and are still safe. The list is already filtered to safe meals only.

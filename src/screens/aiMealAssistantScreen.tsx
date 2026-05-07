@@ -11,7 +11,9 @@ import {
   Platform,
   ScrollView,
   StatusBar,
+  Alert,
 } from 'react-native';
+import { useCart } from './context/CartContext';
 import Feather from 'react-native-vector-icons/Feather';
 import {
   MealService,
@@ -65,19 +67,24 @@ const getMealPlaceholder = (name: string) =>
   MEAL_PLACEHOLDERS[name] || { bg: COLORS.primaryLight, emoji: '🍽' };
 
 // ---------- Rich Text Renderer ----------
-// Parses **bold**, meal names (renders inline cards), and bullet points
+// Parses **bold**, meal names (renders inline cards), and bullet points.
+// onOrderMeal — optional callback so meal cards inside chat bubbles can
+// trigger a one-tap order from the conversation. Called with the meal
+// the user tapped Order on; the parent component handles cart + place.
 const RichText = ({
   text,
   isUser,
   allMeals,
   scaled,
   language,
+  onOrderMeal,
 }: {
   text: string;
   isUser: boolean;
   allMeals: ServiceMeal[];
   scaled: (base: number) => number;
   language: 'English' | 'Español' | 'Français' | '中文';
+  onOrderMeal?: (meal: ServiceMeal) => void;
 }) => {
   const lines = text.split('\n');
 
@@ -120,6 +127,18 @@ const RichText = ({
                   <Text style={[richStyles.mealCardReason, { fontSize: scaled(13) }]}>
                     {suffixText}
                   </Text>
+                )}
+                {onOrderMeal && (
+                  <TouchableOpacity
+                    style={richStyles.orderBtn}
+                    onPress={() => onOrderMeal(matchedMeal)}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="shopping-bag" size={14} color="#fff" />
+                    <Text style={[richStyles.orderBtnText, { fontSize: scaled(13) }]}>
+                      Order this
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </View>
             </View>
@@ -241,6 +260,22 @@ const richStyles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 6,
   },
+  orderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  orderBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
 });
 
 // ---------- Types ----------
@@ -264,6 +299,55 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const foodAllergies: string[] = route?.params?.foodAllergies || [];
   const medicalConditions: string[] = route?.params?.medicalConditions || [];
   const [allMeals, setAllMeals] = useState<ServiceMeal[]>([]);
+  const { addToCart, clearCart, placeOrder } = useCart();
+
+  /**
+   * One-tap "Order this" from a chat meal card. Adds just that meal to
+   * the cart, places the order, and shows a confirmation. Uses the
+   * meal's own period so drinks/sides go under the right meal window
+   * (CartContext's clock fallback handles the edge cases).
+   */
+  const handleOrderFromChat = async (meal: ServiceMeal) => {
+    Alert.alert(
+      'Place this order?',
+      `${meal.name} for ${residentName}\n\n${meal.mealPeriod} · ${meal.timeRange}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Place Order',
+          onPress: async () => {
+            try {
+              clearCart();
+              addToCart({
+                id: Number(meal.id),
+                name: meal.name,
+                meal_period: meal.mealPeriod as any,
+                description: meal.description,
+                kcal: meal.nutrition.calories,
+                sodium_mg: typeof meal.nutrition.sodium === 'number' ? meal.nutrition.sodium : 0,
+                protein_g: typeof meal.nutrition.protein === 'number' ? meal.nutrition.protein : 0,
+                tags: meal.tags,
+              } as any);
+              await new Promise<void>((r) => setTimeout(r, 100));
+              const period = meal.mealPeriod === 'Drinks' || meal.mealPeriod === 'Sides'
+                ? undefined  // let clock fallback decide
+                : meal.mealPeriod;
+              const result = await placeOrder(residentId, period);
+              if (result.order) {
+                Alert.alert('Order placed!', `${meal.name} is on its way.`);
+              } else if (result.complianceBlock) {
+                Alert.alert('Restricted', 'This meal conflicts with the resident\'s dietary profile. Use the menu screen to request an override.');
+              } else {
+                Alert.alert('Could not place order', 'Please try again or use the menu.');
+              }
+            } catch (e: any) {
+              Alert.alert('Order failed', e?.message ?? 'Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const chatServiceRef = useRef<GeminiChatService | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -522,6 +606,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
                   allMeals={allMeals}
                   scaled={scaled}
                   language={language}
+                  onOrderMeal={handleOrderFromChat}
                 />
               <Text
                 style={[
