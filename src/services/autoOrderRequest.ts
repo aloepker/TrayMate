@@ -21,6 +21,7 @@
 import {
   sendMessage,
   getMessageUsers,
+  getMe,
   placeOrderApi,
   type MessageUser,
 } from "./api";
@@ -67,16 +68,31 @@ export async function broadcastPendingAutoOrder(
 ): Promise<void> {
   const body = encodePendingAutoOrder(req);
 
-  // Caregiver fan-out — in parallel, swallow individual failures.
-  const cgSends = assignedCaregiverIds.map((id) =>
-    sendMessage(id, body).catch(() => {}),
-  );
+  // Get the current user's id so we can exclude them from the fan-out.
+  // Without this, an admin viewing as a resident receives their OWN
+  // request message and gets the "different admin needed" confusion.
+  let currentUserId: string | null = null;
+  try {
+    const me = await getMe();
+    currentUserId = String(me.id);
+  } catch {
+    // If /auth/me fails, we just don't dedupe. Better to over-notify
+    // than block the broadcast entirely.
+  }
+
+  const isSelf = (id: string) =>
+    currentUserId !== null && String(id) === currentUserId;
+
+  // Caregiver fan-out — skip self, in parallel, swallow individual failures.
+  const cgSends = assignedCaregiverIds
+    .filter((id) => !isSelf(id))
+    .map((id) => sendMessage(id, body).catch(() => {}));
 
   // Admin fan-out — fetch the full user list once and pick admins.
   let admins: MessageUser[] = [];
   try {
     const users = await getMessageUsers();
-    admins = users.filter((u) => u.role === "ROLE_ADMIN");
+    admins = users.filter((u) => u.role === "ROLE_ADMIN" && !isSelf(u.id));
   } catch {
     // If the user list is unavailable, just skip admins. Caregivers
     // still get the alert.

@@ -300,14 +300,17 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
           ? { name: residentName, dietaryRestrictions, foodAllergies, medicalConditions, favoriteMealIds }
           : undefined;
         console.log('[AIMealAssistant] Initializing Gemini chat service...');
+        // Optimistic: assume AI is available. Init only builds the system
+        // prompt — actual API calls happen on send. If init fails (e.g.
+        // a sub-fetch 401s), we still let the user try; sendMessage will
+        // surface a real error if the API is genuinely unreachable.
+        setAiMode('ai');
         service.initialize(residentId, language, override, favoriteMealIds)
-          .then(() => {
-            console.log('[AIMealAssistant] Gemini initialized successfully');
-            setAiMode('ai');
-          })
+          .then(() => console.log('[AIMealAssistant] Gemini initialized successfully'))
           .catch((err) => {
-            console.error('[AIMealAssistant] Gemini init failed:', err?.message || err);
-            setAiMode('offline');
+            // Don't flip to offline — the model fallback chain will
+            // catch real outages on the first sendMessage attempt.
+            console.warn('[AIMealAssistant] Init had issues but continuing:', err?.message || err);
           });
       })();
     } else {

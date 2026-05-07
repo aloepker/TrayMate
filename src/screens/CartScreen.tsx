@@ -153,7 +153,12 @@ const CartScreen = ({ navigation, route }: any) => {
     }
 
     try {
-      const { order, conflict, complianceBlock } = await placeOrder(residentId);
+      // If BrowseScreen passed the active tab period, use it. Without
+      // this, drinks/sides-only orders fall back to the clock and end
+      // up filed under "Lunch" at noon even when the resident was on
+      // the Breakfast tab pre-ordering tomorrow's coffee.
+      const tabPeriod = (route?.params as any)?.mealPeriod as string | undefined;
+      const { order, conflict, complianceBlock } = await placeOrder(residentId, tabPeriod);
 
       // Backend rejected the order because a meal violates the resident's
       // dietary profile and there's no approved override. Offer a one-shot

@@ -396,9 +396,12 @@ const AIAssistantChat = ({
         const override = !resident
           ? { name: residentName, dietaryRestrictions, foodAllergies, medicalConditions, favoriteMealIds }
           : undefined;
+        // Optimistic: assume AI is available. Init only builds the
+        // system prompt locally — real Gemini calls happen on send,
+        // where the model fallback chain handles outages.
+        setAiAvailable(true);
         geminiChat.initialize(residentId, language, override, favoriteMealIds)
-          .then(() => setAiAvailable(true))
-          .catch(() => setAiAvailable(false));
+          .catch((err) => console.warn('[GrannyGBT] init issue, continuing optimistically:', err?.message ?? err));
       })();
     }
   }, [visible, residentId, language, residentName, dietaryRestrictions, foodAllergies, medicalConditions]);
@@ -940,9 +943,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     route?.params?.residentName ||
     ResidentService.getDefaultResident().fullName;
 
-  // Navigate to cart screen with resident context
+  // Navigate to cart screen with resident context. Pass the active tab's
+  // meal period so drinks/sides-only orders land under the right meal —
+  // CartContext.deriveMealOfDay can't distinguish "I'm pre-ordering for
+  // breakfast" from "it's noon and I want a coffee" without this hint.
+  // 'allDay' means no specific tab → CartContext falls back to the clock.
   const goToCart = () => {
-    navigation.navigate('Cart', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] });
+    const tabPeriod = selectedPeriod?.key === 'allDay' ? undefined : selectedPeriod?.value;
+    navigation.navigate('Cart', {
+      residentId,
+      residentName,
+      dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
+      mealPeriod: tabPeriod,
+    });
   };
 
   // Caregiver chat

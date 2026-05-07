@@ -341,7 +341,13 @@ function SettingsScreen({ navigation, route }: any) {
             title={t.aiAssistant} desc={t.aiAssistantDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
-            onPress={() => navigation.navigate('AIMealAssistant')}
+            onPress={() => navigation.navigate('AIMealAssistant', {
+              residentId,
+              residentName,
+              dietaryRestrictions: route?.params?.dietaryRestrictions ?? [],
+              foodAllergies: route?.params?.foodAllergies ?? [],
+              medicalConditions: route?.params?.medicalConditions ?? [],
+            })}
           />
         </View>
 
