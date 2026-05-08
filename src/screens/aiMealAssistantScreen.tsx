@@ -589,10 +589,57 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
       )
       .join('\n');
 
-    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') || lower.includes(t.whatsOnMenuToday.toLowerCase());
-    const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
+    const isPlaceOrderQuery = lower.includes('place') && lower.includes('order');
+    const isDietaryQuery = !isPlaceOrderQuery && (lower.includes('dietary') || lower.includes('restriction') || lower.includes('allergies') || lower.includes('allergy'));
+    const isMenuQuery = !isPlaceOrderQuery && !isDietaryQuery && (lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') || lower.includes(t.whatsOnMenuToday.toLowerCase()));
+    const isRecommendQuery = !isPlaceOrderQuery && !isDietaryQuery && (lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase()));
+
+    // "Place X order" — pick a safe meal for the requested period and
+    // surface it as a tappable card with the inline "Order this" button.
+    if (isPlaceOrderQuery) {
+      const inferPeriod = (): ServiceMeal['mealPeriod'] => {
+        if (periodFilter) return periodFilter;
+        const mins = new Date().getHours() * 60 + new Date().getMinutes();
+        if (mins >= 7 * 60 && mins <= 10 * 60) return 'Breakfast';
+        if (mins >= 11 * 60 && mins <= 14 * 60) return 'Lunch';
+        if (mins >= 16 * 60 && mins <= 19 * 60) return 'Dinner';
+        return 'Lunch';
+      };
+      const target = inferPeriod();
+      const candidates = safeAllMeals.filter((m) => m.mealPeriod === target);
+      if (candidates.length === 0) {
+        return `No safe ${target.toLowerCase()} options for ${residentName} right now.`;
+      }
+      const pick = candidates[0];
+      return `For ${target.toLowerCase()}, I'd suggest:\n\n• **${translateMealName(pick.name, language)}** — ${pick.nutrition.calories} cal · ${pick.nutrition.sodium} sodium\n\nTap "Order this" on the card to place the order.`;
+    }
+
+    if (isDietaryQuery) {
+      const lines: string[] = [];
+      if (safetyResident.foodAllergies && safetyResident.foodAllergies.length > 0) {
+        lines.push(`**Allergies:** ${safetyResident.foodAllergies.join(', ')}`);
+      }
+      if (safetyResident.dietaryRestrictions && safetyResident.dietaryRestrictions.length > 0) {
+        lines.push(`**Dietary:** ${safetyResident.dietaryRestrictions.join(', ')}`);
+      }
+      if (safetyResident.medicalConditions && safetyResident.medicalConditions.length > 0) {
+        lines.push(`**Medical:** ${safetyResident.medicalConditions.join(', ')}`);
+      }
+      if (lines.length === 0) {
+        return `${residentName} has no allergies or dietary restrictions on file.`;
+      }
+      return `${residentName}'s profile:\n\n${lines.join('\n')}`;
+    }
 
     if (isMenuQuery) {
+      if (filteredMeals.length === 0) {
+        const profileNote = (safetyResident.foodAllergies?.length || 0) + (safetyResident.dietaryRestrictions?.length || 0) > 0
+          ? ` (avoiding ${[...(safetyResident.foodAllergies ?? []), ...(safetyResident.dietaryRestrictions ?? [])].join(', ')})`
+          : '';
+        return periodFilter
+          ? `No safe ${periodFilter.toLowerCase()} options on the menu right now${profileNote}.`
+          : `Menu data isn't available right now — please try again in a moment.`;
+      }
       const header = periodHeader ? `${periodHeader}! 📋` : `${t.heresTheMenu} 📋`;
       return `${header}\n\n${menuItems}`;
     }
