@@ -4,6 +4,8 @@ import java.util.List;
 
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.traymate.backend.auth.repository.UserRepository;
 import com.traymate.backend.auth.model.User;
@@ -23,15 +25,21 @@ public class MessageController {
     private final UserRepository userRepository;
     private final UserMessagingService userMessagingService;
 
+    private User currentUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication is required");
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User session is no longer valid"));
+    }
+
     @PostMapping("/send")
     public MessageResponse sendMessage(
             @RequestBody SendMessageRequest req,
             Authentication authentication) {
 
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow();
+        User user = currentUser(authentication);
 
         Long senderId = user.getId();
 
@@ -41,10 +49,7 @@ public class MessageController {
     @GetMapping("/inbox")
     public List<Message> getInbox(Authentication authentication) {
 
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow();
+        User user = currentUser(authentication);
 
         return service.getInbox(user.getId());
     }
@@ -54,9 +59,7 @@ public class MessageController {
             @PathVariable  Long otherUserId,
             Authentication authentication) {
 
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email).orElseThrow();
+        User user = currentUser(authentication);
 
         return service.getConversation(user.getId(), otherUserId);
     }
@@ -64,10 +67,7 @@ public class MessageController {
     @GetMapping("/chats")
     public List<ChatResponse> getChats(Authentication authentication) {
 
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow();
+        User user = currentUser(authentication);
 
         return service.getChats(user.getId());
     }
@@ -76,10 +76,7 @@ public class MessageController {
     @GetMapping("/users")
     public List<UserList> getAllUsers(Authentication authentication) {
 
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow();
+        User user = currentUser(authentication);
 
         return userMessagingService.getAllUsers(user.getId());
     }
@@ -94,10 +91,7 @@ public class MessageController {
     @DeleteMapping("/conversation/{otherUserId}")
     public void deleteChat(@PathVariable Long otherUserId, Authentication authentication) {
 
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow();
+        User user = currentUser(authentication);
 
         service.deleteChat(user.getId(), otherUserId);
     }

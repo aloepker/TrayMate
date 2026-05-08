@@ -26,7 +26,7 @@ public class UserMessagingService {
                 .map(user -> UserList.builder()
                         .id(user.getId())
                         .fullName(user.getFullName())
-                        .role(user.getRole().toString())
+                        .role(user.getRole() == null ? "" : user.getRole())
                         .build())
                 .toList();
     }

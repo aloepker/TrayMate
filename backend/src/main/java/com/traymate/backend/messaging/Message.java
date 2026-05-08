@@ -27,8 +27,10 @@ public class Message {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "is_read")
     private Boolean isRead;
 
 }
