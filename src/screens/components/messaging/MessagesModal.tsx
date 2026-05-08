@@ -97,12 +97,13 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
       const myId = meRes.status === "fulfilled" ? String(meRes.value.id) : null;
       setCurrentUserId(myId);
 
-      // Surface a real error instead of silently dropping to "No chats yet" —
-      // most of the time when the badge says "1" but the sidebar is empty,
-      // /messages/chats failed (network blip / cold backend / 401).
-      if (chatsRes.status === "rejected") {
-        const status = (chatsRes.reason as any)?.status;
-        const msg = (chatsRes.reason as any)?.message ?? "Could not load messages";
+      // Treat /messages/chats as a preview endpoint. If it fails but we can
+      // still load message users, keep New Chat usable and let the
+      // conversation probe below recover any existing threads.
+      if (chatsRes.status === "rejected" && usersRes.status === "rejected") {
+        const reason = chatsRes.reason as any;
+        const status = reason?.status;
+        const msg = reason?.message ?? "Could not load messages";
         setInitError(
           status === 403
             ? "Your saved session is not accepted for messages. Log out, then sign in again with a live backend login."

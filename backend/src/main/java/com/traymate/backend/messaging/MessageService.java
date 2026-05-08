@@ -15,12 +15,14 @@ import com.traymate.backend.messaging.dto.ChatResponse;
 import com.traymate.backend.messaging.dto.MessageResponse;
 import com.traymate.backend.messaging.dto.SendMessageRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MessageService {
 
     private final MessageRepository repository;
@@ -81,6 +83,15 @@ public class MessageService {
 
     // new chat function
     public List<ChatResponse> getChats(Long userId) {
+        try {
+            return buildChats(userId);
+        } catch (RuntimeException e) {
+            log.warn("Failed to load message chat previews for user {}", userId, e);
+            return List.of();
+        }
+    }
+
+    private List<ChatResponse> buildChats(Long userId) {
 
         // Was: repository.getConversation(userId, userId), which only returned
         // self-messages and left the sidebar empty for real conversations.
