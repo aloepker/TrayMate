@@ -77,6 +77,7 @@ export type TranslationKeys = {
   desserts: string;
   sides: string;
   seasonal: string;
+  softBite: string;
   tapToAdd: string;
   meals: string;
   order: string;
@@ -213,6 +214,7 @@ const EN: TranslationKeys = {
   desserts: 'Desserts',
   sides: 'Sides',
   seasonal: 'Seasonal',
+  softBite: 'Soft Bite',
   tapToAdd: 'Tap to add to order',
   meals: 'Meals',
   order: 'Order',
@@ -342,6 +344,7 @@ const ES: TranslationKeys = {
   desserts: 'Postres',
   sides: 'Acompañamientos',
   seasonal: 'De Temporada',
+  softBite: 'Bocado Suave',
   tapToAdd: 'Toque para agregar al pedido',
   meals: 'Comidas',
   order: 'Pedir',
@@ -471,6 +474,7 @@ const FR: TranslationKeys = {
   desserts: 'Desserts',
   sides: 'Accompagnements',
   seasonal: 'Saisonnier',
+  softBite: 'Bouchées Tendres',
   tapToAdd: 'Appuyez pour ajouter',
   meals: 'Repas',
   order: 'Commander',
@@ -600,6 +604,7 @@ const ZH: TranslationKeys = {
   desserts: '甜点',
   sides: '配菜',
   seasonal: '时令',
+  softBite: '软食',
   tapToAdd: '点击添加到订单',
   meals: '餐食',
   order: '下单',

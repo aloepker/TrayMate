@@ -288,6 +288,7 @@ const PERIOD_THEMES: Record<string, {
   beverages: { bg: '#F5F9FC', titleColor: '#1A3040', subColor: '#4A6A80', tabActiveBg: '#4A7A9A', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,154,0.07)', tabInactiveText: '#3A607A', icon: '🥤', buttonBg: '#F2F7FA', buttonBorder: 'rgba(74,122,154,0.2)'  },
   desserts:  { bg: '#FCF7FA', titleColor: '#32142A', subColor: '#7A4A68', tabActiveBg: '#8A4A72', tabActiveText: '#FFF', tabInactiveBg: 'rgba(138,74,114,0.07)', tabInactiveText: '#6A3A58', icon: '🍰', buttonBg: '#FAF4F8', buttonBorder: 'rgba(138,74,114,0.2)'  },
   seasonal:  { bg: '#F6FAF6', titleColor: '#1A3020', subColor: '#4A6848', tabActiveBg: '#4A7850', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,120,80,0.07)',  tabInactiveText: '#3A5840', icon: '🌸', buttonBg: '#F4F9F4', buttonBorder: 'rgba(74,120,80,0.2)'   },
+  softBite:  { bg: '#FBFAF6', titleColor: '#2F2418', subColor: '#705C42', tabActiveBg: '#8B6F47', tabActiveText: '#FFF', tabInactiveBg: 'rgba(139,111,71,0.08)', tabInactiveText: '#6B5638', icon: '🥣', buttonBg: '#FFFDF8', buttonBorder: 'rgba(139,111,71,0.22)' },
 };
 
 const PERIOD_KEYS: PeriodOption[] = [
@@ -298,6 +299,7 @@ const PERIOD_KEYS: PeriodOption[] = [
   { key: "beverages", value: "Drinks" },
   { key: "desserts", value: "Sides" },
   { key: "seasonal", value: null },
+  { key: "softBite", value: null },
 ];
 
 /**
@@ -1478,10 +1480,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setError("");
 
     try {
-      // Seasonal tab: fetch all meals then filter to seasonal only
+      // Special tabs fetch by tag/flag; period tabs fetch by meal period.
       let serviceMeals = periodKey === 'seasonal'
         ? await MealService.getSeasonalMeals()
-        : await MealService.getMealsByPeriod(period);
+        : periodKey === 'softBite'
+          ? await MealService.getMealsByTag('Soft Bite')
+          : await MealService.getMealsByPeriod(period);
 
       // After-kitchen-close behaviour: when the resident lands on the
       // "All Day" tab past 7 PM (Breakfast pre-order window), pull in
