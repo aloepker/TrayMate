@@ -57,6 +57,7 @@ export type DisplayMeal = {
   time_range: string;
   kcal: number;
   sodium_mg: number;
+  sugar_g?: number;
   protein_g: number;
   imageUrl?: string;
   tags?: string[];
@@ -211,6 +212,7 @@ export const mapServiceMeal = (m: ServiceMeal): DisplayMeal => ({
   time_range: m.timeRange,
   kcal: m.nutrition.calories,
   sodium_mg: parseInt(String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0", 10),
+  sugar_g: parseInt(String(m.nutrition.sugar).replace(/[^\d]/g, "") || "0", 10),
   protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
   imageUrl: m.imageUrl,
   tags: m.tags ?? [],

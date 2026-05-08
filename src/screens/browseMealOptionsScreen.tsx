@@ -1008,6 +1008,135 @@ function formatMinsUntil(mins: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+const AUTO_CONFIRM_DELAY_MINS = 15;
+
+const cleanProfileList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value.split(/[,;]/).map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+};
+
+const buildSafetyProfileFromParams = (params: any): SafetyResident => ({
+  foodAllergies:       cleanProfileList(params?.foodAllergies),
+  dietaryRestrictions: cleanProfileList(params?.dietaryRestrictions),
+  medicalConditions:   cleanProfileList(params?.medicalConditions),
+});
+
+const hasProfileParamKey = (params: any, key: string): boolean =>
+  Boolean(params) && Object.prototype.hasOwnProperty.call(params, key);
+
+const buildSafetyProfileFromLocalResident = (
+  resident: Resident | null | undefined,
+): SafetyResident | null => {
+  if (!resident?.dietaryRestrictions) return null;
+  return {
+    foodAllergies: resident.dietaryRestrictions
+      .filter((rule) => rule.type === 'allergy')
+      .map((rule) => rule.name),
+    dietaryRestrictions: resident.dietaryRestrictions
+      .filter((rule) => rule.type !== 'allergy' && rule.type !== 'medical')
+      .map((rule) => rule.name),
+    medicalConditions: resident.dietaryRestrictions
+      .filter((rule) => rule.type === 'medical')
+      .map((rule) => rule.name),
+  };
+};
+
+const EMPTY_SAFETY_PROFILE: SafetyResident = {
+  foodAllergies: [],
+  dietaryRestrictions: [],
+  medicalConditions: [],
+};
+
+const mergeSafetyProfile = (
+  params: any,
+  fallback: SafetyResident | null | undefined,
+): SafetyResident => {
+  const routeProfile = buildSafetyProfileFromParams(params);
+  const base = fallback ?? EMPTY_SAFETY_PROFILE;
+  return {
+    foodAllergies: hasProfileParamKey(params, 'foodAllergies')
+      ? routeProfile.foodAllergies
+      : base.foodAllergies ?? [],
+    dietaryRestrictions: hasProfileParamKey(params, 'dietaryRestrictions')
+      ? routeProfile.dietaryRestrictions
+      : base.dietaryRestrictions ?? [],
+    medicalConditions: hasProfileParamKey(params, 'medicalConditions')
+      ? routeProfile.medicalConditions
+      : base.medicalConditions ?? [],
+  };
+};
+
+const normalizeSafetyToken = (value: string): string => value.toLowerCase().trim();
+
+const getMealSugarG = (meal: Meal): number | null => {
+  const raw = (meal as any).sugar_g ?? (meal as any).sugarG ?? (meal as any).sugar;
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string') {
+    const parsed = parseInt(raw.replace(/[^\d]/g, ''), 10);
+    return isNaN(parsed) ? null : parsed;
+  }
+  return null;
+};
+
+function autoOrderMedicalFitScore(meal: Meal, profile: SafetyResident): number {
+  const conditions = [
+    ...(profile.medicalConditions ?? []),
+    ...(profile.dietaryRestrictions ?? []),
+  ].map(normalizeSafetyToken);
+  const has = (needle: string) => conditions.some((condition) => condition.includes(needle));
+  let score = 0;
+
+  if (
+    has('hypertension') ||
+    has('high blood pressure') ||
+    has('heart disease') ||
+    has('kidney disease') ||
+    has('low sodium') ||
+    has('low-sodium')
+  ) {
+    score += Math.max(0, 600 - (meal.sodium_mg ?? 0));
+  }
+
+  if (has('diabetes') || has('diabetic')) {
+    const sugar = getMealSugarG(meal);
+    if (sugar != null) score += Math.max(0, 25 - sugar) * 12;
+  }
+
+  score += Math.min(meal.protein_g ?? 0, 40);
+  return score;
+}
+
+function pickAutoOrderMeal(
+  candidates: Meal[],
+  frequency: Map<string, number>,
+  profile: SafetyResident,
+): Meal | null {
+  const safeCandidates = candidates
+    .filter((meal) => meal.isAvailable !== false)
+    .filter((meal) => isMealSafe(meal as any, profile));
+
+  safeCandidates.sort((a, b) => {
+    const historyDelta =
+      (frequency.get(b.name.toLowerCase()) ?? 0) -
+      (frequency.get(a.name.toLowerCase()) ?? 0);
+    if (historyDelta !== 0) return historyDelta;
+
+    const medicalDelta =
+      autoOrderMedicalFitScore(b, profile) -
+      autoOrderMedicalFitScore(a, profile);
+    if (medicalDelta !== 0) return medicalDelta;
+
+    return a.name.localeCompare(b.name);
+  });
+
+  return safeCandidates[0] ?? null;
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -1123,14 +1252,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           if (cancelled || !fresh) return;
           // Only update if something actually changed to avoid pointless re-renders
           const current = {
-            dietary: (route?.params as any)?.dietaryRestrictions ?? [],
-            allergies: (route?.params as any)?.foodAllergies ?? [],
-            medical: (route?.params as any)?.medicalConditions ?? [],
+            dietary: cleanProfileList((route?.params as any)?.dietaryRestrictions),
+            allergies: cleanProfileList((route?.params as any)?.foodAllergies),
+            medical: cleanProfileList((route?.params as any)?.medicalConditions),
           };
           const incoming = {
-            dietary: fresh.dietaryRestrictions ?? [],
-            allergies: fresh.foodAllergies ?? [],
-            medical: fresh.medicalConditions ?? [],
+            dietary: cleanProfileList(fresh.dietaryRestrictions),
+            allergies: cleanProfileList(fresh.foodAllergies),
+            medical: cleanProfileList(fresh.medicalConditions),
           };
           const eq = (a: string[], b: string[]) =>
             a.length === b.length && a.every((v, i) => v === b[i]);
@@ -1150,6 +1279,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           // the new restrictions (e.g. a previously-suggested meal that
           // is now flagged should be re-checked).
           autoConfirmShownRef.current.clear();
+          setAutoSuggestDismissed(false);
+          setAutoSuggest(null);
+          setPendingAutoOrder(null);
+          setShowAutoOrderPanel(false);
         } catch { /* network blip — keep stale params */ }
       })();
       return () => { cancelled = true; };
@@ -1175,10 +1308,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Get resident name from route params or use localDataService
   const residentId = route?.params?.residentId as string | undefined;
+  const localResidentRecord = residentId ? ResidentService.getResidentById(residentId) : null;
   const residentName =
-    (residentId && ResidentService.getResidentById(residentId)?.fullName) ||
+    localResidentRecord?.fullName ||
     route?.params?.residentName ||
     ResidentService.getDefaultResident().fullName;
+  const residentSafetyProfile = mergeSafetyProfile(
+    route?.params,
+    buildSafetyProfileFromLocalResident(localResidentRecord),
+  );
+  const residentSafetyProfileKey = JSON.stringify(residentSafetyProfile);
+
+  useEffect(() => {
+    autoConfirmShownRef.current.clear();
+    setAutoSuggest(null);
+    setPendingAutoOrder(null);
+    setShowAutoOrderPanel(false);
+    setAutoSuggestDismissed(false);
+  }, [residentId]);
 
   // Navigate to cart screen with resident context. Pass the active tab's
   // meal period so drinks/sides-only orders land under the right meal —
@@ -1380,32 +1527,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setRecPeriodMeals(periodMeals.map(mapServiceMeal));
 
       // ── Step 2: build a SafetyResident (unified shape for both paths) ──
-      // Empty strings are filtered out so they don't turn into wildcard matches.
-      const clean = (arr: string[] | undefined) =>
-        (arr ?? []).map((s) => String(s).trim()).filter(Boolean);
-
-      let residentName: string;
-      let safetyResident: SafetyResident;
-
-      if (localResident) {
-        residentName = localResident.fullName;
-        safetyResident = {
-          foodAllergies: localResident.dietaryRestrictions
-            .filter((r) => r.type === 'allergy')
-            .map((r) => r.name),
-          dietaryRestrictions: localResident.dietaryRestrictions
-            .filter((r) => r.type !== 'allergy')
-            .map((r) => r.name),
-          medicalConditions: [],
-        };
-      } else {
-        residentName = route?.params?.residentName ?? 'Resident';
-        safetyResident = {
-          foodAllergies:        clean(route?.params?.foodAllergies as any),
-          dietaryRestrictions:  clean(route?.params?.dietaryRestrictions as any),
-          medicalConditions:    clean(route?.params?.medicalConditions as any),
-        };
-      }
+      // Route params win when present because they are refreshed from the
+      // backend on focus; local data fills gaps for bundled residents.
+      const residentName = localResident?.fullName ?? route?.params?.residentName ?? 'Resident';
+      const safetyResident = mergeSafetyProfile(
+        route?.params,
+        buildSafetyProfileFromLocalResident(localResident),
+      );
 
       // Browse list shows ALL meals (with red restriction badges), but the AI
       // recommendation picks from SAFE meals only — never suggest something
@@ -1418,6 +1546,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         allergenInfo: m.allergenInfo,
         ingredients: m.ingredients,
         sodium: m.nutrition?.sodium,
+        sugar: m.nutrition?.sugar,
         meal_period: m.mealPeriod,
       }));
       const safeIds = new Set(
@@ -1429,20 +1558,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
       // No options at all — give the UI a clear "nothing available" state.
       if (safeMeals.length === 0) {
-        if (periodMeals.length > 0) {
-          const first = periodMeals[0];
-          setRecommendation({
-            meal_name: first.name,
-            reason: "We couldn't find a meal that matches every restriction — please double-check the profile. You might consider the",
-            dietary_restrictions: [
-              ...(safetyResident.foodAllergies ?? []),
-              ...(safetyResident.dietaryRestrictions ?? []),
-            ],
-            targetPeriod: targetPeriod ?? undefined,
-          } as any);
-        } else {
-          setRecommendation(null);
-        }
+        setRecommendation(null);
         setRecLoading(false);
         return;
       }
@@ -1513,6 +1629,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         }
       }
 
+      if (rec) {
+        const recName = String(rec.meal_name ?? '').trim().toLowerCase();
+        const inSafeSet = safeMeals.some((meal) => meal.name.trim().toLowerCase() === recName);
+        if (!inSafeSet) rec = null;
+      }
+
       // Final guard: if both Gemini and the rule-based fallback came up empty
       // but we DO have safe meals, pick the first one so the card isn't dead.
       // Ensures "No recommendation available" only shows when there's truly
@@ -1565,21 +1687,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const hasOrderForPeriod = resOrders.some((o) =>
       o.items.some((i) => i.meal_period === upcoming.label)
     );
-    if (hasOrderForPeriod) return;
+    if (hasOrderForPeriod) {
+      setAutoSuggest(null);
+      setPendingAutoOrder(null);
+      setShowAutoOrderPanel(false);
+      return;
+    }
 
     const allPastItems = resOrders.flatMap((o) => o.items);
 
     // Use the centralised safety service so the auto-suggest filter
-    // matches what the menu cards show. Critically, this also applies
-    // medical-condition rules (e.g. sodium cap for hypertension, sugar
-    // cap for diabetes) — the old inline check only saw allergies.
-    const safetyResidentForAuto: SafetyResident = {
-      foodAllergies:        (route?.params?.foodAllergies as string[]) ?? [],
-      dietaryRestrictions:  (route?.params?.dietaryRestrictions as string[]) ?? [],
-      medicalConditions:    (route?.params?.medicalConditions as string[]) ?? [],
-    };
+    // matches what the menu cards and cart gate show. This is a hard
+    // filter: the bell should never recommend a meal that conflicts with
+    // allergies or medical conditions.
     const isSafeForResident = (m: Meal): boolean =>
-      isMealSafe(m as any, safetyResidentForAuto);
+      isMealSafe(m as any, residentSafetyProfile);
 
     // Helper: count frequency of each item name in history for a given period
     const getFrequencyRanked = (period: string): Map<string, number> => {
@@ -1593,63 +1715,40 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return freq;
     };
 
-    // Pick main meal — most frequently ordered for this period, then fallback
+    // Pick main meal from safe candidates only. History wins first, then
+    // a small medical-fit score breaks ties for residents with conditions.
     const mealFreq = getFrequencyRanked(upcoming.label);
-    let mainMeal: Meal | null = null;
-    if (mealFreq.size > 0) {
-      // Sort by frequency descending, try each until we find a safe available match
-      const ranked = [...mealFreq.entries()].sort((a, b) => b[1] - a[1]);
-      for (const [name] of ranked) {
-        const candidate = meals.find(
-          (m) => m.meal_period === upcoming.label && m.name.toLowerCase() === name && isSafeForResident(m)
-        );
-        if (candidate) { mainMeal = candidate; break; }
-      }
-    }
+    let mainMeal: Meal | null = pickAutoOrderMeal(
+      meals.filter((m) => m.meal_period === upcoming.label),
+      mealFreq,
+      residentSafetyProfile,
+    );
     if (!mainMeal) {
-      const periodMeals = meals.filter((m) => m.meal_period === upcoming.label && isSafeForResident(m));
-      mainMeal = periodMeals[0] ?? null;
+      setAutoSuggest(null);
+      setPendingAutoOrder(null);
+      setShowAutoOrderPanel(false);
+      return;
     }
-    // Final fallback: if no SAFE meal exists for this period (resident
-    // has restrictions blocking everything), still suggest the first
-    // available period meal so the bell fires. The Approve button then
-    // gets blocked by the backend compliance check, which surfaces the
-    // override flow — better than silently never alerting anyone.
-    if (!mainMeal) {
-      const anyPeriodMeals = meals.filter((m) => m.meal_period === upcoming.label);
-      mainMeal = anyPeriodMeals[0] ?? null;
-    }
-    if (!mainMeal) return;
 
     // Pick drink — most frequently ordered, then fallback
-    const safeDrinks = availableDrinks.filter(isSafeForResident);
     const drinkFreq = getFrequencyRanked('Drinks');
-    let suggestDrink: Meal | undefined;
-    if (drinkFreq.size > 0) {
-      const ranked = [...drinkFreq.entries()].sort((a, b) => b[1] - a[1]);
-      for (const [name] of ranked) {
-        const candidate = safeDrinks.find((d) => d.name.toLowerCase() === name);
-        if (candidate) { suggestDrink = candidate; break; }
-      }
-    }
-    if (!suggestDrink) suggestDrink = safeDrinks[0];
+    const suggestDrink = pickAutoOrderMeal(
+      availableDrinks.filter(isSafeForResident),
+      drinkFreq,
+      residentSafetyProfile,
+    ) ?? undefined;
 
     // Pick side — most frequently ordered, then fallback
-    const safeSides = availableSides.filter(isSafeForResident);
     const sideFreq = getFrequencyRanked('Sides');
-    let suggestDessert: Meal | undefined;
-    if (sideFreq.size > 0) {
-      const ranked = [...sideFreq.entries()].sort((a, b) => b[1] - a[1]);
-      for (const [name] of ranked) {
-        const candidate = safeSides.find((s) => s.name.toLowerCase() === name);
-        if (candidate) { suggestDessert = candidate; break; }
-      }
-    }
-    if (!suggestDessert) suggestDessert = safeSides[0];
+    const suggestDessert = pickAutoOrderMeal(
+      availableSides.filter(isSafeForResident),
+      sideFreq,
+      residentSafetyProfile,
+    ) ?? undefined;
 
     setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, isNow: next.isNow, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, currentTime.getHours(), currentTime.getMinutes()]);
+  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
 
   // ── Auto-confirm prompt (replaces the old silent auto-place) ─────────
   // 15 minutes into the meal period, if the resident still hasn't ordered,
@@ -1675,15 +1774,29 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const hasOrderForPeriod = resOrders.some((o) =>
       o.items.some((i) => i.meal_period === autoSuggest.period),
     );
-    if (hasOrderForPeriod) return;
+    if (hasOrderForPeriod) {
+      setAutoSuggest(null);
+      setPendingAutoOrder(null);
+      setShowAutoOrderPanel(false);
+      return;
+    }
 
     // 15 minutes into the period
     const periodSched = MEAL_SCHEDULE.find((s) => s.label === autoSuggest.period);
     if (!periodSched) return;
     const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
     const minsSinceStart = nowMins - periodSched.start;
-    const AUTO_CONFIRM_DELAY = 15;
-    if (minsSinceStart < AUTO_CONFIRM_DELAY) return;
+    if (minsSinceStart < AUTO_CONFIRM_DELAY_MINS) return;
+
+    const snapshot = autoSuggest;
+    const items = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
+    const unsafeItem = items.find((item) => !isMealSafe(item as any, residentSafetyProfile));
+    if (unsafeItem) {
+      setAutoSuggest(null);
+      setPendingAutoOrder(null);
+      setShowAutoOrderPanel(false);
+      return;
+    }
 
     // In-session lock — once shown, do not re-show this session for the
     // same (resident, period, date) combo, no matter how many minute
@@ -1693,8 +1806,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     if (autoConfirmShownRef.current.has(key)) return;
     autoConfirmShownRef.current.add(key);
 
-    const snapshot = autoSuggest;
-    const items = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
     const itemNames = items.map((i) => i.name).join(', ');
     const itemBullets = items.map((i) => `• ${i.name}`).join('\n');
 
@@ -1722,7 +1833,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       lockKey: key,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSuggest, autoSuggestDismissed, residentId, currentTime.getHours(), currentTime.getMinutes()]);
+  }, [autoSuggest, autoSuggestDismissed, residentId, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -1749,6 +1860,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     if (!pendingAutoOrder) return;
     const { period, items, lockKey } = pendingAutoOrder;
     const itemNames = items.map((i) => i.name).join(', ');
+    const unsafe = items
+      .map((item) => ({ item, reason: getMealUnsafeReason(item) }))
+      .find((entry) => entry.reason);
+    if (unsafe) {
+      autoConfirmShownRef.current.delete(lockKey);
+      setAutoSuggest(null);
+      setPendingAutoOrder(null);
+      setShowAutoOrderPanel(false);
+      Alert.alert(
+        'Recommendation changed',
+        `${unsafe.item.name} is no longer safe for this resident: ${unsafe.reason}. Please choose another meal or request an override.`,
+      );
+      return;
+    }
     try {
       clearCart();
       for (const item of items) {
@@ -1801,16 +1926,36 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Resident safety profile pulled from the navigation params that the
   // login/home flow attaches. The centralised safety service consumes
   // these arrays directly — keeping logic out of this file.
-  const residentSafetyProfile = {
-    foodAllergies: (route?.params?.foodAllergies ?? []) as string[],
-    dietaryRestrictions: (route?.params?.dietaryRestrictions ?? []) as string[],
-    medicalConditions: (route?.params?.medicalConditions ?? []) as string[],
-  };
-
   /** Centralised safety check — returns a human reason or null. */
   const getMealUnsafeReason = (meal: Meal | null | undefined): string | null => {
     if (!meal) return null;
     return getUnsafeReason(meal as any, residentSafetyProfile);
+  };
+
+  const addSuggestedItemToCart = (item: Meal): boolean => {
+    const unsafeReason = getMealUnsafeReason(item);
+    if (unsafeReason) {
+      setAutoSuggest(null);
+      setPendingAutoOrder(null);
+      setShowAutoOrderPanel(false);
+      Alert.alert(
+        'Recommendation changed',
+        `${item.name} is no longer safe for this resident: ${unsafeReason}. Please choose another meal or request an override.`,
+      );
+      return false;
+    }
+
+    addToCart({
+      id: Number(item.id),
+      name: item.name,
+      meal_period: item.meal_period as any,
+      description: item.description,
+      kcal: item.kcal,
+      sodium_mg: item.sodium_mg,
+      protein_g: item.protein_g,
+      tags: item.tags,
+    });
+    return true;
   };
 
   /**
@@ -2296,7 +2441,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 {autoSuggest.isNow
                   ? `Current meal: ${autoSuggest.period} — ${formatMinsUntil(autoSuggest.minsUntil)} left`
                   : `Next meal: ${autoSuggest.period} in ${formatMinsUntil(autoSuggest.minsUntil)}`}
-                {' — based on your favorites'}
+                {' — safe pick from past orders'}
               </Text>
               <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={10}>
                 <Feather name="x" size={18} color="#9CA3AF" />
@@ -2312,7 +2457,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 style={styles.bottomCardSuggestConfirm}
                 onPress={() => {
                   const m = autoSuggest.meal;
-                  addToCart({ id: Number(m.id), name: m.name, meal_period: m.meal_period as any, description: m.description, kcal: m.kcal, sodium_mg: m.sodium_mg, protein_g: m.protein_g, tags: m.tags });
+                  addSuggestedItemToCart(m);
                 }}
               >
                 <Text style={[styles.bottomCardSuggestConfirmText, { fontSize: scaled(16) }]}>Add</Text>
@@ -2326,10 +2471,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   <Text style={styles.bottomCardMealName}>{translateMealName(autoSuggest.drink.name, language)}</Text>
                 </Text>
                 <TouchableOpacity
-                  style={styles.bottomCardSuggestConfirm}
-                  onPress={() => {
-                    const d = autoSuggest.drink!;
-                    addToCart({ id: Number(d.id), name: d.name, meal_period: d.meal_period as any, description: d.description, kcal: d.kcal, sodium_mg: d.sodium_mg, protein_g: d.protein_g, tags: d.tags });
+                style={styles.bottomCardSuggestConfirm}
+                onPress={() => {
+                  const d = autoSuggest.drink!;
+                    addSuggestedItemToCart(d);
                   }}
                 >
                   <Text style={[styles.bottomCardSuggestConfirmText, { fontSize: scaled(16) }]}>Add</Text>
@@ -2344,10 +2489,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   <Text style={styles.bottomCardMealName}>{translateMealName(autoSuggest.dessert.name, language)}</Text>
                 </Text>
                 <TouchableOpacity
-                  style={styles.bottomCardSuggestConfirm}
-                  onPress={() => {
-                    const s = autoSuggest.dessert!;
-                    addToCart({ id: Number(s.id), name: s.name, meal_period: s.meal_period as any, description: s.description, kcal: s.kcal, sodium_mg: s.sodium_mg, protein_g: s.protein_g, tags: s.tags });
+                style={styles.bottomCardSuggestConfirm}
+                onPress={() => {
+                  const s = autoSuggest.dessert!;
+                    addSuggestedItemToCart(s);
                   }}
                 >
                   <Text style={[styles.bottomCardSuggestConfirmText, { fontSize: scaled(16) }]}>Add</Text>
@@ -2360,6 +2505,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               onPress={async () => {
                 if (!autoSuggest || !residentId) return;
                 const items = [autoSuggest.meal, autoSuggest.drink, autoSuggest.dessert].filter(Boolean) as Meal[];
+                const unsafe = items
+                  .map((item) => ({ item, reason: getMealUnsafeReason(item) }))
+                  .find((entry) => entry.reason);
+                if (unsafe) {
+                  setAutoSuggest(null);
+                  setPendingAutoOrder(null);
+                  setShowAutoOrderPanel(false);
+                  Alert.alert(
+                    'Recommendation changed',
+                    `${unsafe.item.name} is no longer safe for this resident: ${unsafe.reason}. Please choose another meal or request an override.`,
+                  );
+                  return;
+                }
                 clearCart();
                 for (const item of items) {
                   addToCart({ id: Number(item.id), name: item.name, meal_period: item.meal_period as any, description: item.description, kcal: item.kcal, sodium_mg: item.sodium_mg, protein_g: item.protein_g, tags: item.tags });
@@ -2756,7 +2914,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </ScrollView>
 
             <Text style={[styles.autoOrderApprovalNote, { fontSize: scaled(12) }]}>
-              Admin or caregiver approval required.
+              Filtered against allergies and medical conditions. Admin or caregiver approval required.
             </Text>
 
             <View style={styles.autoOrderActions}>

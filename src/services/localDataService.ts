@@ -96,7 +96,7 @@ function resolvePeriodWithFallback(
 }
 
 function parseNutrition(nutritionText: string | null | undefined): Nutrition {
-  const text = nutritionText ?? "";
+  const text = typeof nutritionText === "string" ? nutritionText : "";
 
   const extract = (label: string): string => {
     const regex = new RegExp(`${label}\\s*:?\\s*([^,]+)`, "i");
@@ -135,6 +135,7 @@ function apiMealToMeal(api: any): Meal {
   console.log("API meal row:", api);
   const name = api.name ?? "";
   const description = api.description ?? "";
+  const parsedNutrition = parseNutrition(api.nutrition);
   cachePersistedMealTranslations({ ...api, name, description });
 
   return {
@@ -142,16 +143,16 @@ function apiMealToMeal(api: any): Meal {
     name,
     ingredients: splitCommaList(api.ingredients),
     nutrition: {
-      calories: Number(api.calories) || 0,
-      totalFat: "",
-      saturatedFat: undefined,
-      transFat: undefined,
-      cholesterol: "",
-      carbohydrate: "",
-      fiber: "",
-      sugar: "",
-      sodium: String(api.sodium ?? ""),
-      protein: String(api.protein ?? ""),
+      calories: Number(api.calories) || parsedNutrition.calories || 0,
+      totalFat: parsedNutrition.totalFat,
+      saturatedFat: parsedNutrition.saturatedFat,
+      transFat: parsedNutrition.transFat,
+      cholesterol: parsedNutrition.cholesterol,
+      carbohydrate: parsedNutrition.carbohydrate,
+      fiber: parsedNutrition.fiber,
+      sugar: parsedNutrition.sugar,
+      sodium: String(api.sodium ?? parsedNutrition.sodium ?? ""),
+      protein: String(api.protein ?? parsedNutrition.protein ?? ""),
     },
     description,
     imageUrl: String(api.imageUrl ?? "").trim(),
