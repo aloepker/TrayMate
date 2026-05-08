@@ -330,7 +330,7 @@ ${mealsContext}${restrictedContext}${favoritesContext}
 
 RESPONSE RULES — KEEP IT SHORT:
 - Max 2-3 sentences per response. Never write paragraphs.
-- For meal recommendations: one sentence on why it fits, then the meal name in bold.
+- For meal recommendations: put the recommended meal on its own line as a card line: **Exact Meal Name** — short reason.
 - For menu listing: bullet points only, no extra commentary.
 - Never repeat the resident's name back in every sentence.
 - No filler phrases like "Great question!" or "Of course!".
@@ -338,7 +338,7 @@ RESPONSE RULES — KEEP IT SHORT:
 - Flag unsafe meals in one short sentence.
 - Only recommend meals from the AVAILABLE MEALS list.
 
-LANGUAGE: Respond in ${language} only. Meal names stay in English.`;
+LANGUAGE: Respond in ${language} only. When ${language} is not English, translate meal names naturally too; keep the exact menu item identity and do not invent new meals.`;
 }
 
 /**
@@ -690,6 +690,48 @@ ${numbered}`;
         if (orig) result[orig] = tr;
       }
       return result;
+    } catch {
+      continue;
+    }
+  }
+  return {};
+}
+
+/**
+ * Batch-translate short meal tag labels (e.g. "Dairy-Free", "Low Sugar").
+ * Returns { tag -> translations } so callers can persist the same JSON shape
+ * stored in the dynamic tag cache.
+ */
+export async function translateMealTagsWithGemini(
+  tags: string[],
+): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  const uniqueTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
+  if (uniqueTags.length === 0) return {};
+
+  const prompt = `Translate these short English meal/dietary tag labels into Spanish (Español), French (Français), and Chinese (中文).
+Return ONLY valid JSON — no markdown, no explanation — exactly like this example:
+{"Low Sodium":{"Español":"Bajo en Sodio","Français":"Faible en Sodium","中文":"低钠"}}
+
+Tags to translate:
+${uniqueTags.join('\n')}`;
+
+  for (const model of GEMINI_CONFIG.models) {
+    try {
+      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
+      };
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
+      return JSON.parse(clean);
     } catch {
       continue;
     }

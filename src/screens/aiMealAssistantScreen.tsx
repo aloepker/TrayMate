@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   SafeAreaView,
   StyleSheet,
@@ -27,8 +28,9 @@ import {
   translateMealTimeRange,
 } from '../services/mealLocalization';
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
-import { getDefaultMealsApi } from '../services/api';
+import { getDefaultMealsApi, getResidentById as fetchResidentApi } from '../services/api';
 import { getMealImage } from '../services/mealDisplayService';
+import { isMealSafe, SafetyResident } from '../services/mealSafetyService';
 import { useSettings } from './context/SettingsContext';
 
 // ---------- TrayMate Color Palette ----------
@@ -67,6 +69,8 @@ const MEAL_PLACEHOLDERS: Record<string, { bg: string; emoji: string }> = {
 const getMealPlaceholder = (name: string) =>
   MEAL_PLACEHOLDERS[name] || { bg: COLORS.primaryLight, emoji: '🍽' };
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ---------- Rich Text Renderer ----------
 // Parses **bold**, meal names (renders inline cards), and bullet points.
 // onOrderMeal — optional callback so meal cards inside chat bubbles can
@@ -88,35 +92,60 @@ const RichText = ({
   onOrderMeal?: (meal: ServiceMeal) => void;
 }) => {
   const lines = text.split('\n');
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[’']/g, "'")
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   return (
     <View>
       {lines.map((line, lineIdx) => {
-        // Check if this line is a meal card line (starts with number or bullet + bold meal name)
+        // Check if this line has a bold meal name that matches a real meal
         const mealCardMatch = line.match(
-          /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
+          /^(.*?)(?:\d+\.\s*|[•-]\s*)?\*\*(.+?)\*\*(.*)$/,
         );
-        const requestedMealName = mealCardMatch?.[1].toLowerCase().trim();
+        const requestedMealName = mealCardMatch ? norm(mealCardMatch[2]) : '';
         const matchedMeal = mealCardMatch
-          ? allMeals.find(
-              m =>
-                m.name.toLowerCase() === requestedMealName ||
-                translateMealName(m.name, language).toLowerCase() === requestedMealName,
-            )
+          ? allMeals.find(m => {
+              const n1 = norm(m.name);
+              const n2 = norm(translateMealName(m.name, language));
+              if (!requestedMealName) return false;
+              if (n1 === requestedMealName || n2 === requestedMealName) return true;
+              if (requestedMealName.length >= 4 && (n1.includes(requestedMealName) || n2.includes(requestedMealName))) return true;
+              if (n1.length >= 4 && requestedMealName.includes(n1)) return true;
+              if (n2.length >= 4 && requestedMealName.includes(n2)) return true;
+              return false;
+            })
           : null;
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
-          // Real bundled meal image (matches the menu screen) — falls back
-          // to emoji if no asset is available for this meal name.
-          const realImg = getMealImage(matchedMeal.name);
+          // Same picture chain the menu screen uses: backend imageUrl
+          // first, then bundled asset, then emoji placeholder.
+          const remoteUri = matchedMeal.imageUrl && matchedMeal.imageUrl.trim().length > 0
+            ? matchedMeal.imageUrl.trim()
+            : null;
+          const localImg = remoteUri ? null : getMealImage(matchedMeal.name);
           // Extract reasoning text after **name** (e.g. " — Free of: Dairy | Low sodium")
-          const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
+          const suffixText = mealCardMatch?.[3]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
-            <View key={lineIdx} style={richStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
+            <TouchableOpacity
+              key={lineIdx}
+              style={richStyles.mealCard}
+              activeOpacity={onOrderMeal ? 0.78 : 1}
+              onPress={onOrderMeal ? () => onOrderMeal(matchedMeal) : undefined}
+              accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}. Tap to order this meal.`}
+            >
               <View style={[richStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                {realImg ? (
-                  <Image source={realImg} style={richStyles.mealCardRealImage} resizeMode="cover" />
+                {remoteUri ? (
+                  <Image source={{ uri: remoteUri }} style={richStyles.mealCardRealImage} resizeMode="cover" />
+                ) : localImg ? (
+                  <Image source={localImg} style={richStyles.mealCardRealImage} resizeMode="cover" />
                 ) : (
                   <Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>
                 )}
@@ -149,7 +178,7 @@ const RichText = ({
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }
 
@@ -376,17 +405,129 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  // Pick a menu question that matches the wall clock — inside a serving
+  // window we ask about that period, between meals (or after dinner) we
+  // ask about the next one coming up. Uses translated strings so the
+  // button matches the active language.
+  const getMenuNowQuestion = (): string => {
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    if (mins >= 7 * 60 && mins <= 10 * 60) return t.whatsForBreakfast;
+    if (mins >= 11 * 60 && mins <= 14 * 60) return t.whatsForLunch;
+    if (mins >= 16 * 60 && mins <= 19 * 60) return t.whatsForDinner;
+    if (mins < 7 * 60) return t.whatsForBreakfast;
+    if (mins < 11 * 60) return t.whatsForLunch;
+    if (mins < 16 * 60) return t.whatsForDinner;
+    return t.whatsForBreakfastTomorrow;
+  };
   const QUICK_QUESTIONS = [
-    t.whatsOnMenuToday,
+    getMenuNowQuestion(),
     t.recommendAMeal,
     t.viewDietaryRestrictionsPrompt,
     t.whatMealsLowSodium,
   ];
 
+  const injectMealBold = useCallback((raw: string) => {
+    if (!raw) return raw;
+
+    const mealNames = (allMeals || [])
+      .map(m => ({
+        raw: m.name,
+        localized: translateMealName(m.name, language),
+      }))
+      .sort((a, b) => b.localized.length - a.localized.length);
+
+    let out = raw;
+    for (const mealName of mealNames) {
+      const candidates = Array.from(new Set([mealName.localized, mealName.raw])).filter(Boolean);
+      for (const candidate of candidates) {
+        const useWordBoundary = /[A-Za-z0-9]/.test(candidate);
+        const re = useWordBoundary
+          ? new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegExp(candidate)})(?=$|[^\\p{L}\\p{N}])`, 'giu')
+          : new RegExp(`(${escapeRegExp(candidate)})`, 'giu');
+        out = out.replace(re, (...args) => {
+          const offset = args[args.length - 2] as number;
+          const full = args[args.length - 1] as string;
+          const prefix = useWordBoundary ? (args[1] as string) : '';
+          const mealText = useWordBoundary ? (args[2] as string) : (args[1] as string);
+          const mealOffset = offset + prefix.length;
+          const boldMarkersBefore = (full.slice(0, mealOffset).match(/\*\*/g) || []).length;
+          const boldMarkersAfter = (full.slice(mealOffset + mealText.length).match(/\*\*/g) || []).length;
+          const insideBold = boldMarkersBefore % 2 === 1 && boldMarkersAfter % 2 === 1;
+          const directlyBold =
+            full.slice(mealOffset - 2, mealOffset) === '**' &&
+            full.slice(mealOffset + mealText.length, mealOffset + mealText.length + 2) === '**';
+          if (insideBold || directlyBold) {
+            return `${prefix}${mealText}`;
+          }
+          return `${prefix}**${mealText}**`;
+        });
+      }
+    }
+    return out;
+  }, [allMeals, language]);
+
   // Load meals from API on mount
   useEffect(() => {
     MealService.getAllMeals().then(setAllMeals).catch(() => setAllMeals([]));
   }, []);
+
+  // Refresh resident profile from the backend whenever this screen gains
+  // focus — same mechanism the browse screen uses. Catches allergies
+  // and dietary restrictions added (or new residents) since the local
+  // cache was last populated. Updates route.params so the offline
+  // fallback picks them up, AND re-initializes Granny BT directly so
+  // the AI prompt also sees the fresh profile without a remount.
+  useFocusEffect(
+    useCallback(() => {
+      if (!residentId) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const fresh = await fetchResidentApi(residentId);
+          if (cancelled || !fresh) return;
+          const incoming = {
+            dietaryRestrictions: fresh.dietaryRestrictions ?? [],
+            foodAllergies: fresh.foodAllergies ?? [],
+            medicalConditions: fresh.medicalConditions ?? [],
+          };
+          const cur = {
+            dietaryRestrictions: (route?.params as any)?.dietaryRestrictions ?? [],
+            foodAllergies: (route?.params as any)?.foodAllergies ?? [],
+            medicalConditions: (route?.params as any)?.medicalConditions ?? [],
+          };
+          const eq = (a: string[], b: string[]) =>
+            a.length === b.length && a.every((v, i) => v === b[i]);
+          const changed =
+            !eq(cur.dietaryRestrictions, incoming.dietaryRestrictions) ||
+            !eq(cur.foodAllergies, incoming.foodAllergies) ||
+            !eq(cur.medicalConditions, incoming.medicalConditions);
+          if (changed) {
+            navigation.setParams(incoming as any);
+          }
+          // Re-initialize the AI session with the fresh profile so
+          // newly-added allergies show up in the prompt right away.
+          const service = chatServiceRef.current;
+          if (service && service.isConfigured()) {
+            let favoriteMealIds: number[] = [];
+            try {
+              favoriteMealIds = await getDefaultMealsApi(residentId);
+            } catch { /* no-op */ }
+            const override = {
+              name: residentName,
+              dietaryRestrictions: incoming.dietaryRestrictions,
+              foodAllergies: incoming.foodAllergies,
+              medicalConditions: incoming.medicalConditions,
+              favoriteMealIds,
+            };
+            service.initialize(residentId, language, override, favoriteMealIds).catch(() => {});
+          }
+        } catch { /* network blip — keep stale params */ }
+      })();
+      return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [residentId, residentName, language, navigation]),
+  );
 
   // Initialize chat service on mount
   useEffect(() => {
@@ -442,18 +583,121 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   // Minimal fallback for when ALL Gemini models are down
   const generateFallbackResponse = async (userMessage: string): Promise<string> => {
     const lower = userMessage.toLowerCase();
-    const menuItems = allMeals
+
+    // Strip restricted meals up-front so neither the menu list nor the
+    // recommend list can surface anything unsafe for this resident.
+    //
+    // Look up the local resident fresh on every message so allergies
+    // added through the UI (without re-navigating) are picked up
+    // immediately. Falls back to route.params for backend-only
+    // residents that aren't in the local cache.
+    const localResident = ResidentService.getResidentById(residentId);
+    const safetyResident: SafetyResident = localResident
+      ? {
+          foodAllergies: localResident.dietaryRestrictions
+            .filter((r) => r.type === 'allergy')
+            .map((r) => r.name),
+          dietaryRestrictions: localResident.dietaryRestrictions
+            .filter((r) => r.type !== 'allergy')
+            .map((r) => r.name),
+          medicalConditions: [],
+        }
+      : {
+          foodAllergies,
+          dietaryRestrictions,
+          medicalConditions,
+        };
+    const safeAllMeals = allMeals.filter((m) =>
+      isMealSafe(
+        {
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          tags: m.tags,
+          allergenInfo: m.allergenInfo,
+          ingredients: m.ingredients,
+          sodium: m.nutrition?.sodium,
+          meal_period: m.mealPeriod,
+        },
+        safetyResident,
+      ),
+    );
+
+    // Detect a specific period in the question so the fallback shows
+    // only the relevant slice — matches Granny BT's time-aware behavior.
+    let periodFilter: ServiceMeal['mealPeriod'] | null = null;
+    let periodHeader: string | null = null;
+    if (lower.includes('breakfast')) {
+      periodFilter = 'Breakfast';
+      periodHeader = lower.includes('tomorrow') ? "Here's tomorrow's breakfast" : "Here's breakfast";
+    } else if (lower.includes('lunch')) {
+      periodFilter = 'Lunch';
+      periodHeader = "Here's lunch";
+    } else if (lower.includes('dinner')) {
+      periodFilter = 'Dinner';
+      periodHeader = "Here's dinner";
+    }
+    const filteredMeals = periodFilter ? safeAllMeals.filter((m) => m.mealPeriod === periodFilter) : safeAllMeals;
+    const menuItems = filteredMeals
       .map(
         (m: ServiceMeal) =>
           `• **${translateMealName(m.name, language)}** (${translateMealPeriod(m.mealPeriod, language)}, ${translateMealTimeRange(m.timeRange, language)})`,
       )
       .join('\n');
 
-    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes(t.whatsOnMenuToday.toLowerCase());
-    const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
+    const isPlaceOrderQuery = lower.includes('place') && lower.includes('order');
+    const isDietaryQuery = !isPlaceOrderQuery && (lower.includes('dietary') || lower.includes('restriction') || lower.includes('allergies') || lower.includes('allergy'));
+    const isMenuQuery = !isPlaceOrderQuery && !isDietaryQuery && (lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') || lower.includes(t.whatsOnMenuToday.toLowerCase()));
+    const isRecommendQuery = !isPlaceOrderQuery && !isDietaryQuery && (lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase()));
+
+    // "Place X order" — pick a safe meal for the requested period and
+    // surface it as a tappable card with the inline "Order this" button.
+    if (isPlaceOrderQuery) {
+      const inferPeriod = (): ServiceMeal['mealPeriod'] => {
+        if (periodFilter) return periodFilter;
+        const mins = new Date().getHours() * 60 + new Date().getMinutes();
+        if (mins >= 7 * 60 && mins <= 10 * 60) return 'Breakfast';
+        if (mins >= 11 * 60 && mins <= 14 * 60) return 'Lunch';
+        if (mins >= 16 * 60 && mins <= 19 * 60) return 'Dinner';
+        return 'Lunch';
+      };
+      const target = inferPeriod();
+      const candidates = safeAllMeals.filter((m) => m.mealPeriod === target);
+      if (candidates.length === 0) {
+        return `No safe ${target.toLowerCase()} options for ${residentName} right now.`;
+      }
+      const pick = candidates[0];
+      return `For ${target.toLowerCase()}, I'd suggest:\n\n• **${translateMealName(pick.name, language)}** — ${pick.nutrition.calories} cal · ${pick.nutrition.sodium} sodium\n\nTap "Order this" on the card to place the order.`;
+    }
+
+    if (isDietaryQuery) {
+      const lines: string[] = [];
+      if (safetyResident.foodAllergies && safetyResident.foodAllergies.length > 0) {
+        lines.push(`**Allergies:** ${safetyResident.foodAllergies.join(', ')}`);
+      }
+      if (safetyResident.dietaryRestrictions && safetyResident.dietaryRestrictions.length > 0) {
+        lines.push(`**Dietary:** ${safetyResident.dietaryRestrictions.join(', ')}`);
+      }
+      if (safetyResident.medicalConditions && safetyResident.medicalConditions.length > 0) {
+        lines.push(`**Medical:** ${safetyResident.medicalConditions.join(', ')}`);
+      }
+      if (lines.length === 0) {
+        return `${residentName} has no allergies or dietary restrictions on file.`;
+      }
+      return `${residentName}'s profile:\n\n${lines.join('\n')}`;
+    }
 
     if (isMenuQuery) {
-      return `${t.heresTheMenu} 📋\n\n${menuItems}\n\n${t.aiOfflineMenuAvailable}`;
+      if (filteredMeals.length === 0) {
+        const profileNote = (safetyResident.foodAllergies?.length || 0) + (safetyResident.dietaryRestrictions?.length || 0) > 0
+          ? ` (avoiding ${[...(safetyResident.foodAllergies ?? []), ...(safetyResident.dietaryRestrictions ?? [])].join(', ')})`
+          : '';
+        return periodFilter
+          ? `No safe ${periodFilter.toLowerCase()} options on the menu right now${profileNote}.`
+          : `Menu data isn't available right now — please try again in a moment.`;
+      }
+      const header = periodHeader ? `${periodHeader}! 📋` : `${t.heresTheMenu} 📋`;
+      return `${header}\n\n${menuItems}`;
     }
     if (isRecommendQuery) {
       const recs = await RecommendationService.getRecommendations(residentId, null, 3);
@@ -463,13 +707,9 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
           .join('\n');
         return `${t.topPicksFor} ${residentName}:\n\n${recList}`;
       }
-      // Fallback: filter meals by dietary restrictions and show top 3 with reasons
-      const restrictionsLower = dietaryRestrictions.map((r: string) => r.toLowerCase());
-      const safeMeals = allMeals.filter(m => {
-        const allergens = m.allergenInfo.map(a => a.toLowerCase());
-        return !restrictionsLower.some(r => allergens.some(a => a.includes(r)));
-      });
-      const topMeals = (safeMeals.length > 0 ? safeMeals : allMeals).slice(0, 3);
+      // Use the same safety-filtered list as the menu fallback so the
+      // two never disagree on what's safe to surface.
+      const topMeals = (safeAllMeals.length > 0 ? safeAllMeals : allMeals).slice(0, 3);
       const recList = topMeals
         .map((m, i) => {
           // Always build useful reasoning so the card shows WHY
@@ -529,6 +769,8 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
         setAiMode('offline');
         responseText = await generateFallbackResponse(text.trim());
       }
+
+      responseText = injectMealBold(responseText);
 
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),

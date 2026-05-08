@@ -39,6 +39,15 @@ public class Meal {
     @Column(columnDefinition = "TEXT")
     private String tags;
 
+    @Column(name = "name_translations", columnDefinition = "TEXT")
+    private String nameTranslations;
+
+    @Column(name = "description_translations", columnDefinition = "TEXT")
+    private String descriptionTranslations;
+
+    @Column(name = "tag_translations", columnDefinition = "TEXT")
+    private String tagTranslations;
+
     @Column(name = "is_available")
     private boolean available;
 
