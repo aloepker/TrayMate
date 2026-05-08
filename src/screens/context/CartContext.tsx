@@ -8,6 +8,7 @@ import {
   type MealOrderResponse,
   type ComplianceResult,
 } from '../../services/api';
+import { cachePersistedMealTranslations } from '../../services/mealLocalization';
 
 // Meal type definition
 type Meal = {
@@ -258,16 +259,19 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         id: `backend_${entry.order.id}`,
         backendId: entry.order.id,
         residentId: entry.order.userId,
-        items: entry.meals.map((m) => ({
-          id: m.id,
-          name: m.name,
-          meal_period: (m.mealperiod?.split(',')[0]?.trim() || 'Lunch') as Meal['meal_period'],
-          description: m.description,
-          kcal: m.calories,
-          sodium_mg: m.sodium,
-          protein_g: m.protein,
-          tags: m.tags ? m.tags.split(',').map((t) => t.trim()) : [],
-        })),
+        items: entry.meals.map((m) => {
+          cachePersistedMealTranslations(m);
+          return {
+            id: m.id,
+            name: m.name,
+            meal_period: (m.mealperiod?.split(',')[0]?.trim() || 'Lunch') as Meal['meal_period'],
+            description: m.description,
+            kcal: m.calories,
+            sodium_mg: m.sodium,
+            protein_g: m.protein,
+            tags: m.tags ? m.tags.split(',').map((t) => t.trim()) : [],
+          };
+        }),
         status: (() => {
           const s = entry.order.status as string;
           if (s === 'pending') return 'confirmed';

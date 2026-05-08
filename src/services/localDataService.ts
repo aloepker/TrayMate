@@ -13,6 +13,7 @@
 
 // ==================== TYPES ====================
 import { Platform } from "react-native";
+import { cachePersistedMealTranslations } from "./mealLocalization";
 
 const API_BASE_URL = "https://traymate-auth.onrender.com";
 // For local testing use: 
@@ -131,11 +132,14 @@ function parseNutrition(nutritionText: string | null | undefined): Nutrition {
 
 // Converts one API row into app's Meal interface
 function apiMealToMeal(api: any): Meal {
-    console.log("API meal row:", api);
+  console.log("API meal row:", api);
+  const name = api.name ?? "";
+  const description = api.description ?? "";
+  cachePersistedMealTranslations({ ...api, name, description });
 
   return {
     id: Number(api.id),
-    name: api.name ?? "",
+    name,
     ingredients: splitCommaList(api.ingredients),
     nutrition: {
       calories: Number(api.calories) || 0,
@@ -149,8 +153,9 @@ function apiMealToMeal(api: any): Meal {
       sodium: String(api.sodium ?? ""),
       protein: String(api.protein ?? ""),
     },
-    description: api.description ?? "",
-    imageUrl: String(api.imageUrl ?? "").trim(),    mealType: api.mealtype ?? "",
+    description,
+    imageUrl: String(api.imageUrl ?? "").trim(),
+    mealType: api.mealtype ?? "",
     // Use the name-aware fallback so drinks/sides whose backend
     // mealperiod is null/garbage don't leak into the All Day tab.
     mealPeriod: resolvePeriodWithFallback(api.mealperiod, api.name),

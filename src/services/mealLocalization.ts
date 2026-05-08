@@ -638,6 +638,9 @@ const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
   'Low Sugar': { Español: 'Bajo en Azúcar', Français: 'Faible en Sucre', 中文: '低糖' },
   'Gluten-Free': { Español: 'Sin Gluten', Français: 'Sans Gluten', 中文: '无麸质' },
   'Gluten Free': { Español: 'Sin Gluten', Français: 'Sans Gluten', 中文: '无麸质' },
+  'Dairy-Free': { Español: 'Sin Lácteos', Français: 'Sans Produits Laitiers', 中文: '无乳制品' },
+  'Nut-Free': { Español: 'Sin Nueces', Français: 'Sans Fruits à Coque', 中文: '无坚果' },
+  Halal: { Español: 'Halal', Français: 'Halal', 中文: '清真' },
   Seasonal: { Español: 'De Temporada', Français: 'Saisonnier', 中文: '时令' },
   'Vitamin C': { Español: 'Vitamina C', Français: 'Vitamine C', 中文: '维生素C' },
   Antioxidant: { Español: 'Antioxidante', Français: 'Antioxydant', 中文: '抗氧化' },
@@ -689,6 +692,8 @@ const DYNAMIC_NAME_CACHE: Record<string, Partial<Record<AppLanguage, string>>> =
 const DYNAMIC_DESCRIPTION_CACHE: Record<string, Partial<Record<AppLanguage, string>>> = {};
 const DYNAMIC_TAG_CACHE: Record<string, Partial<Record<AppLanguage, string>>> = {};
 
+type MealTranslationBundle = { Español: string; Français: string; 中文: string };
+
 /**
  * Store Gemini-translated names into the in-memory cache.
  * Call this after translateMealNamesWithGemini resolves.
@@ -731,6 +736,86 @@ export function setCachedTagTranslations(
       Français: translations.Français,
       中文: translations['中文'],
     };
+  }
+}
+
+function parsePersistedTranslationBundle(value: unknown): MealTranslationBundle | null {
+  if (!value) return null;
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+  const record = parsed as Record<string, unknown>;
+  const es = record['Español'] ?? record['Espanol'] ?? record['es'];
+  const fr = record['Français'] ?? record['Francais'] ?? record['fr'];
+  const zh = record['中文'] ?? record['zh'];
+  if (!es || !fr || !zh) return null;
+
+  return {
+    Español: String(es),
+    Français: String(fr),
+    中文: String(zh),
+  };
+}
+
+function parsePersistedTranslationRecord(value: unknown): Record<string, MealTranslationBundle> {
+  if (!value) return {};
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+  const out: Record<string, MealTranslationBundle> = {};
+  for (const [key, rawBundle] of Object.entries(parsed)) {
+    const bundle = parsePersistedTranslationBundle(rawBundle);
+    if (key && bundle) out[key] = bundle;
+  }
+  return out;
+}
+
+export function cachePersistedMealTranslations(source: {
+  name?: string | null;
+  description?: string | null;
+  nameTranslations?: unknown;
+  name_translations?: unknown;
+  descriptionTranslations?: unknown;
+  description_translations?: unknown;
+  tagTranslations?: unknown;
+  tag_translations?: unknown;
+}): void {
+  const name = String(source.name ?? '').trim();
+  const description = String(source.description ?? '').trim();
+
+  const nameTranslations = parsePersistedTranslationBundle(
+    source.nameTranslations ?? source.name_translations,
+  );
+  if (name && nameTranslations) {
+    setCachedMealTranslations({ [name]: nameTranslations });
+  }
+
+  const descriptionTranslations = parsePersistedTranslationBundle(
+    source.descriptionTranslations ?? source.description_translations,
+  );
+  if (description && descriptionTranslations) {
+    setCachedDescriptionTranslations({ [description]: descriptionTranslations });
+  }
+
+  const tagTranslations = parsePersistedTranslationRecord(
+    source.tagTranslations ?? source.tag_translations,
+  );
+  if (Object.keys(tagTranslations).length > 0) {
+    setCachedTagTranslations(tagTranslations);
   }
 }
 

@@ -598,6 +598,9 @@ export type BackendMealItem = {
   timeRange: string;
   allergenInfo: string;
   tags: string;
+  nameTranslations?: string | null;
+  descriptionTranslations?: string | null;
+  tagTranslations?: string | null;
   available: boolean;
   seasonal: boolean;
   nutrition: string;
@@ -1033,6 +1036,9 @@ export interface CreateMealPayload {
   sodium?: number;
   protein?: number;
   tags?: string;
+  nameTranslations?: string | null;
+  descriptionTranslations?: string | null;
+  tagTranslations?: string | null;
   allergenInfo?: string;
   ingredients?: string;
   available?: boolean;
@@ -1053,6 +1059,16 @@ export async function createMeal(payload: CreateMealPayload): Promise<any> {
 export async function updateMeal(mealId: number, payload: Partial<CreateMealPayload>): Promise<any> {
   return request<any>(`/menu/${mealId}`, {
     method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateMealTranslations(
+  mealId: number,
+  payload: Pick<CreateMealPayload, "nameTranslations" | "descriptionTranslations" | "tagTranslations">
+): Promise<any> {
+  return request<any>(`/menu/${mealId}/translations`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
