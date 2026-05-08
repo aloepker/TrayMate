@@ -63,7 +63,6 @@ import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi, getResidentById } from '../services/api';
-import { broadcastPendingAutoOrder } from '../services/autoOrderRequest';
 
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -227,6 +226,11 @@ const chatRichStyles = StyleSheet.create({
 // COLORS → imported from ../services/mealDisplayService.ts
 // DisplayMeal (aliased as Meal below) → imported from ../services/mealDisplayService.ts
 type Meal = DisplayMeal;
+
+type PendingAuto = {
+  period: string;
+  items: Meal[];
+};
 
 type ChatMessage = {
   id: string;
@@ -1008,8 +1012,6 @@ function formatMinsUntil(mins: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-const AUTO_CONFIRM_DELAY_MINS = 15;
-
 const cleanProfileList = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -1137,6 +1139,33 @@ function pickAutoOrderMeal(
   return safeCandidates[0] ?? null;
 }
 
+const orderDateKey = (value: unknown): string | null => {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const parsed = new Date(text);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+};
+
+function hasOrderForPeriodOnDate(ordersForResident: any[], period: string, dateKey: string): boolean {
+  return ordersForResident.some((order) => {
+    const date = orderDateKey(order?.date ?? order?.placedAt);
+    if (date !== dateKey) return false;
+    if (String(order?.mealOfDay ?? '') === period) return true;
+    return (order?.items ?? []).some((item: any) => item?.meal_period === period);
+  });
+}
+
+function buildPendingAutoOrder(
+  suggestion: { period: string; meal: Meal; drink?: Meal; dessert?: Meal },
+): PendingAuto {
+  return {
+    period: suggestion.period,
+    items: [suggestion.meal, suggestion.drink, suggestion.dessert].filter(Boolean) as Meal[],
+  };
+}
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -1176,19 +1205,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // period (since `autoSuggestDismissed` already does this, this is mostly
   // legacy but harmless to keep for the manual Place Order button below).
   const [, setAutoPlaced] = useState(false);
-  // In-session lock for the auto-confirm Alert. Keyed by
-  // `${residentId}|${period}|${YYYY-MM-DD}` — once an alert fires for that
-  // combo, it can't fire again this app session. Cleared on Alert "Cancel"
-  // (so we don't keep nagging) or on Alert "Confirm" failure (so retry works).
-  const autoConfirmShownRef = useRef<Set<string>>(new Set());
   // Pending auto-order surfaced as a notification bell (top-right of header)
-  // instead of a blocking Alert. Holds the same shape as `autoSuggest` plus
-  // a stable lock-key so we can release the in-session lock on Deny.
-  type PendingAuto = {
-    period: string;
-    items: Meal[];
-    lockKey: string;
-  };
+  // for the resident to approve or deny directly.
   const [pendingAutoOrder, setPendingAutoOrder] = useState<PendingAuto | null>(null);
   const [showAutoOrderPanel, setShowAutoOrderPanel] = useState(false);
 
@@ -1278,7 +1296,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           // Reset auto-suggest gate so the bell can re-evaluate against
           // the new restrictions (e.g. a previously-suggested meal that
           // is now flagged should be re-checked).
-          autoConfirmShownRef.current.clear();
           setAutoSuggestDismissed(false);
           setAutoSuggest(null);
           setPendingAutoOrder(null);
@@ -1320,7 +1337,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const residentSafetyProfileKey = JSON.stringify(residentSafetyProfile);
 
   useEffect(() => {
-    autoConfirmShownRef.current.clear();
     setAutoSuggest(null);
     setPendingAutoOrder(null);
     setShowAutoOrderPanel(false);
@@ -1684,9 +1700,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     // Check if resident already has a current order for this period
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
-    const hasOrderForPeriod = resOrders.some((o) =>
-      o.items.some((i) => i.meal_period === upcoming.label)
-    );
+    const today = new Date().toISOString().slice(0, 10);
+    const hasOrderForPeriod = hasOrderForPeriodOnDate(resOrders, upcoming.label, today);
     if (hasOrderForPeriod) {
       setAutoSuggest(null);
       setPendingAutoOrder(null);
@@ -1746,94 +1761,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       residentSafetyProfile,
     ) ?? undefined;
 
-    setAutoSuggest({ period: upcoming.label, minsUntil: next.minsUntil, isNow: next.isNow, meal: mainMeal, drink: suggestDrink, dessert: suggestDessert });
+    const suggestion = {
+      period: upcoming.label,
+      minsUntil: next.minsUntil,
+      isNow: next.isNow,
+      meal: mainMeal,
+      drink: suggestDrink,
+      dessert: suggestDessert,
+    };
+    setAutoSuggest(suggestion);
+    if (residentId) {
+      setPendingAutoOrder(buildPendingAutoOrder(suggestion));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
-
-  // ── Auto-confirm prompt (replaces the old silent auto-place) ─────────
-  // 15 minutes into the meal period, if the resident still hasn't ordered,
-  // pop a confirmation Alert. Admin/caregiver (or whoever is using the
-  // tablet) must tap "Confirm & Place Order" — no silent ordering, ever.
-  //
-  // Multi-layer guard against the cluster-order bug that killed v1:
-  //   1. autoConfirmShownRef (in-session): once the alert fires, the same
-  //      (residentId, period, date) key is locked for this app session, so
-  //      the minute-tick can't re-fire it.
-  //   2. hasOrderForPeriod check: if any order already exists for this
-  //      period, we skip — handles app-restart case where someone already
-  //      placed.
-  //   3. Single placeOrder call gated behind the user's tap, not state.
-  // ─────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!autoSuggest || !autoSuggest.isNow || !residentId) return;
-    if (autoSuggestDismissed) return;
-
-    // Skip if resident already has an order for this period (covers
-    // restart / cluster-deletion scenarios)
-    const resOrders = getOrdersForResident(residentId);
-    const hasOrderForPeriod = resOrders.some((o) =>
-      o.items.some((i) => i.meal_period === autoSuggest.period),
-    );
-    if (hasOrderForPeriod) {
-      setAutoSuggest(null);
-      setPendingAutoOrder(null);
-      setShowAutoOrderPanel(false);
-      return;
-    }
-
-    // 15 minutes into the period
-    const periodSched = MEAL_SCHEDULE.find((s) => s.label === autoSuggest.period);
-    if (!periodSched) return;
-    const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
-    const minsSinceStart = nowMins - periodSched.start;
-    if (minsSinceStart < AUTO_CONFIRM_DELAY_MINS) return;
-
-    const snapshot = autoSuggest;
-    const items = [snapshot.meal, snapshot.drink, snapshot.dessert].filter(Boolean) as Meal[];
-    const unsafeItem = items.find((item) => !isMealSafe(item as any, residentSafetyProfile));
-    if (unsafeItem) {
-      setAutoSuggest(null);
-      setPendingAutoOrder(null);
-      setShowAutoOrderPanel(false);
-      return;
-    }
-
-    // In-session lock — once shown, do not re-show this session for the
-    // same (resident, period, date) combo, no matter how many minute
-    // ticks fire.
-    const today = new Date().toISOString().slice(0, 10);
-    const key = `${residentId}|${autoSuggest.period}|${today}`;
-    if (autoConfirmShownRef.current.has(key)) return;
-    autoConfirmShownRef.current.add(key);
-
-    const itemNames = items.map((i) => i.name).join(', ');
-    const itemBullets = items.map((i) => `• ${i.name}`).join('\n');
-
-    // Broadcast a pending-order alert to all assigned caregivers + every
-    // admin user so they can confirm/deny from their dashboards. The
-    // resident's local Alert below is the third confirmation path.
-    broadcastPendingAutoOrder(
-      {
-        residentId,
-        residentName: residentName || 'Resident',
-        period: snapshot.period,
-        date: today,
-        items: items.map((i) => ({ id: i.id, name: i.name, mealPeriod: i.meal_period })),
-      },
-      assignedCaregivers.map((cg) => cg.caregiverId),
-    ).catch(() => { /* non-blocking — local Alert still works */ });
-
-    // Surface as a notification bell instead of a blocking Alert. The
-    // bell pulses in the header until the user taps it; the panel that
-    // opens shows actual meal pictures + Approve/Deny buttons.
-    void itemBullets; void itemNames; // formatted strings still used by msg below
-    setPendingAutoOrder({
-      period: snapshot.period,
-      items,
-      lockKey: key,
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSuggest, autoSuggestDismissed, residentId, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -1852,19 +1793,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     setShowMealDetail(true);
   };
 
-  // ── Pending auto-order: approve / deny handlers ──────────────────
-  // Approve places the order via existing cart + placeOrder pipeline
-  // and notifies caregivers. Deny just dismisses (releases the lock so
-  // the bell can be re-raised later if conditions warrant it).
+  // ── Pending auto-order: resident confirm / deny handlers ─────────
+  // Confirm places the order through the same cart + placeOrder pipeline
+  // used everywhere else. Deny dismisses this suggestion for the session.
   const handleApprovePendingAuto = async () => {
     if (!pendingAutoOrder) return;
-    const { period, items, lockKey } = pendingAutoOrder;
+    const { period, items } = pendingAutoOrder;
     const itemNames = items.map((i) => i.name).join(', ');
     const unsafe = items
       .map((item) => ({ item, reason: getMealUnsafeReason(item) }))
       .find((entry) => entry.reason);
     if (unsafe) {
-      autoConfirmShownRef.current.delete(lockKey);
       setAutoSuggest(null);
       setPendingAutoOrder(null);
       setShowAutoOrderPanel(false);
@@ -1904,22 +1843,20 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         }
         Alert.alert('Order Placed', `${period}: ${itemNames}`, [{ text: 'OK' }]);
       } else {
-        // Backend rejected — keep the bell visible, release the lock
-        autoConfirmShownRef.current.delete(lockKey);
+        // Backend rejected — keep the bell visible so the resident can retry.
         Alert.alert('Order Failed', 'The order could not be placed. Please try again or order manually.');
       }
     } catch (e: any) {
-      autoConfirmShownRef.current.delete(lockKey);
-      console.warn('[AutoConfirm] placeOrder failed:', e?.message ?? e);
+      console.warn('[AutoOrder] placeOrder failed:', e?.message ?? e);
       Alert.alert('Order Failed', e?.message ?? 'Network error. Please try again.');
     }
   };
 
   const handleDenyPendingAuto = () => {
+    setAutoSuggestDismissed(true);
+    setAutoSuggest(null);
     setPendingAutoOrder(null);
     setShowAutoOrderPanel(false);
-    // The lockKey stays in autoConfirmShownRef so the bell doesn't
-    // immediately re-raise for the same period+date in this session.
   };
 
   // Check if a meal conflicts with the resident's dietary profile
@@ -2296,9 +2233,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="calendar" size={26} color={pt.tabActiveBg} />
           </TouchableOpacity>
-          {/* Pending auto-order bell. Only renders while there's a
-              suggestion waiting for approval — disappears once the
-              user (or caregiver/admin) approves or denies. */}
+          {/* Pending auto-order bell. Only renders while there's a resident
+              suggestion waiting for confirm/deny. */}
           {pendingAutoOrder && (
             <TouchableOpacity
               style={[
@@ -2872,10 +2808,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.autoOrderHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.autoOrderTitle, { fontSize: scaled(20) }]}>
-                  Confirm Auto-Order
+                  Suggested Auto-Order
                 </Text>
                 <Text style={[styles.autoOrderSub, { fontSize: scaled(14) }]}>
-                  {(residentName || 'Resident')} hasn't ordered {pendingAutoOrder?.period?.toLowerCase()} yet
+                  Confirm or dismiss this safe {pendingAutoOrder?.period?.toLowerCase()} suggestion
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowAutoOrderPanel(false)} hitSlop={10}>
@@ -2914,7 +2850,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </ScrollView>
 
             <Text style={[styles.autoOrderApprovalNote, { fontSize: scaled(12) }]}>
-              Filtered against allergies and medical conditions. Admin or caregiver approval required.
+              Filtered against allergies and medical conditions. Confirming will send this order.
             </Text>
 
             <View style={styles.autoOrderActions}>
@@ -2924,7 +2860,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 activeOpacity={0.85}
               >
                 <Feather name="x-circle" size={16} color="#DC2626" />
-                <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(14) }]}>Deny</Text>
+                <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(14) }]}>Dismiss</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.autoOrderBtn, styles.autoOrderBtnApprove]}
@@ -2932,7 +2868,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 activeOpacity={0.85}
               >
                 <Feather name="check-circle" size={16} color="#FFFFFF" />
-                <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(14) }]}>Approve & Place</Text>
+                <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(14) }]}>Place Order</Text>
               </TouchableOpacity>
             </View>
           </View>
