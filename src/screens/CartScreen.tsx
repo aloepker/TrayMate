@@ -248,12 +248,12 @@ const CartScreen = ({ navigation, route }: any) => {
           <View style={styles.nutritionBarDivider} />
           <View style={styles.nutritionBarItem}>
             <Text style={[styles.nutritionBarValue, { fontSize: scaled(18) }]}>{totals.sodium}<Text style={styles.nutritionBarUnit}>mg</Text></Text>
-            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>sodium</Text>
+            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>{t.sodium.toLowerCase()}</Text>
           </View>
           <View style={styles.nutritionBarDivider} />
           <View style={styles.nutritionBarItem}>
             <Text style={[styles.nutritionBarValue, { fontSize: scaled(18) }]}>{totals.protein}<Text style={styles.nutritionBarUnit}>g</Text></Text>
-            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>protein</Text>
+            <Text style={[styles.nutritionBarLabel, { fontSize: scaled(11) }]}>{t.protein.toLowerCase()}</Text>
           </View>
         </View>
       )}
@@ -329,7 +329,7 @@ const CartScreen = ({ navigation, route }: any) => {
                     onPress={() => removeFromCart(index)}
                   >
                     <Feather name="x" size={16} color={COLORS.danger} />
-                    <Text style={styles.removeText}>Remove</Text>
+                    <Text style={styles.removeText}>{t.remove}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -356,10 +356,10 @@ const CartScreen = ({ navigation, route }: any) => {
                     <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.kcal} kcal</Text>
                   </View>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.sodium_mg}mg sodium</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.sodium_mg}mg {t.sodium.toLowerCase()}</Text>
                   </View>
                   <View style={styles.nutritionChip}>
-                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.protein_g}g protein</Text>
+                    <Text style={[styles.nutritionText, { fontSize: scaled(13) }]}>{item.protein_g}g {t.protein.toLowerCase()}</Text>
                   </View>
                 </View>
               </View>

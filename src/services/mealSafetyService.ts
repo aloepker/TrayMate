@@ -36,6 +36,10 @@ export type SafetyMeal = {
   kcal?: number;
   sodium_mg?: number;
   sodium?: string | number;    // fallback for "400mg" string shape
+  sugar_g?: number;
+  sugarG?: number;
+  sugar?: string | number;
+  sugars?: string | number;
   meal_period?: string;
   mealPeriod?: string;
 };
@@ -224,54 +228,7 @@ function extractSodium(meal: SafetyMeal): number | null {
  * First unsafe match wins so UI copy stays concise.
  */
 export function getUnsafeReason(meal: SafetyMeal, resident: SafetyResident | null | undefined): string | null {
-  if (!resident) return null;
-
-  const allergies    = (resident.foodAllergies ?? []).map(norm).filter(Boolean);
-  const restrictions = (resident.dietaryRestrictions ?? []).map(norm).filter(Boolean);
-  const conditions   = (resident.medicalConditions ?? []).map(norm).filter(Boolean);
-  const haystack     = mealHaystack(meal);
-
-  // ── 1. Allergies (highest priority) ──
-  const explicit = [...(meal.allergens ?? []), ...(meal.allergenInfo ?? [])].map(norm);
-  for (const allergy of allergies) {
-    // Explicit allergen match on the meal's own allergen list.
-    if (explicit.some((a) => a.includes(allergy) || allergy.includes(a))) {
-      return `Contains ${titleCase(allergy)} — resident is allergic`;
-    }
-    // Keyword scan of name/description/tags/ingredients.
-    const keywords = ALLERGEN_KEYWORDS[allergy] ?? [allergy];
-    if (keywords.some((kw) => haystack.includes(kw))) {
-      return `Contains ${titleCase(allergy)} — resident is allergic`;
-    }
-  }
-
-  // ── 2. Dietary restrictions (vegetarian, vegan, halal, kosher…) ──
-  for (const restriction of restrictions) {
-    // Low-sodium diet → numeric threshold.
-    if (restriction.includes("low sodium") || restriction.includes("low-sodium")) {
-      const sodium = extractSodium(meal);
-      if (sodium != null && sodium > CONDITION_SODIUM_LIMIT_MG) {
-        return `High sodium (${sodium}mg) — resident on low-sodium diet`;
-      }
-      continue;
-    }
-    const keywords = DIET_KEYWORDS[restriction] ?? [];
-    if (keywords.length > 0 && keywords.some((kw) => haystack.includes(kw))) {
-      return `Not ${titleCase(restriction)} — resident follows ${titleCase(restriction)} diet`;
-    }
-  }
-
-  // ── 3. Medical conditions (high blood pressure, diabetes, etc.) ──
-  for (const condition of conditions) {
-    if (condition.includes("hypertension") || condition.includes("high blood pressure")) {
-      const sodium = extractSodium(meal);
-      if (sodium != null && sodium > CONDITION_SODIUM_LIMIT_MG) {
-        return `High sodium (${sodium}mg) — resident has ${titleCase(condition)}`;
-      }
-    }
-  }
-
-  return null;
+  return getAllUnsafeReasons(meal, resident)[0]?.reason ?? null;
 }
 
 export function isMealSafe(meal: SafetyMeal, resident: SafetyResident | null | undefined): boolean {

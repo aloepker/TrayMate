@@ -59,12 +59,33 @@ public class MenuMutationController {
         existing.setTimeRange(incoming.getTimeRange());
         existing.setAllergenInfo(incoming.getAllergenInfo());
         existing.setTags(incoming.getTags());
+        existing.setNameTranslations(incoming.getNameTranslations());
+        existing.setDescriptionTranslations(incoming.getDescriptionTranslations());
+        existing.setTagTranslations(incoming.getTagTranslations());
         existing.setAvailable(incoming.isAvailable());
         existing.setSeasonal(incoming.isSeasonal());
         existing.setNutrition(incoming.getNutrition());
         existing.setCalories(incoming.getCalories());
         existing.setSodium(incoming.getSodium());
         existing.setProtein(incoming.getProtein());
+
+        return mealRepository.save(existing);
+    }
+
+    /**
+     * Patch only persisted translation JSON. Used by the kitchen add-meal
+     * flow after Gemini translates the newly-created row; avoids a partial
+     * PUT accidentally clearing core menu fields.
+     */
+    @PatchMapping("/{id}/translations")
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_KITCHEN_STAFF','ROLE_KITCHEN')")
+    public Meal updateTranslations(@PathVariable Integer id, @RequestBody Meal incoming) {
+        Meal existing = mealRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Meal not found"));
+
+        existing.setNameTranslations(incoming.getNameTranslations());
+        existing.setDescriptionTranslations(incoming.getDescriptionTranslations());
+        existing.setTagTranslations(incoming.getTagTranslations());
 
         return mealRepository.save(existing);
     }

@@ -79,6 +79,13 @@ export type TranslationKeys = {
   seasonal: string;
   tapToAdd: string;
   meals: string;
+  order: string;
+  availableNow: string;
+  notServingNow: string;
+  availableAt: string;
+  recommendationOnlySafeOption: string;
+  recommendationSafeOptionToday: string;
+  recommendationGreatFit: string;
   // Cart
   yourCart: string;
   cartEmpty: string;
@@ -126,7 +133,16 @@ export type TranslationKeys = {
   typeYourMessage: string;
   somethingWentWrong: string;
   whatsOnMenuToday: string;
+  whatsForBreakfast: string;
+  whatsForLunch: string;
+  whatsForDinner: string;
+  whatsForBreakfastTomorrow: string;
   recommendAMeal: string;
+  // Card / detail badges
+  notAvailable: string;
+  notAvailableToday: string;
+  tomorrowsBreakfast: string;
+  restricted: string;
   viewDietaryRestrictionsPrompt: string;
   whatMealsLowSodium: string;
   placeLunchOrder: string;
@@ -199,6 +215,13 @@ const EN: TranslationKeys = {
   seasonal: 'Seasonal',
   tapToAdd: 'Tap to add to order',
   meals: 'Meals',
+  order: 'Order',
+  availableNow: 'Available now',
+  notServingNow: 'Not serving now',
+  availableAt: 'Available {time}',
+  recommendationOnlySafeOption: 'Only safe option in the current {period} — we recommend the',
+  recommendationSafeOptionToday: "A safe option from today's {period} — we recommend the",
+  recommendationGreatFit: 'A great fit for your profile — we recommend the',
   yourCart: 'Your Cart',
   cartEmpty: 'Your cart is empty',
   cartEmptyDesc: 'Add meals from the menu to get started',
@@ -241,7 +264,15 @@ const EN: TranslationKeys = {
   typeYourMessage: 'Type your message...',
   somethingWentWrong: 'Something went wrong — please try again! 😅',
   whatsOnMenuToday: "What's on the menu today?",
+  whatsForBreakfast: "What's for breakfast?",
+  whatsForLunch: "What's for lunch?",
+  whatsForDinner: "What's for dinner?",
+  whatsForBreakfastTomorrow: "What's for breakfast tomorrow?",
   recommendAMeal: 'Recommend a meal',
+  notAvailable: 'Not available',
+  notAvailableToday: 'Not available today',
+  tomorrowsBreakfast: "Tomorrow's breakfast",
+  restricted: 'Restricted',
   viewDietaryRestrictionsPrompt: 'View dietary restrictions',
   whatMealsLowSodium: 'What meals are low sodium?',
   placeLunchOrder: 'Place lunch order',
@@ -313,6 +344,13 @@ const ES: TranslationKeys = {
   seasonal: 'De Temporada',
   tapToAdd: 'Toque para agregar al pedido',
   meals: 'Comidas',
+  order: 'Pedir',
+  availableNow: 'Disponible ahora',
+  notServingNow: 'No disponible ahora',
+  availableAt: 'Disponible {time}',
+  recommendationOnlySafeOption: 'Única opción segura para este periodo de {period} — recomendamos',
+  recommendationSafeOptionToday: 'Opción segura del menú de {period} de hoy — recomendamos',
+  recommendationGreatFit: 'Buena opción para su perfil — recomendamos',
   yourCart: 'Tu Carrito',
   cartEmpty: 'Tu carrito está vacío',
   cartEmptyDesc: 'Agrega comidas del menú para comenzar',
@@ -355,7 +393,15 @@ const ES: TranslationKeys = {
   typeYourMessage: 'Escribe tu mensaje...',
   somethingWentWrong: 'Algo salió mal. ¡Inténtalo de nuevo! 😅',
   whatsOnMenuToday: '¿Qué hay en el menú hoy?',
+  whatsForBreakfast: '¿Qué hay para el desayuno?',
+  whatsForLunch: '¿Qué hay para el almuerzo?',
+  whatsForDinner: '¿Qué hay para la cena?',
+  whatsForBreakfastTomorrow: '¿Qué hay para el desayuno mañana?',
   recommendAMeal: 'Recomiéndame una comida',
+  notAvailable: 'No disponible',
+  notAvailableToday: 'No disponible hoy',
+  tomorrowsBreakfast: 'Desayuno de mañana',
+  restricted: 'Restringido',
   viewDietaryRestrictionsPrompt: 'Ver restricciones dietéticas',
   whatMealsLowSodium: '¿Qué comidas son bajas en sodio?',
   placeLunchOrder: 'Pedir almuerzo',
@@ -427,6 +473,13 @@ const FR: TranslationKeys = {
   seasonal: 'Saisonnier',
   tapToAdd: 'Appuyez pour ajouter',
   meals: 'Repas',
+  order: 'Commander',
+  availableNow: 'Disponible maintenant',
+  notServingNow: 'Non servi maintenant',
+  availableAt: 'Disponible {time}',
+  recommendationOnlySafeOption: 'Seule option sûre pour ce service de {period} — nous recommandons',
+  recommendationSafeOptionToday: "Option sûre du menu de {period} aujourd'hui — nous recommandons",
+  recommendationGreatFit: 'Bon choix pour son profil — nous recommandons',
   yourCart: 'Votre Panier',
   cartEmpty: 'Votre panier est vide',
   cartEmptyDesc: 'Ajoutez des repas depuis le menu',
@@ -469,7 +522,15 @@ const FR: TranslationKeys = {
   typeYourMessage: 'Tapez votre message...',
   somethingWentWrong: "Une erreur s'est produite — veuillez réessayer ! 😅",
   whatsOnMenuToday: "Qu'y a-t-il au menu aujourd'hui ?",
+  whatsForBreakfast: 'Que mange-t-on au petit-déjeuner ?',
+  whatsForLunch: 'Que mange-t-on au déjeuner ?',
+  whatsForDinner: 'Que mange-t-on au dîner ?',
+  whatsForBreakfastTomorrow: 'Que mange-t-on au petit-déjeuner demain ?',
   recommendAMeal: 'Recommander un repas',
+  notAvailable: 'Non disponible',
+  notAvailableToday: "Non disponible aujourd'hui",
+  tomorrowsBreakfast: 'Petit-déjeuner de demain',
+  restricted: 'Restreint',
   viewDietaryRestrictionsPrompt: 'Voir les restrictions alimentaires',
   whatMealsLowSodium: 'Quels repas sont faibles en sodium ?',
   placeLunchOrder: 'Commander le déjeuner',
@@ -541,6 +602,13 @@ const ZH: TranslationKeys = {
   seasonal: '时令',
   tapToAdd: '点击添加到订单',
   meals: '餐食',
+  order: '下单',
+  availableNow: '现在可用',
+  notServingNow: '当前未供应',
+  availableAt: '{time} 可用',
+  recommendationOnlySafeOption: '当前{period}唯一安全选项，推荐',
+  recommendationSafeOptionToday: '今日{period}的安全选择，推荐',
+  recommendationGreatFit: '适合该档案的选择，推荐',
   yourCart: '您的购物车',
   cartEmpty: '购物车为空',
   cartEmptyDesc: '从菜单中添加餐食开始',
@@ -583,7 +651,15 @@ const ZH: TranslationKeys = {
   typeYourMessage: '输入你的消息...',
   somethingWentWrong: '出错了，请重试！😅',
   whatsOnMenuToday: '今天菜单有什么？',
+  whatsForBreakfast: '早餐吃什么？',
+  whatsForLunch: '午餐吃什么？',
+  whatsForDinner: '晚餐吃什么？',
+  whatsForBreakfastTomorrow: '明天早餐吃什么？',
   recommendAMeal: '推荐一份餐食',
+  notAvailable: '不可用',
+  notAvailableToday: '今日不可用',
+  tomorrowsBreakfast: '明日早餐',
+  restricted: '受限',
   viewDietaryRestrictionsPrompt: '查看饮食限制',
   whatMealsLowSodium: '哪些餐食低钠？',
   placeLunchOrder: '下单午餐',

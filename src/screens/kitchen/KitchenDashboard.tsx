@@ -24,19 +24,19 @@ import Feather from "react-native-vector-icons/Feather";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
-import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, deleteMeal, getAllMenuMeals, setMealAvailability, listCoverageAlertsApi, type MealCoverageAlert } from "../../services/api";
+import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, updateMealTranslations, deleteMeal, getAllMenuMeals, setMealAvailability, listCoverageAlertsApi, type MealCoverageAlert } from "../../services/api";
 import { FALLBACK_MEALS } from "../../services/localDataService";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
 import {
-  hasMealNameTranslation,
-  hasMealDescriptionTranslation,
   setCachedMealTranslations,
   setCachedDescriptionTranslations,
+  setCachedTagTranslations,
 } from "../../services/mealLocalization";
 import {
   translateMealNamesWithGemini,
   translateMealDescriptionsWithGemini,
+  translateMealTagsWithGemini,
 } from "../../services/geminiService";
 
 // ─── Palette (matches app-wide theme) ─────────────────────────────────────────
@@ -674,6 +674,74 @@ interface SeasonalEntry {
   tag: string;
 }
 
+type TranslationBundle = { Español: string; Français: string; 中文: string };
+type PersistedTranslationFields = {
+  nameTranslations?: string | null;
+  descriptionTranslations?: string | null;
+  tagTranslations?: string | null;
+};
+
+const splitTagText = (tagText: string | null | undefined): string[] =>
+  String(tagText ?? "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+const pickTranslationBundle = (
+  results: Record<string, TranslationBundle>,
+  original: string,
+): TranslationBundle | undefined => {
+  if (results[original]) return results[original];
+  const normalized = original.trim().toLowerCase();
+  const match = Object.entries(results).find(([key]) => key.trim().toLowerCase() === normalized);
+  return match?.[1];
+};
+
+async function buildPersistedTranslationFields(
+  name: string,
+  description: string,
+  tags: string,
+): Promise<PersistedTranslationFields> {
+  const cleanName = name.trim();
+  const cleanDescription = description.trim();
+  const cleanTags = splitTagText(tags);
+  const emptyTranslations = {} as Record<string, TranslationBundle>;
+
+  const [nameResults, descriptionResults, tagResults] = await Promise.all([
+    cleanName ? translateMealNamesWithGemini([cleanName]) : Promise.resolve(emptyTranslations),
+    cleanDescription ? translateMealDescriptionsWithGemini([cleanDescription]) : Promise.resolve(emptyTranslations),
+    cleanTags.length > 0 ? translateMealTagsWithGemini(cleanTags) : Promise.resolve(emptyTranslations),
+  ]);
+
+  const fields: PersistedTranslationFields = {};
+
+  const nameBundle = cleanName ? pickTranslationBundle(nameResults, cleanName) : undefined;
+  if (cleanName && nameBundle) {
+    setCachedMealTranslations({ [cleanName]: nameBundle });
+    fields.nameTranslations = JSON.stringify(nameBundle);
+  }
+
+  const descriptionBundle = cleanDescription
+    ? pickTranslationBundle(descriptionResults, cleanDescription)
+    : undefined;
+  if (cleanDescription && descriptionBundle) {
+    setCachedDescriptionTranslations({ [cleanDescription]: descriptionBundle });
+    fields.descriptionTranslations = JSON.stringify(descriptionBundle);
+  }
+
+  const normalizedTagResults: Record<string, TranslationBundle> = {};
+  for (const tag of cleanTags) {
+    const bundle = pickTranslationBundle(tagResults, tag);
+    if (bundle) normalizedTagResults[tag] = bundle;
+  }
+  if (Object.keys(normalizedTagResults).length > 0) {
+    setCachedTagTranslations(normalizedTagResults);
+    fields.tagTranslations = JSON.stringify(normalizedTagResults);
+  }
+
+  return fields;
+}
+
 
 // ─── Tutorial / Guide Modal ────────────────────────────────────────────────────
 const TUTORIAL_STEPS = [
@@ -1129,7 +1197,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
     setAddMealStage({ stage: 'saving', mealName: meal.name });
 
-    let saved = false;
+    let savedMealId: number | null = null;
     try {
       const result = await createMeal({
         name: meal.name,
@@ -1145,8 +1213,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         imageUrl: meal.imageUrl,
       });
       const newId = result?.id ? String(result.id) : `meal_${Date.now()}`;
+      savedMealId = result?.id ? Number(result.id) : null;
       setSeasonalMeals((prev) => [...prev, { ...meal, id: newId }]);
-      saved = true;
     } catch (e: any) {
       // Still add locally even if backend fails — keeps the UI usable
       setSeasonalMeals((prev) => [...prev, { ...meal, id: `local_${Date.now()}` }]);
@@ -1157,32 +1225,22 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     }
 
     // Translation — awaited so the loading screen reflects real progress.
-    // Errors here are swallowed because the meal itself already saved.
+    // Persist the generated JSON back onto the meal row so every resident
+    // gets the right language later from their own Settings preference.
     setAddMealStage({ stage: 'translating', mealName: meal.name });
     try {
-      const toTranslateNames: string[] = [];
-      const toTranslateDescs: string[] = [];
-      if (meal.name && !hasMealNameTranslation(meal.name)) {
-        toTranslateNames.push(meal.name);
+      const translationFields = await buildPersistedTranslationFields(
+        meal.name,
+        meal.description,
+        meal.tag,
+      );
+      if (savedMealId && Object.keys(translationFields).length > 0) {
+        await updateMealTranslations(savedMealId, translationFields);
       }
-      if (meal.description && !hasMealDescriptionTranslation(meal.description)) {
-        toTranslateDescs.push(meal.description);
-      }
-      const [nameResults, descResults] = await Promise.all([
-        toTranslateNames.length > 0
-          ? translateMealNamesWithGemini(toTranslateNames)
-          : Promise.resolve({}),
-        toTranslateDescs.length > 0
-          ? translateMealDescriptionsWithGemini(toTranslateDescs)
-          : Promise.resolve({}),
-      ]);
-      if (Object.keys(nameResults).length > 0) setCachedMealTranslations(nameResults);
-      if (Object.keys(descResults).length > 0) setCachedDescriptionTranslations(descResults);
     } catch { /* silent — translation is best-effort */ }
 
     setAddMealStage({ stage: 'done', mealName: meal.name });
     setTimeout(() => setAddMealStage(null), 1100);
-    void saved;
   };
 
   const removeSeasonalMeal = (id: string) => {
@@ -1277,26 +1335,55 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     if (!editingMeal) return;
     if (!editName.trim()) { Alert.alert("Required", "Meal name is required."); return; }
     try {
+      const nextName = editName.trim();
+      const nextDescription = editDesc.trim();
+      const nextTags = editTags.trim();
+      const nameChanged = nextName !== String(editingMeal.name ?? "");
+      const descriptionChanged = nextDescription !== String(editingMeal.description ?? "");
+      const tagsChanged = nextTags !== String(editingMeal.tags ?? "");
+      let translationFields: PersistedTranslationFields = {};
+      try {
+        translationFields = await buildPersistedTranslationFields(
+          nextName,
+          nextDescription,
+          nextTags,
+        );
+      } catch {
+        translationFields = {};
+      }
+      const persistedTranslationFields: PersistedTranslationFields = {
+        nameTranslations:
+          translationFields.nameTranslations ??
+          (nameChanged ? null : editingMeal.nameTranslations ?? null),
+        descriptionTranslations:
+          translationFields.descriptionTranslations ??
+          (descriptionChanged ? null : editingMeal.descriptionTranslations ?? null),
+        tagTranslations:
+          translationFields.tagTranslations ??
+          (tagsChanged ? null : editingMeal.tagTranslations ?? null),
+      };
+
       await updateMeal(Number(editingMeal.id), {
-        name: editName.trim(),
-        description: editDesc.trim(),
+        name: nextName,
+        description: nextDescription,
         mealperiod: editPeriod,
         calories: editCalories ? Number(editCalories) : undefined,
         sodium: editSodium ? Number(editSodium) : undefined,
         protein: editProtein ? Number(editProtein) : undefined,
-        tags: editTags.trim(),
+        tags: nextTags,
         seasonal: editSeasonal,
         available: editAvailable,
         imageUrl: editImageUrl.trim(),
+        ...persistedTranslationFields,
       });
       // Update local state
       setMenuMeals((prev) => prev.map((m) =>
         m.id === editingMeal.id
-          ? { ...m, name: editName.trim(), description: editDesc.trim(), mealperiod: editPeriod, calories: editCalories ? Number(editCalories) : m.calories, sodium: editSodium ? Number(editSodium) : m.sodium, protein: editProtein ? Number(editProtein) : m.protein, tags: editTags.trim(), seasonal: editSeasonal, available: editAvailable, imageUrl: editImageUrl.trim() }
+          ? { ...m, name: nextName, description: nextDescription, mealperiod: editPeriod, calories: editCalories ? Number(editCalories) : m.calories, sodium: editSodium ? Number(editSodium) : m.sodium, protein: editProtein ? Number(editProtein) : m.protein, tags: nextTags, seasonal: editSeasonal, available: editAvailable, imageUrl: editImageUrl.trim(), ...persistedTranslationFields }
           : m
       ));
       setEditingMeal(null);
-      Alert.alert("Saved", `"${editName.trim()}" has been updated.`);
+      Alert.alert("Saved", `"${nextName}" has been updated.`);
     } catch (e: any) {
       Alert.alert("Error", "Could not update meal: " + e.message);
     }

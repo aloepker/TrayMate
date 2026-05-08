@@ -56,3 +56,12 @@ CREATE TABLE IF NOT EXISTS medical_override_request (
 
 ALTER TABLE residents
     ADD COLUMN IF NOT EXISTS dietary_restrictions VARCHAR(1000) NULL;
+
+ALTER TABLE meals
+    ADD COLUMN IF NOT EXISTS name_translations TEXT NULL;
+
+ALTER TABLE meals
+    ADD COLUMN IF NOT EXISTS description_translations TEXT NULL;
+
+ALTER TABLE meals
+    ADD COLUMN IF NOT EXISTS tag_translations TEXT NULL;

@@ -57,6 +57,7 @@ export type DisplayMeal = {
   time_range: string;
   kcal: number;
   sodium_mg: number;
+  sugar_g?: number;
   protein_g: number;
   imageUrl?: string;
   tags?: string[];
@@ -179,9 +180,15 @@ export const MEAL_IMAGES: Record<string, any> = {
 /**
  * Safe accessor – returns `null` when no bundled image exists,
  * so the UI can fall back to the emoji placeholder.
+ * Case-insensitive so AI-returned names ("caesar salad with chicken")
+ * still resolve to the correct asset key.
  */
-export const getMealImage = (mealName: string): any | null =>
-  MEAL_IMAGES[mealName] ?? null;
+export const getMealImage = (mealName: string): any | null => {
+  if (MEAL_IMAGES[mealName]) return MEAL_IMAGES[mealName];
+  const lower = mealName.toLowerCase();
+  const key = Object.keys(MEAL_IMAGES).find(k => k.toLowerCase() === lower);
+  return key ? MEAL_IMAGES[key] : null;
+};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Service → display mapping
@@ -205,6 +212,7 @@ export const mapServiceMeal = (m: ServiceMeal): DisplayMeal => ({
   time_range: m.timeRange,
   kcal: m.nutrition.calories,
   sodium_mg: parseInt(String(m.nutrition.sodium).replace(/[^\d]/g, "") || "0", 10),
+  sugar_g: parseInt(String(m.nutrition.sugar).replace(/[^\d]/g, "") || "0", 10),
   protein_g: parseInt(String(m.nutrition.protein).replace(/[^\d]/g, "") || "0", 10),
   imageUrl: m.imageUrl,
   tags: m.tags ?? [],
