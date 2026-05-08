@@ -92,8 +92,10 @@ const ChatRichText = ({
   const norm = (s: string) =>
     s
       .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[’']/g, "'")
-      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -102,9 +104,9 @@ const ChatRichText = ({
       {lines.map((line, lineIdx) => {
         // Check if line has a bold meal name that matches a real meal
         const mealCardMatch = line.match(
-          /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
+          /^(.*?)(?:\d+\.\s*|[•-]\s*)?\*\*(.+?)\*\*(.*)$/,
         );
-        const requestedMealName = mealCardMatch ? norm(mealCardMatch[1]) : '';
+        const requestedMealName = mealCardMatch ? norm(mealCardMatch[2]) : '';
         const matchedMeal = mealCardMatch
           ? allMeals.find(m => {
               const n1 = norm(m.name);
@@ -128,7 +130,7 @@ const ChatRichText = ({
             ? matchedMeal.imageUrl.trim()
             : null;
           const localImg = remoteUri ? null : getMealImage(matchedMeal.name);
-          const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
+          const suffixText = mealCardMatch?.[3]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
             <TouchableOpacity
               key={lineIdx}
@@ -376,9 +378,6 @@ const AIAssistantChat = ({
   // If Gemini replies without **Meal Name** formatting, try to bold known meal names
   const injectMealBold = (raw: string) => {
     if (!raw) return raw;
-    // If the model already used markdown bold somewhere, don't over-touch it
-    if (raw.includes('**')) return raw;
-
     // Prefer longer names first to avoid partial replacements
     const mealNames = (chatMeals || [])
       .map(m => ({
@@ -391,8 +390,27 @@ const AIAssistantChat = ({
     for (const mn of mealNames) {
       const candidates = Array.from(new Set([mn.localized, mn.raw])).filter(Boolean);
       for (const c of candidates) {
-        const re = new RegExp(`\\b${escapeRegExp(c)}\\b`, 'gi');
-        out = out.replace(re, match => `**${match}**`);
+        const useWordBoundary = /[A-Za-z0-9]/.test(c);
+        const re = useWordBoundary
+          ? new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegExp(c)})(?=$|[^\\p{L}\\p{N}])`, 'giu')
+          : new RegExp(`(${escapeRegExp(c)})`, 'giu');
+        out = out.replace(re, (...args) => {
+          const offset = args[args.length - 2] as number;
+          const full = args[args.length - 1] as string;
+          const prefix = useWordBoundary ? (args[1] as string) : '';
+          const mealText = useWordBoundary ? (args[2] as string) : (args[1] as string);
+          const mealOffset = offset + prefix.length;
+          const boldMarkersBefore = (full.slice(0, mealOffset).match(/\*\*/g) || []).length;
+          const boldMarkersAfter = (full.slice(mealOffset + mealText.length).match(/\*\*/g) || []).length;
+          const insideBold = boldMarkersBefore % 2 === 1 && boldMarkersAfter % 2 === 1;
+          const directlyBold =
+            full.slice(mealOffset - 2, mealOffset) === '**' &&
+            full.slice(mealOffset + mealText.length, mealOffset + mealText.length + 2) === '**';
+          if (insideBold || directlyBold) {
+            return `${prefix}${mealText}`;
+          }
+          return `${prefix}**${mealText}**`;
+        });
       }
     }
     return out;

@@ -69,6 +69,8 @@ const MEAL_PLACEHOLDERS: Record<string, { bg: string; emoji: string }> = {
 const getMealPlaceholder = (name: string) =>
   MEAL_PLACEHOLDERS[name] || { bg: COLORS.primaryLight, emoji: '🍽' };
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ---------- Rich Text Renderer ----------
 // Parses **bold**, meal names (renders inline cards), and bullet points.
 // onOrderMeal — optional callback so meal cards inside chat bubbles can
@@ -91,16 +93,23 @@ const RichText = ({
 }) => {
   const lines = text.split('\n');
   const norm = (s: string) =>
-    s.toLowerCase().replace(/['']/g, "'").replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[’']/g, "'")
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
   return (
     <View>
       {lines.map((line, lineIdx) => {
-        // Check if this line is a meal card line (starts with number or bullet + bold meal name)
+        // Check if this line has a bold meal name that matches a real meal
         const mealCardMatch = line.match(
-          /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
+          /^(.*?)(?:\d+\.\s*|[•-]\s*)?\*\*(.+?)\*\*(.*)$/,
         );
-        const requestedMealName = mealCardMatch ? norm(mealCardMatch[1]) : '';
+        const requestedMealName = mealCardMatch ? norm(mealCardMatch[2]) : '';
         const matchedMeal = mealCardMatch
           ? allMeals.find(m => {
               const n1 = norm(m.name);
@@ -123,9 +132,15 @@ const RichText = ({
             : null;
           const localImg = remoteUri ? null : getMealImage(matchedMeal.name);
           // Extract reasoning text after **name** (e.g. " — Free of: Dairy | Low sodium")
-          const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
+          const suffixText = mealCardMatch?.[3]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
-            <View key={lineIdx} style={richStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
+            <TouchableOpacity
+              key={lineIdx}
+              style={richStyles.mealCard}
+              activeOpacity={onOrderMeal ? 0.78 : 1}
+              onPress={onOrderMeal ? () => onOrderMeal(matchedMeal) : undefined}
+              accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}. Tap to order this meal.`}
+            >
               <View style={[richStyles.mealCardImage, { backgroundColor: ph.bg }]}>
                 {remoteUri ? (
                   <Image source={{ uri: remoteUri }} style={richStyles.mealCardRealImage} resizeMode="cover" />
@@ -163,7 +178,7 @@ const RichText = ({
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }
 
@@ -411,6 +426,46 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
     t.viewDietaryRestrictionsPrompt,
     t.whatMealsLowSodium,
   ];
+
+  const injectMealBold = useCallback((raw: string) => {
+    if (!raw) return raw;
+
+    const mealNames = (allMeals || [])
+      .map(m => ({
+        raw: m.name,
+        localized: translateMealName(m.name, language),
+      }))
+      .sort((a, b) => b.localized.length - a.localized.length);
+
+    let out = raw;
+    for (const mealName of mealNames) {
+      const candidates = Array.from(new Set([mealName.localized, mealName.raw])).filter(Boolean);
+      for (const candidate of candidates) {
+        const useWordBoundary = /[A-Za-z0-9]/.test(candidate);
+        const re = useWordBoundary
+          ? new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegExp(candidate)})(?=$|[^\\p{L}\\p{N}])`, 'giu')
+          : new RegExp(`(${escapeRegExp(candidate)})`, 'giu');
+        out = out.replace(re, (...args) => {
+          const offset = args[args.length - 2] as number;
+          const full = args[args.length - 1] as string;
+          const prefix = useWordBoundary ? (args[1] as string) : '';
+          const mealText = useWordBoundary ? (args[2] as string) : (args[1] as string);
+          const mealOffset = offset + prefix.length;
+          const boldMarkersBefore = (full.slice(0, mealOffset).match(/\*\*/g) || []).length;
+          const boldMarkersAfter = (full.slice(mealOffset + mealText.length).match(/\*\*/g) || []).length;
+          const insideBold = boldMarkersBefore % 2 === 1 && boldMarkersAfter % 2 === 1;
+          const directlyBold =
+            full.slice(mealOffset - 2, mealOffset) === '**' &&
+            full.slice(mealOffset + mealText.length, mealOffset + mealText.length + 2) === '**';
+          if (insideBold || directlyBold) {
+            return `${prefix}${mealText}`;
+          }
+          return `${prefix}**${mealText}**`;
+        });
+      }
+    }
+    return out;
+  }, [allMeals, language]);
 
   // Load meals from API on mount
   useEffect(() => {
@@ -714,6 +769,8 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
         setAiMode('offline');
         responseText = await generateFallbackResponse(text.trim());
       }
+
+      responseText = injectMealBold(responseText);
 
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),

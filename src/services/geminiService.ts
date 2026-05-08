@@ -330,7 +330,7 @@ ${mealsContext}${restrictedContext}${favoritesContext}
 
 RESPONSE RULES — KEEP IT SHORT:
 - Max 2-3 sentences per response. Never write paragraphs.
-- For meal recommendations: one sentence on why it fits, then the meal name in bold.
+- For meal recommendations: put the recommended meal on its own line as a card line: **Exact Meal Name** — short reason.
 - For menu listing: bullet points only, no extra commentary.
 - Never repeat the resident's name back in every sentence.
 - No filler phrases like "Great question!" or "Of course!".
