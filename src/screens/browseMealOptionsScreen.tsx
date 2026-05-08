@@ -449,11 +449,27 @@ const AIAssistantChat = ({
     // think about listing or recommending. Same source of truth the
     // regular menu uses, so chat output never lists a meal the resident
     // can't actually order.
-    const safetyResident: SafetyResident = {
-      foodAllergies,
-      dietaryRestrictions,
-      medicalConditions,
-    };
+    //
+    // Look up the local resident fresh on every message so allergies
+    // added through the UI (without re-navigating) are picked up
+    // immediately. Falls back to props (route.params) for backend-only
+    // residents that aren't in the local cache.
+    const localResident = ResidentService.getResidentById(residentId);
+    const safetyResident: SafetyResident = localResident
+      ? {
+          foodAllergies: localResident.dietaryRestrictions
+            .filter((r) => r.type === 'allergy')
+            .map((r) => r.name),
+          dietaryRestrictions: localResident.dietaryRestrictions
+            .filter((r) => r.type !== 'allergy')
+            .map((r) => r.name),
+          medicalConditions: [],
+        }
+      : {
+          foodAllergies,
+          dietaryRestrictions,
+          medicalConditions,
+        };
     const safeAllMeals = allServiceMeals.filter((m) =>
       isMealSafe(
         {

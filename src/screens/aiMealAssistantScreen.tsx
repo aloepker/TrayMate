@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   SafeAreaView,
   StyleSheet,
@@ -27,7 +28,7 @@ import {
   translateMealTimeRange,
 } from '../services/mealLocalization';
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
-import { getDefaultMealsApi } from '../services/api';
+import { getDefaultMealsApi, getResidentById as fetchResidentApi } from '../services/api';
 import { getMealImage } from '../services/mealDisplayService';
 import { isMealSafe, SafetyResident } from '../services/mealSafetyService';
 import { useSettings } from './context/SettingsContext';
@@ -415,6 +416,63 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
     MealService.getAllMeals().then(setAllMeals).catch(() => setAllMeals([]));
   }, []);
 
+  // Refresh resident profile from the backend whenever this screen gains
+  // focus — same mechanism the browse screen uses. Catches allergies
+  // and dietary restrictions added (or new residents) since the local
+  // cache was last populated. Updates route.params so the offline
+  // fallback picks them up, AND re-initializes Granny BT directly so
+  // the AI prompt also sees the fresh profile without a remount.
+  useFocusEffect(
+    useCallback(() => {
+      if (!residentId) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const fresh = await fetchResidentApi(residentId);
+          if (cancelled || !fresh) return;
+          const incoming = {
+            dietaryRestrictions: fresh.dietaryRestrictions ?? [],
+            foodAllergies: fresh.foodAllergies ?? [],
+            medicalConditions: fresh.medicalConditions ?? [],
+          };
+          const cur = {
+            dietaryRestrictions: (route?.params as any)?.dietaryRestrictions ?? [],
+            foodAllergies: (route?.params as any)?.foodAllergies ?? [],
+            medicalConditions: (route?.params as any)?.medicalConditions ?? [],
+          };
+          const eq = (a: string[], b: string[]) =>
+            a.length === b.length && a.every((v, i) => v === b[i]);
+          const changed =
+            !eq(cur.dietaryRestrictions, incoming.dietaryRestrictions) ||
+            !eq(cur.foodAllergies, incoming.foodAllergies) ||
+            !eq(cur.medicalConditions, incoming.medicalConditions);
+          if (changed) {
+            navigation.setParams(incoming as any);
+          }
+          // Re-initialize the AI session with the fresh profile so
+          // newly-added allergies show up in the prompt right away.
+          const service = chatServiceRef.current;
+          if (service && service.isConfigured()) {
+            let favoriteMealIds: number[] = [];
+            try {
+              favoriteMealIds = await getDefaultMealsApi(residentId);
+            } catch { /* no-op */ }
+            const override = {
+              name: residentName,
+              dietaryRestrictions: incoming.dietaryRestrictions,
+              foodAllergies: incoming.foodAllergies,
+              medicalConditions: incoming.medicalConditions,
+              favoriteMealIds,
+            };
+            service.initialize(residentId, language, override, favoriteMealIds).catch(() => {});
+          }
+        } catch { /* network blip — keep stale params */ }
+      })();
+      return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [residentId, residentName, language, navigation]),
+  );
+
   // Initialize chat service on mount
   useEffect(() => {
     const service = createGeminiChat();
@@ -472,11 +530,27 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
 
     // Strip restricted meals up-front so neither the menu list nor the
     // recommend list can surface anything unsafe for this resident.
-    const safetyResident: SafetyResident = {
-      foodAllergies,
-      dietaryRestrictions,
-      medicalConditions,
-    };
+    //
+    // Look up the local resident fresh on every message so allergies
+    // added through the UI (without re-navigating) are picked up
+    // immediately. Falls back to route.params for backend-only
+    // residents that aren't in the local cache.
+    const localResident = ResidentService.getResidentById(residentId);
+    const safetyResident: SafetyResident = localResident
+      ? {
+          foodAllergies: localResident.dietaryRestrictions
+            .filter((r) => r.type === 'allergy')
+            .map((r) => r.name),
+          dietaryRestrictions: localResident.dietaryRestrictions
+            .filter((r) => r.type !== 'allergy')
+            .map((r) => r.name),
+          medicalConditions: [],
+        }
+      : {
+          foodAllergies,
+          dietaryRestrictions,
+          medicalConditions,
+        };
     const safeAllMeals = allMeals.filter((m) =>
       isMealSafe(
         {
