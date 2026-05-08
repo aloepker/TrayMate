@@ -24,7 +24,21 @@ import Feather from "react-native-vector-icons/Feather";
 import { launchImageLibrary } from "react-native-image-picker";
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
-import { getResidents, getResidentById, Resident as ApiResident, getChats, createMeal, updateMeal, updateMealTranslations, deleteMeal, getAllMenuMeals, setMealAvailability, listCoverageAlertsApi, type MealCoverageAlert } from "../../services/api";
+import {
+  getResidents,
+  getResidentById,
+  Resident as ApiResident,
+  getInbox,
+  getMe,
+  createMeal,
+  updateMeal,
+  updateMealTranslations,
+  deleteMeal,
+  getAllMenuMeals,
+  setMealAvailability,
+  listCoverageAlertsApi,
+  type MealCoverageAlert,
+} from "../../services/api";
 import { FALLBACK_MEALS } from "../../services/localDataService";
 import MessagesModal from "../components/messaging/MessagesModal";
 import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
@@ -928,6 +942,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
   const [coverageAlerts, setCoverageAlerts] = useState<MealCoverageAlert[]>([]);
+  const modalOpenRef = useRef(false);
+  useEffect(() => { modalOpenRef.current = showMessagesModal; }, [showMessagesModal]);
 
   // Per-order messaging
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
@@ -978,17 +994,24 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   // ── check for unread backend messages ──
   useEffect(() => {
     const checkUnread = async () => {
+      if (modalOpenRef.current) return;
       try {
-        const chats = await getChats();
-        if (!Array.isArray(chats)) return;
-        const me = await import("../../services/api").then(m => m.getMe());
+        const me = await getMe();
+        if (modalOpenRef.current) return;
         const myId = String(me.id);
-        const count = chats.filter(c => !c.isRead && String(c.receiverId) === myId).length;
+        const inbox = await getInbox();
+        if (modalOpenRef.current) return;
+        if (!Array.isArray(inbox)) return;
+        const count = inbox.filter(
+          m => !m.isRead
+            && String(m.receiverId) === myId
+            && String(m.senderId) !== myId
+        ).length;
         setMsgUnread(count);
       } catch { /* ignore */ }
     };
     checkUnread();
-    const iv = setInterval(checkUnread, 30000);
+    const iv = setInterval(checkUnread, 10000);
     return () => clearInterval(iv);
   }, []);
 
