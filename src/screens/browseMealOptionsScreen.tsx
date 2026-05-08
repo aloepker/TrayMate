@@ -2509,17 +2509,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     {detailIsPreorder && (
                       <View style={styles.preorderBanner}>
                         <View style={styles.preorderBannerIconWrap}>
-                          <Feather name="sunrise" size={26} color="#FFFFFF" />
+                          <Feather name="sunrise" size={18} color="#FFFFFF" />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.preorderBannerTitle, { fontSize: scaled(18) }]}>
-                            This is for TOMORROW MORNING
+                          <Text style={[styles.preorderBannerTitle, { fontSize: scaled(14) }]}>
+                            Pre-order for tomorrow morning
                           </Text>
-                          <Text style={[styles.preorderBannerBody, { fontSize: scaled(16) }]}>
-                            You&apos;re pre-ordering tomorrow&apos;s breakfast now so
-                            it&apos;s ready when the kitchen opens. It will be served
-                            between {BREAKFAST_WINDOW_LABEL}. The kitchen is closed
-                            right now.
+                          <Text style={[styles.preorderBannerBody, { fontSize: scaled(13) }]}>
+                            Served {BREAKFAST_WINDOW_LABEL} when the kitchen opens.
                           </Text>
                         </View>
                       </View>
@@ -3567,20 +3564,20 @@ const styles = StyleSheet.create({
   // text so it stands as its own section explaining the pre-order concept.
   preorderBanner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
+    alignItems: 'center',
+    gap: 10,
     backgroundColor: '#FFF7ED',
     borderColor: '#D97706',
-    borderWidth: 2,
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginBottom: 18,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
   },
   preorderBannerIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#D97706',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3588,15 +3585,15 @@ const styles = StyleSheet.create({
   // Base sizes here are a fallback — the inline fontSize via scaled() in the
   // render is the authoritative size so accessibility scaling is honored.
   preorderBannerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#9A3412',
-    letterSpacing: 0.3,
-    marginBottom: 6,
+    letterSpacing: 0.2,
+    marginBottom: 2,
   },
   preorderBannerBody: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 17,
     color: '#7C2D12',
   },
   aiRecommendationIcon: {
