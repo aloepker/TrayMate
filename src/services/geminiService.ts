@@ -338,7 +338,7 @@ RESPONSE RULES — KEEP IT SHORT:
 - Flag unsafe meals in one short sentence.
 - Only recommend meals from the AVAILABLE MEALS list.
 
-LANGUAGE: Respond in ${language} only. Meal names stay in English.`;
+LANGUAGE: Respond in ${language} only. When ${language} is not English, translate meal names naturally too; keep the exact menu item identity and do not invent new meals.`;
 }
 
 /**

@@ -77,6 +77,7 @@ const ChatRichText = ({
   isUser,
   scaled,
   language,
+  nutritionLabels,
   allMeals = [],
   onMealTap,
 }: {
@@ -84,6 +85,7 @@ const ChatRichText = ({
   isUser: boolean;
   scaled: (base: number) => number;
   language: 'English' | 'Español' | 'Français' | '中文';
+  nutritionLabels: { sodium: string; protein: string };
   allMeals?: ServiceMeal[];
   onMealTap?: (meal: ServiceMeal) => void;
 }) => {
@@ -153,7 +155,7 @@ const ChatRichText = ({
                     {translateMealPeriod(matchedMeal.mealPeriod, language)} · {translateMealTimeRange(matchedMeal.timeRange, language)}
                   </Text>
                   <Text style={[chatRichStyles.mealCardNutrition, { fontSize: scaled(12) }]}>
-                    {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium · {matchedMeal.nutrition.protein} protein
+                    {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} {nutritionLabels.sodium} · {matchedMeal.nutrition.protein} {nutritionLabels.protein}
                   </Text>
                   {suffixText !== '' && (
                     <Text style={[chatRichStyles.mealCardReason, { fontSize: scaled(12) }]}>
@@ -532,10 +534,10 @@ const AIAssistantChat = ({
       const target = inferPeriod();
       const candidates = safeAllMeals.filter((m) => m.mealPeriod === target);
       if (candidates.length === 0) {
-        return `No safe ${target.toLowerCase()} options for ${residentName} right now.`;
+        return `No safe ${translateMealPeriod(target, language).toLowerCase()} options for ${residentName} right now.`;
       }
       const pick = candidates[0];
-      return `For ${target.toLowerCase()}, I'd suggest:\n\n• **${translateMealName(pick.name, language)}** — ${pick.nutrition.calories} cal · ${pick.nutrition.sodium} sodium\n\nTap the meal to place the order.`;
+      return `For ${translateMealPeriod(target, language).toLowerCase()}, I'd suggest:\n\n• **${translateMealName(pick.name, language)}** — ${pick.nutrition.calories} cal · ${pick.nutrition.sodium} ${t.sodium.toLowerCase()}\n\nTap the meal to place the order.`;
     }
 
     if (isDietaryQuery) {
@@ -590,8 +592,8 @@ const AIAssistantChat = ({
             }
           }
           reasons.push(`${m.nutrition.calories} cal`);
-          if (parseInt(String(m.nutrition.sodium)) <= 400) reasons.push('Low sodium');
-          if (parseInt(String(m.nutrition.protein)) >= 20) reasons.push('High protein');
+          if (parseInt(String(m.nutrition.sodium)) <= 400) reasons.push(translateMealTag('Low Sodium', language));
+          if (parseInt(String(m.nutrition.protein)) >= 20) reasons.push(translateMealTag('High Protein', language));
           if (m.allergenInfo.length === 0) reasons.push('No allergens');
           return `${i + 1}. **${translateMealName(m.name, language)}** — ${reasons.join(' · ')}`;
         })
@@ -787,6 +789,7 @@ const AIAssistantChat = ({
                     isUser={message.role === 'user'}
                     scaled={scaled}
                     language={language}
+                    nutritionLabels={{ sodium: t.sodium.toLowerCase(), protein: t.protein.toLowerCase() }}
                     allMeals={chatMeals}
                     onMealTap={message.role === 'assistant' ? onMealTap : undefined}
                   />
@@ -2042,7 +2045,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
           <View style={[styles.timeBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
             <Text style={[styles.timeBadgeText, { fontSize: scaled(14), color: theme.accent }]}>
-              {item.time_range}
+              {translateMealTimeRange(item.time_range, language)}
             </Text>
           </View>
           <Text style={[styles.cardDescription, { fontSize: scaled(15), color: theme.textSecondary }]}>
@@ -2053,10 +2056,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               {item.kcal} kcal
             </Text>
             <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
-              Sodium: {item.sodium_mg}mg
+              {t.sodium}: {item.sodium_mg}mg
             </Text>
             <Text style={[styles.nutritionItem, { fontSize: scaled(13), color: theme.textSecondary }]}>
-              Protein: {item.protein_g}g
+              {t.protein}: {item.protein_g}g
             </Text>
           </View>
           {item.tags && item.tags.length > 0 && (
@@ -2262,7 +2265,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                       </Text>
                     ) : targetSched ? (
                       <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(13) }]}>
-                        Not serving now · Available {recMeal?.time_range || (() => {
+                        Not serving now · Available {recMeal?.time_range ? translateMealTimeRange(recMeal.time_range, language) : (() => {
                           const sh = targetSched.start / 60;
                           const eh = targetSched.end / 60;
                           return `${sh}am – ${eh > 12 ? (eh - 12) + 'pm' : eh + 'am'}`;
@@ -2303,7 +2306,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.bottomCardSuggestRow}>
               <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(17), lineHeight: scaled(24), flex: 1 }]}>
                 <Text style={styles.bottomCardSuggestLabel}>Meal: </Text>
-                <Text style={styles.bottomCardMealName}>{autoSuggest.meal.name}</Text>
+                <Text style={styles.bottomCardMealName}>{translateMealName(autoSuggest.meal.name, language)}</Text>
               </Text>
               <TouchableOpacity
                 style={styles.bottomCardSuggestConfirm}
@@ -2320,7 +2323,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               <View style={styles.bottomCardSuggestRow}>
                 <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(17), lineHeight: scaled(24), flex: 1 }]}>
                   <Text style={styles.bottomCardSuggestLabel}>Drink: </Text>
-                  <Text style={styles.bottomCardMealName}>{autoSuggest.drink.name}</Text>
+                  <Text style={styles.bottomCardMealName}>{translateMealName(autoSuggest.drink.name, language)}</Text>
                 </Text>
                 <TouchableOpacity
                   style={styles.bottomCardSuggestConfirm}
@@ -2338,7 +2341,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               <View style={styles.bottomCardSuggestRow}>
                 <Text style={[styles.bottomCardSuggestText, { fontSize: scaled(17), lineHeight: scaled(24), flex: 1 }]}>
                   <Text style={styles.bottomCardSuggestLabel}>Side: </Text>
-                  <Text style={styles.bottomCardMealName}>{autoSuggest.dessert.name}</Text>
+                  <Text style={styles.bottomCardMealName}>{translateMealName(autoSuggest.dessert.name, language)}</Text>
                 </Text>
                 <TouchableOpacity
                   style={styles.bottomCardSuggestConfirm}
@@ -2526,8 +2529,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     <Text style={[styles.detailDesc, { fontSize: scaled(15) }]}>{translateMealDescription(selectedMeal.description, language)}</Text>
                     <View style={styles.detailNutrRow}>
                       <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>{selectedMeal.kcal} kcal</Text>
-                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>Sodium: {selectedMeal.sodium_mg}mg</Text>
-                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>Protein: {selectedMeal.protein_g}g</Text>
+                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>{t.sodium}: {selectedMeal.sodium_mg}mg</Text>
+                      <Text style={[styles.detailNutr, { fontSize: scaled(14) }]}>{t.protein}: {selectedMeal.protein_g}g</Text>
                     </View>
 
                     {/* Special Note */}
@@ -2570,7 +2573,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   {availableDrinks.map(drink => (
                                     <Picker.Item
                                       key={drink.id}
-                                      label={`${drink.name}  ·  ${drink.kcal} kcal`}
+                                      label={`${translateMealName(drink.name, language)}  ·  ${drink.kcal} kcal`}
                                       value={drink.id}
                                     />
                                   ))}
@@ -2580,10 +2583,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                 <View style={styles.drinkSelectedRow}>
                                   <View style={{ flex: 1 }}>
                                     <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
-                                      {selectedDrink.name}
+                                      {translateMealName(selectedDrink.name, language)}
                                     </Text>
                                     <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(11) }]}>
-                                      {selectedDrink.kcal} kcal · {selectedDrink.sodium_mg}mg Na
+                                      {selectedDrink.kcal} kcal · {selectedDrink.sodium_mg}mg {t.sodium}
                                     </Text>
                                   </View>
                                 </View>
@@ -2615,7 +2618,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   {availableSides.map(side => (
                                     <Picker.Item
                                       key={side.id}
-                                      label={`${side.name}  ·  ${side.kcal} kcal`}
+                                      label={`${translateMealName(side.name, language)}  ·  ${side.kcal} kcal`}
                                       value={side.id}
                                     />
                                   ))}
@@ -2625,10 +2628,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                 <View style={styles.drinkSelectedRow}>
                                   <View style={{ flex: 1 }}>
                                     <Text style={[styles.drinkSelectedName, { fontSize: scaled(13) }]}>
-                                      {selectedSide.name}
+                                      {translateMealName(selectedSide.name, language)}
                                     </Text>
                                     <Text style={[styles.drinkSelectedMeta, { fontSize: scaled(11) }]}>
-                                      {selectedSide.kcal} kcal · {selectedSide.sodium_mg}mg Na
+                                      {selectedSide.kcal} kcal · {selectedSide.sodium_mg}mg {t.sodium}
                                     </Text>
                                   </View>
                                 </View>
@@ -2672,7 +2675,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
                       <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
                         {selectedDrink || selectedSide
-                          ? `Add to Cart + ${[selectedDrink?.name, selectedSide?.name].filter(Boolean).join(' + ')}`
+                          ? `Add to Cart + ${[selectedDrink, selectedSide].filter(Boolean).map((m) => translateMealName((m as Meal).name, language)).join(' + ')}`
                           : 'Add to Cart'}
                       </Text>
                     </TouchableOpacity>
