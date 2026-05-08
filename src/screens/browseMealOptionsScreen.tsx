@@ -2650,6 +2650,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
             <View style={styles.scheduleCardBlock}>
               <Text style={[styles.scheduleCardTitle, { fontSize: scaled(16) }]}>Kitchen Hours</Text>
+              <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>Kitchen open 7 am – 7 pm daily</Text>
               {MEAL_SCHEDULE.map((s) => {
                 const isActive = activePeriod === s.label;
                 return (
@@ -2665,7 +2666,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   </View>
                 );
               })}
-              <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>Kitchen open 7 am – 7 pm daily</Text>
+              {/* <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>Kitchen open 7 am – 7 pm daily</Text> */}
             </View>
 
             <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
@@ -3343,8 +3344,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#EF4444',
-    paddingVertical: 4,
-    paddingHorizontal: 9,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
     borderRadius: 20,
     shadowColor: '#000',
     shadowOpacity: 0.15,
@@ -3878,7 +3879,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 1080,
   },
   supportCardHeader: {
     flexDirection: 'row',
@@ -3904,12 +3905,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   scheduleCardTitle: {
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: '800',
     color: '#4A4A4A',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    alignSelf: 'center',
   },
   scheduleCardRow: {
     flexDirection: 'row',
@@ -3932,15 +3934,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#374151',
-    width: 72,
+    width: 90,
   },
   scheduleCardLabelActive: {
     color: '#1D4ED8',
   },
   scheduleCardTime: {
-    fontSize: 13,
+    fontSize: 30,
     color: '#6B7280',
     flex: 1,
+    alignItems: 'center',
   },
   scheduleActiveDot: {
     width: 8,
@@ -3949,8 +3952,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#22C55E',
   },
   scheduleKitchenNote: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    fontSize: 30,
+    color: '#5e636c',
     marginTop: 10,
     textAlign: 'center',
   },
