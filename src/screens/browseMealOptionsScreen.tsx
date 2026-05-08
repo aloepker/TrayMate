@@ -1217,6 +1217,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
   const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; isNow: boolean; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
+  const [autoOrderMeals, setAutoOrderMeals] = useState<Meal[]>([]);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
   // Tracks whether the resident manually placed via the auto-suggest banner —
   // used to suppress the banner re-rendering after they've placed once this
@@ -1440,6 +1441,36 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       assignedCaregivers: assignedCaregivers.length > 0 ? assignedCaregivers : undefined,
     });
   };
+
+  const loadAutoOrderCandidates = useCallback(async () => {
+    try {
+      const periodMealSets = await Promise.all(
+        MEAL_SCHEDULE.map(async (period) => {
+          const serviceMeals = await MealService.getMealsByPeriod(period.label as any);
+          return serviceMeals
+            .filter((meal) => meal.mealPeriod !== "Drinks" && meal.mealPeriod !== "Sides")
+            .map((serviceMeal) => {
+              const mapped = mapServiceMeal(serviceMeal);
+              return {
+                ...mapped,
+                meal_period:
+                  serviceMeal.mealPeriod === "All Day"
+                    ? (period.label as Meal["meal_period"])
+                    : mapped.meal_period,
+              };
+            });
+        }),
+      );
+
+      const byMealAndPeriod = new Map<string, Meal>();
+      periodMealSets.flat().forEach((meal) => {
+        byMealAndPeriod.set(`${meal.id}:${meal.meal_period}`, meal);
+      });
+      setAutoOrderMeals(Array.from(byMealAndPeriod.values()));
+    } catch (e) {
+      console.warn("Failed to load auto-order candidates:", e);
+    }
+  }, []);
 
   // Fetch meals from API (async)
   const loadMenu = useCallback(async (period: PeriodOption["value"], periodKey?: string) => {
@@ -1696,6 +1727,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Pre-load drinks, sides, and backend order history once on mount
   useEffect(() => {
+    loadAutoOrderCandidates();
     MealService.getMealsByPeriod("Drinks").then(d => setAvailableDrinks(d.map(mapServiceMeal)));
     MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
     if (residentId) fetchOrderHistory(residentId);
@@ -1710,7 +1742,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Auto-suggest next upcoming meal from past orders (always visible, time-aware)
   useEffect(() => {
-    if (autoSuggestDismissed || meals.length === 0) return;
+    const candidateMeals = autoOrderMeals.length > 0 ? autoOrderMeals : meals;
+    if (autoSuggestDismissed || candidateMeals.length === 0) return;
 
     const next = getNextMealPeriod(currentTime);
     if (!next) return;
@@ -1752,7 +1785,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // a small medical-fit score breaks ties for residents with conditions.
     const mealFreq = getFrequencyRanked(upcoming.label);
     let mainMeal: Meal | null = pickAutoOrderMeal(
-      meals.filter((m) => m.meal_period === upcoming.label),
+      candidateMeals.filter((m) => m.meal_period === upcoming.label),
       mealFreq,
       residentSafetyProfile,
     );
@@ -1792,15 +1825,16 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setPendingAutoOrder(buildPendingAutoOrder(suggestion));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
+  }, [meals, autoOrderMeals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadMenu(selectedPeriod.value, selectedPeriod.key);
+    await loadAutoOrderCandidates();
     await loadRecommendation();
     setRefreshing(false);
-  }, [selectedPeriod.value, selectedPeriod.key, loadMenu, loadRecommendation]);
+  }, [selectedPeriod.value, selectedPeriod.key, loadMenu, loadAutoOrderCandidates, loadRecommendation]);
 
   // Open meal detail modal
   const openMealDetail = (meal: Meal) => {
