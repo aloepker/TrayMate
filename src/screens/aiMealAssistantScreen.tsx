@@ -29,6 +29,7 @@ import {
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
 import { getDefaultMealsApi } from '../services/api';
 import { getMealImage } from '../services/mealDisplayService';
+import { isMealSafe, SafetyResident } from '../services/mealSafetyService';
 import { useSettings } from './context/SettingsContext';
 
 // ---------- TrayMate Color Palette ----------
@@ -114,16 +115,21 @@ const RichText = ({
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
-          // Real bundled meal image (matches the menu screen) — falls back
-          // to emoji if no asset is available for this meal name.
-          const realImg = getMealImage(matchedMeal.name);
+          // Same picture chain the menu screen uses: backend imageUrl
+          // first, then bundled asset, then emoji placeholder.
+          const remoteUri = matchedMeal.imageUrl && matchedMeal.imageUrl.trim().length > 0
+            ? matchedMeal.imageUrl.trim()
+            : null;
+          const localImg = remoteUri ? null : getMealImage(matchedMeal.name);
           // Extract reasoning text after **name** (e.g. " — Free of: Dairy | Low sodium")
           const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
             <View key={lineIdx} style={richStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
               <View style={[richStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                {realImg ? (
-                  <Image source={realImg} style={richStyles.mealCardRealImage} resizeMode="cover" />
+                {remoteUri ? (
+                  <Image source={{ uri: remoteUri }} style={richStyles.mealCardRealImage} resizeMode="cover" />
+                ) : localImg ? (
+                  <Image source={localImg} style={richStyles.mealCardRealImage} resizeMode="cover" />
                 ) : (
                   <Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>
                 )}
@@ -464,6 +470,29 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const generateFallbackResponse = async (userMessage: string): Promise<string> => {
     const lower = userMessage.toLowerCase();
 
+    // Strip restricted meals up-front so neither the menu list nor the
+    // recommend list can surface anything unsafe for this resident.
+    const safetyResident: SafetyResident = {
+      foodAllergies,
+      dietaryRestrictions,
+      medicalConditions,
+    };
+    const safeAllMeals = allMeals.filter((m) =>
+      isMealSafe(
+        {
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          tags: m.tags,
+          allergenInfo: m.allergenInfo,
+          ingredients: m.ingredients,
+          sodium: m.nutrition?.sodium,
+          meal_period: m.mealPeriod,
+        },
+        safetyResident,
+      ),
+    );
+
     // Detect a specific period in the question so the fallback shows
     // only the relevant slice — matches Granny BT's time-aware behavior.
     let periodFilter: ServiceMeal['mealPeriod'] | null = null;
@@ -478,7 +507,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
       periodFilter = 'Dinner';
       periodHeader = "Here's dinner";
     }
-    const filteredMeals = periodFilter ? allMeals.filter((m) => m.mealPeriod === periodFilter) : allMeals;
+    const filteredMeals = periodFilter ? safeAllMeals.filter((m) => m.mealPeriod === periodFilter) : safeAllMeals;
     const menuItems = filteredMeals
       .map(
         (m: ServiceMeal) =>
@@ -501,13 +530,9 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
           .join('\n');
         return `${t.topPicksFor} ${residentName}:\n\n${recList}`;
       }
-      // Fallback: filter meals by dietary restrictions and show top 3 with reasons
-      const restrictionsLower = dietaryRestrictions.map((r: string) => r.toLowerCase());
-      const safeMeals = allMeals.filter(m => {
-        const allergens = m.allergenInfo.map(a => a.toLowerCase());
-        return !restrictionsLower.some(r => allergens.some(a => a.includes(r)));
-      });
-      const topMeals = (safeMeals.length > 0 ? safeMeals : allMeals).slice(0, 3);
+      // Use the same safety-filtered list as the menu fallback so the
+      // two never disagree on what's safe to surface.
+      const topMeals = (safeAllMeals.length > 0 ? safeAllMeals : allMeals).slice(0, 3);
       const recList = topMeals
         .map((m, i) => {
           // Always build useful reasoning so the card shows WHY

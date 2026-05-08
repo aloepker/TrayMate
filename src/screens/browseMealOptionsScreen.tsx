@@ -120,7 +120,13 @@ const ChatRichText = ({
 
         if (matchedMeal && !isUser) {
           const ph = getMealPlaceholder(matchedMeal.name);
-          const realImg = getMealImage(matchedMeal.name);
+          // Same picture chain the regular menu card uses: backend imageUrl
+          // first, then bundled image, then emoji placeholder. Keeps chat
+          // cards visually identical to the menu list.
+          const remoteUri = matchedMeal.imageUrl && matchedMeal.imageUrl.trim().length > 0
+            ? matchedMeal.imageUrl.trim()
+            : null;
+          const localImg = remoteUri ? null : getMealImage(matchedMeal.name);
           const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
             <TouchableOpacity
@@ -131,8 +137,10 @@ const ChatRichText = ({
             >
               <View style={chatRichStyles.mealCard}>
                 <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                  {realImg ? (
-                    <Image source={realImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
+                  {remoteUri ? (
+                    <Image source={{ uri: remoteUri }} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
+                  ) : localImg ? (
+                    <Image source={localImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
                   ) : (
                     <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
                   )}
@@ -437,6 +445,31 @@ const AIAssistantChat = ({
     const lower = userMessage.toLowerCase();
     const allServiceMeals = await MealService.getAllMeals();
 
+    // Strip any meal that's restricted for this resident before we even
+    // think about listing or recommending. Same source of truth the
+    // regular menu uses, so chat output never lists a meal the resident
+    // can't actually order.
+    const safetyResident: SafetyResident = {
+      foodAllergies,
+      dietaryRestrictions,
+      medicalConditions,
+    };
+    const safeAllMeals = allServiceMeals.filter((m) =>
+      isMealSafe(
+        {
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          tags: m.tags,
+          allergenInfo: m.allergenInfo,
+          ingredients: m.ingredients,
+          sodium: m.nutrition?.sodium,
+          meal_period: m.mealPeriod,
+        },
+        safetyResident,
+      ),
+    );
+
     // Detect a specific period in the question so the fallback shows
     // only the relevant slice (matches Granny BT's time-aware behavior).
     let periodFilter: ServiceMeal['mealPeriod'] | null = null;
@@ -452,8 +485,8 @@ const AIAssistantChat = ({
       periodHeader = "Here's dinner";
     }
     const filteredMeals = periodFilter
-      ? allServiceMeals.filter((m) => m.mealPeriod === periodFilter)
-      : allServiceMeals;
+      ? safeAllMeals.filter((m) => m.mealPeriod === periodFilter)
+      : safeAllMeals;
     const menuItems = filteredMeals
       .map(
         (m: ServiceMeal) =>
@@ -476,13 +509,9 @@ const AIAssistantChat = ({
           .join('\n');
         return `${t.topPicksFor} ${residentName}:\n\n${recList}`;
       }
-      // Fallback: filter meals by dietary restrictions and show top 3
-      const restrictionsLower = dietaryRestrictions.map((r: string) => r.toLowerCase());
-      const safeMeals = allServiceMeals.filter(m => {
-        const allergens = m.allergenInfo.map(a => a.toLowerCase());
-        return !restrictionsLower.some(r => allergens.some(a => a.includes(r)));
-      });
-      const topMeals = (safeMeals.length > 0 ? safeMeals : allServiceMeals).slice(0, 3);
+      // Use the same safety-filtered list as the menu fallback so the
+      // two never disagree on what's safe to show.
+      const topMeals = (safeAllMeals.length > 0 ? safeAllMeals : allServiceMeals).slice(0, 3);
       const recList = topMeals
         .map((m, i) => {
           const reasons: string[] = [];
