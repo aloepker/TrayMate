@@ -94,6 +94,7 @@ export const COMMON_MEDICAL_CONDITIONS: string[] = [
   "Lactose Intolerance",
   "GERD",
   "Dysphagia",
+  "Soft Bite",
   "Dementia",
   "Osteoporosis",
   "Arthritis",
@@ -160,6 +161,7 @@ export type ViolationCategory =
   | "allergen"
   | "condition-sodium"
   | "condition-sugar"
+  | "condition-texture"
   | "condition-implied-allergen"
   | "diet-restriction"
   | "diet-low-sodium";
@@ -314,6 +316,47 @@ function matchesAllergenKeywords(allergy: string, meal: SafetyMeal, haystack: st
   return keywords.some((kw) => haystack.includes(kw));
 }
 
+function isSoftBiteFriendly(haystack: string): boolean {
+  const hardTextureWords = [
+    "crunchy",
+    "crispy",
+    "crisp",
+    "crouton",
+    "chips",
+    "nuts",
+    "granola",
+    "raw",
+    "toast",
+    "toasted",
+  ];
+  if (hardTextureWords.some((word) => haystack.includes(word))) return false;
+
+  const softTextureWords = [
+    "soft bite",
+    "soft-bite",
+    "bite-sized",
+    "dysphagia friendly",
+    "easy chew",
+    "easy-to-chew",
+    "texture modified",
+    "soft ",
+    " tender",
+    "mashed",
+    "stew",
+    "oatmeal",
+    "porridge",
+    "pudding",
+    "soup",
+    "smoothie",
+    "casserole",
+    "scrambled",
+    "creamy",
+    "puree",
+    "pureed",
+  ];
+  return softTextureWords.some((word) => haystack.includes(word));
+}
+
 /**
  * Returns EVERY compliance violation the meal triggers for this
  * resident, tagged with severity + category so UI / audit surfaces
@@ -391,6 +434,18 @@ export function getAllUnsafeReasons(
           severity: "medical",
           category: "condition-sugar",
           reason: `High sugar (${sugar}g) — resident has ${titleCase(condition)}`,
+          trigger: titleCase(condition),
+        });
+      }
+    }
+
+    // 2d. Soft Bite / Dysphagia → texture-modified foods only
+    if (condition.includes("soft bite") || condition.includes("dysphagia")) {
+      if (!isSoftBiteFriendly(haystack)) {
+        violations.push({
+          severity: "medical",
+          category: "condition-texture",
+          reason: `Not soft-bite friendly — resident has ${titleCase(condition)}`,
           trigger: titleCase(condition),
         });
       }

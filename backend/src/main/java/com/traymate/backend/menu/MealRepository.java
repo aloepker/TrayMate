@@ -1,10 +1,13 @@
 package com.traymate.backend.menu;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MealRepository extends JpaRepository<Meal, Integer> {
+    Optional<Meal> findByNameIgnoreCase(String name);
+
     List<Meal> findByAvailableTrue();
 
     List<Meal> findByMealperiodContainingIgnoreCase(String mealperiod);

@@ -26,7 +26,8 @@ import java.util.stream.Collectors;
  *        Lactose Intolerance / Lactose  → dairy
  *   3. Hypertension / High Blood Pressure → sodium ≤ 600mg.
  *   4. Diabetes → sugar ≤ 25g (only if meal exposes sugar).
- *   5. Dietary restrictions (vegetarian, vegan, halal, kosher, pescatarian,
+ *   5. Soft Bite / Dysphagia → texture-modified meals only.
+ *   6. Dietary restrictions (vegetarian, vegan, halal, kosher, pescatarian,
  *      low-sodium). Stored on Resident as comma-separated string when present.
  */
 @Service
@@ -188,6 +189,18 @@ public class DietaryComplianceService {
                     .trigger(titleCase(condition))
                     .build());
             }
+
+            // 2d. Soft Bite / Dysphagia -> texture-modified foods only
+            if (condition.contains("soft bite") || condition.contains("dysphagia")) {
+                if (!isSoftBiteFriendly(haystack)) {
+                    violations.add(ComplianceViolation.builder()
+                        .severity("medical")
+                        .category("condition-texture")
+                        .reason("Not soft-bite friendly — resident has " + titleCase(condition))
+                        .trigger(titleCase(condition))
+                        .build());
+                }
+            }
         }
 
         // 3. Dietary restrictions
@@ -242,6 +255,49 @@ public class DietaryComplianceService {
         sb.append(nullToEmpty(meal.getAllergenInfo())).append(' ');
         sb.append(nullToEmpty(meal.getTags()));
         return sb.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isSoftBiteFriendly(String haystack) {
+        List<String> hardTextureWords = List.of(
+            "crunchy",
+            "crispy",
+            "crisp",
+            "crouton",
+            "chips",
+            "nuts",
+            "granola",
+            "raw",
+            "toast",
+            "toasted"
+        );
+        if (hardTextureWords.stream().anyMatch(haystack::contains)) {
+            return false;
+        }
+
+        List<String> softTextureWords = List.of(
+            "soft bite",
+            "soft-bite",
+            "bite-sized",
+            "dysphagia friendly",
+            "easy chew",
+            "easy-to-chew",
+            "texture modified",
+            "soft ",
+            " tender",
+            "mashed",
+            "stew",
+            "oatmeal",
+            "porridge",
+            "pudding",
+            "soup",
+            "smoothie",
+            "casserole",
+            "scrambled",
+            "creamy",
+            "puree",
+            "pureed"
+        );
+        return softTextureWords.stream().anyMatch(haystack::contains);
     }
 
     /** Parse a resident's comma-or-semicolon list into normalized lowercase tokens. */

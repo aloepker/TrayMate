@@ -281,6 +281,71 @@ const MEAL_NAME_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>
     Français: "Toast à l'Avocat",
     中文: '牛油果吐司',
   },
+  'Soft Scrambled Eggs with Potatoes': {
+    Español: 'Huevos Revueltos Suaves con Papas',
+    Français: 'Oeufs Brouillés Mous avec Pommes de Terre',
+    中文: '软嫩炒蛋配土豆',
+  },
+  'Soft Oatmeal with Banana': {
+    Español: 'Avena Suave con Banana',
+    Français: 'Porridge Moelleux à la Banane',
+    中文: '香蕉软燕麦粥',
+  },
+  'Soft Pancakes with Berry Compote': {
+    Español: 'Panqueques Suaves con Compota de Frutos Rojos',
+    Français: 'Pancakes Moelleux avec Compote de Fruits Rouges',
+    中文: '浆果酱软煎饼',
+  },
+  'Soft Chicken and Rice Bowl': {
+    Español: 'Bowl de Pollo Suave con Arroz',
+    Français: 'Bol de Poulet Moelleux au Riz',
+    中文: '软鸡肉米饭碗',
+  },
+  'Soft Turkey Meatloaf with Potatoes': {
+    Español: 'Pastel de Pavo Suave con Papas',
+    Français: 'Pain de Dinde Moelleux avec Pommes de Terre',
+    中文: '软火鸡肉饼配土豆',
+  },
+  'Soft Tuna Rice Casserole': {
+    Español: 'Cazuela Suave de Atún y Arroz',
+    Français: 'Casserole Moelleuse de Thon et Riz',
+    中文: '软金枪鱼米饭焗菜',
+  },
+  'Soft Baked Fish with Rice': {
+    Español: 'Pescado al Horno Suave con Arroz',
+    Français: 'Poisson Cuit au Four Moelleux avec Riz',
+    中文: '软烤鱼配米饭',
+  },
+  'Soft Beef Stew': {
+    Español: 'Estofado de Res Suave',
+    Français: 'Ragoût de Boeuf Moelleux',
+    中文: '软炖牛肉',
+  },
+  'Soft Pasta with Meat Sauce': {
+    Español: 'Pasta Suave con Salsa de Carne',
+    Français: 'Pâtes Moelleuses à la Sauce Viande',
+    中文: '软意面配肉酱',
+  },
+  'Spring Soft Herb Chicken with Vegetables': {
+    Español: 'Pollo Suave de Primavera con Hierbas y Verduras',
+    Français: 'Poulet Moelleux de Printemps aux Herbes et Légumes',
+    中文: '春季香草软鸡肉配蔬菜',
+  },
+  'Summer Soft Lemon Fish and Rice': {
+    Español: 'Pescado Suave de Verano con Limón y Arroz',
+    Français: "Poisson Moelleux d'Été au Citron et Riz",
+    中文: '夏季柠檬软鱼配米饭',
+  },
+  'Fall Soft Turkey Sweet Potato Bowl': {
+    Español: 'Bowl Otoñal Suave de Pavo y Batata',
+    Français: "Bol Moelleux d'Automne à la Dinde et Patate Douce",
+    中文: '秋季火鸡红薯软碗',
+  },
+  'Winter Soft Chicken Pot Pie Filling': {
+    Español: 'Relleno Suave de Pastel de Pollo de Invierno',
+    Français: "Garniture Moelleuse de Tourte au Poulet d'Hiver",
+    中文: '冬季软鸡肉派馅',
+  },
 };
 
 const MEAL_DESCRIPTION_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
@@ -614,6 +679,71 @@ const MEAL_DESCRIPTION_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, 
     Français: "Avocat écrasé crémeux sur pain complet grillé avec un trait de citron.",
     中文: '全谷物吐司上铺顺滑牛油果泥，并加少许柠檬汁。',
   },
+  'Soft scrambled eggs with tender diced potatoes and a smooth side of applesauce.': {
+    Español: 'Huevos revueltos suaves con papas tiernas en cubos y una guarnición suave de puré de manzana.',
+    Français: 'Oeufs brouillés mous avec pommes de terre tendres en dés et compote de pommes lisse.',
+    中文: '软嫩炒蛋配嫩土豆丁和顺滑苹果泥。',
+  },
+  'Warm oatmeal cooked soft with sliced banana and a light cinnamon finish.': {
+    Español: 'Avena tibia cocida suave con rebanadas de banana y un toque ligero de canela.',
+    Français: 'Porridge chaud cuit moelleux avec banane tranchée et légère touche de cannelle.',
+    中文: '温热软燕麦配香蕉片和淡淡肉桂。',
+  },
+  'Tender pancakes served with warm berry compote for an easy-to-chew breakfast.': {
+    Español: 'Panqueques tiernos servidos con compota tibia de frutos rojos para un desayuno fácil de masticar.',
+    Français: 'Pancakes tendres servis avec compote tiède de fruits rouges pour un petit-déjeuner facile à mâcher.',
+    中文: '松软煎饼配温热浆果酱，易于咀嚼。',
+  },
+  'Pulled soft chicken over steamed rice with tender carrots and a light savory sauce.': {
+    Español: 'Pollo suave deshebrado sobre arroz al vapor con zanahorias tiernas y una salsa ligera salada.',
+    Français: 'Poulet effiloché moelleux sur riz vapeur avec carottes tendres et sauce légère salée.',
+    中文: '软嫩手撕鸡铺在蒸米饭上，配嫩胡萝卜和清淡咸香酱汁。',
+  },
+  'Moist turkey meatloaf with mashed potatoes and soft green beans.': {
+    Español: 'Pastel de pavo jugoso con puré de papas y ejotes suaves.',
+    Français: 'Pain de dinde moelleux avec purée de pommes de terre et haricots verts tendres.',
+    中文: '湿润火鸡肉饼配土豆泥和软嫩青豆。',
+  },
+  'Creamy tuna and rice casserole baked until tender and easy to portion.': {
+    Español: 'Cazuela cremosa de atún y arroz horneada hasta quedar tierna y fácil de servir.',
+    Français: 'Casserole crémeuse de thon et riz cuite jusqu’à tendreté et facile à portionner.',
+    中文: '奶香金枪鱼米饭焗菜，烤至软嫩，易于分份。',
+  },
+  'Flaky baked fish served over soft rice with mild lemon herb seasoning.': {
+    Español: 'Pescado al horno tierno servido sobre arroz suave con sazón ligera de limón y hierbas.',
+    Français: 'Poisson cuit au four et tendre servi sur riz moelleux avec assaisonnement doux citron-herbes.',
+    中文: '松嫩烤鱼铺在软米饭上，配温和柠檬香草调味。',
+  },
+  'Slow-simmered beef stew with soft potatoes, carrots, and peas.': {
+    Español: 'Estofado de res cocido lentamente con papas, zanahorias y chícharos suaves.',
+    Français: 'Ragoût de boeuf mijoté lentement avec pommes de terre, carottes et petits pois tendres.',
+    中文: '慢炖牛肉，配软土豆、胡萝卜和豌豆。',
+  },
+  'Soft pasta tossed with a mild meat sauce and finely grated parmesan.': {
+    Español: 'Pasta suave mezclada con salsa de carne ligera y parmesano finamente rallado.',
+    Français: 'Pâtes moelleuses mélangées à une sauce viande douce et parmesan finement râpé.',
+    中文: '软意面拌温和肉酱和细磨帕玛森奶酪。',
+  },
+  'Tender herb chicken with soft spring vegetables in a light broth.': {
+    Español: 'Pollo tierno con hierbas y verduras suaves de primavera en un caldo ligero.',
+    Français: 'Poulet tendre aux herbes avec légumes printaniers moelleux dans un bouillon léger.',
+    中文: '香草嫩鸡配春季软蔬菜和清淡高汤。',
+  },
+  'Lemon baked fish with soft rice and summer vegetables.': {
+    Español: 'Pescado al horno con limón, arroz suave y verduras de verano.',
+    Français: 'Poisson au citron cuit au four avec riz moelleux et légumes d’été.',
+    中文: '柠檬烤鱼配软米饭和夏季蔬菜。',
+  },
+  'Ground turkey with mashed sweet potatoes and tender fall vegetables.': {
+    Español: 'Pavo molido con puré de batata y verduras otoñales tiernas.',
+    Français: 'Dinde hachée avec patates douces écrasées et légumes d’automne tendres.',
+    中文: '火鸡碎肉配红薯泥和秋季嫩蔬菜。',
+  },
+  'Soft chicken pot pie filling with tender vegetables and creamy gravy.': {
+    Español: 'Relleno suave de pastel de pollo con verduras tiernas y salsa cremosa.',
+    Français: 'Garniture moelleuse de tourte au poulet avec légumes tendres et sauce crémeuse.',
+    中文: '软鸡肉派馅，配嫩蔬菜和奶油肉汁。',
+  },
 };
 
 const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
@@ -656,6 +786,11 @@ const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
   Gluten: { Español: 'Gluten', Français: 'Gluten', 中文: '麸质' },
   'Whole Grain': { Español: 'Grano Integral', Français: 'Céréales Complètes', 中文: '全谷物' },
   'UTI Prevention': { Español: 'Prevención Urinaria', Français: 'Prévention Urinaire', 中文: '泌尿护理' },
+  'Soft Bite': { Español: 'Bocado Suave', Français: 'Bouchées Tendres', 中文: '软食' },
+  'Easy Chew': { Español: 'Fácil de Masticar', Français: 'Facile à Mâcher', 中文: '易咀嚼' },
+  'Bite-Sized': { Español: 'En Bocados', Français: 'En Bouchées', 中文: '小块' },
+  'Dysphagia Friendly': { Español: 'Apto para Disfagia', Français: 'Adapté à la Dysphagie', 中文: '吞咽困难友好' },
+  'Texture Modified': { Español: 'Textura Modificada', Français: 'Texture Modifiée', 中文: '改良质地' },
 };
 
 const PERIOD_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
