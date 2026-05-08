@@ -32,4 +32,10 @@ public class MealOrders {
 
     @Column(name = "meal_items_id_numbers", length = 16)
     private String mealItemsIdNumbers;
+
+    @Column(name = "note", length = 1000)
+    private String note;
+
+    @Column(name = "special_instructions", length = 1000)
+    private String specialInstructions;
 }

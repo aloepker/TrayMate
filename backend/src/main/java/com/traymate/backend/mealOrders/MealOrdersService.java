@@ -141,6 +141,8 @@ public class MealOrdersService {
 
     // 3. Overwrite the items and any other relevant fields
     existing.setMealItemsIdNumbers(newOrderData.getMealItemsIdNumbers());
+    existing.setNote(newOrderData.getNote());
+    existing.setSpecialInstructions(newOrderData.getSpecialInstructions());
 
     // Optional: if you want to allow them to change the meal type (e.g., Lunch to Dinner)
     // existing.setMealOfDay(newOrderData.getMealOfDay());

@@ -65,3 +65,9 @@ ALTER TABLE meals
 
 ALTER TABLE meals
     ADD COLUMN IF NOT EXISTS tag_translations TEXT NULL;
+
+ALTER TABLE meal_orders
+    ADD COLUMN IF NOT EXISTS note VARCHAR(1000) NULL;
+
+ALTER TABLE meal_orders
+    ADD COLUMN IF NOT EXISTS special_instructions VARCHAR(1000) NULL;

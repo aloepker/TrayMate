@@ -58,6 +58,7 @@ type CartContextType = {
 
 // Create the context
 const CartContext = createContext<CartContextType | undefined>(undefined);
+const BREAKFAST_PREORDER_NOTE_TAG = "[FOR TOMORROW'S BREAKFAST]";
 
 // Provider component - wrap your app with this
 export const CartProvider = ({ children }: { children: ReactNode }) => {
@@ -94,6 +95,37 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       }),
       { calories: 0, sodium: 0, protein: 0 }
     );
+  };
+
+  const buildOrderNote = (): string | null => {
+    const notedItems = cart
+      .map((item) => {
+        const raw = String(item.specialNote ?? "").trim();
+        if (!raw) return null;
+        const cleaned = raw.replace(BREAKFAST_PREORDER_NOTE_TAG, "").trim();
+        return { item, raw, cleaned };
+      })
+      .filter((entry): entry is { item: Meal; raw: string; cleaned: string } => entry !== null);
+
+    if (notedItems.length === 0) return null;
+
+    const hasBreakfastPreorder = notedItems.some((entry) =>
+      entry.raw.includes(BREAKFAST_PREORDER_NOTE_TAG)
+    );
+    const visibleNotes = notedItems
+      .filter((entry) => entry.cleaned.length > 0)
+      .map((entry) =>
+        notedItems.length === 1
+          ? entry.cleaned
+          : `${entry.item.name}: ${entry.cleaned}`
+      );
+
+    const parts = [
+      hasBreakfastPreorder ? BREAKFAST_PREORDER_NOTE_TAG : "",
+      ...visibleNotes,
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join("\n") : null;
   };
 
   /** Determine the dominant meal period from cart items */
@@ -159,6 +191,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     const meal = mealOfDay || deriveMealOfDay();
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const itemIds = cart.map((m) => String(m.id)).join(', ');
+    const orderNote = buildOrderNote();
 
     try {
       const response = await placeOrderApi({
@@ -166,6 +199,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         mealOfDay: meal,
         userId: rid,
         mealItemsIdNumbers: itemIds,
+        note: orderNote,
+        specialInstructions: orderNote,
       });
 
       // Success — backend returned 201
@@ -222,6 +257,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     const meal = mealOfDay || deriveMealOfDay();
     const today = new Date().toISOString().slice(0, 10);
     const itemIds = cart.map((m) => String(m.id)).join(', ');
+    const orderNote = buildOrderNote();
 
     try {
       const response = await replaceOrderApi(backendOrderId, {
@@ -229,6 +265,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         mealOfDay: meal,
         userId: rid,
         mealItemsIdNumbers: itemIds,
+        note: orderNote,
+        specialInstructions: orderNote,
       });
 
       const newOrder = buildLocalOrder(rid, response.id, meal, today);

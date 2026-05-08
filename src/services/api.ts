@@ -582,6 +582,8 @@ export type MealOrderResponse = {
   userId: string;
   status: string;          // "pending", etc.
   mealItemsIdNumbers: string; // comma-separated meal IDs, e.g. "3, 5, 6"
+  note?: string | null;
+  specialInstructions?: string | null;
 };
 
 /**
@@ -693,6 +695,8 @@ export async function placeOrderApi(payload: {
   userId: string;
   status?: string;
   mealItemsIdNumbers: string;
+  note?: string | null;
+  specialInstructions?: string | null;
 }): Promise<MealOrderResponse> {
   return request<MealOrderResponse>("/mealOrders", {
     method: "POST",
@@ -702,6 +706,8 @@ export async function placeOrderApi(payload: {
       userId: payload.userId,
       status: payload.status ?? "pending",
       mealItemsIdNumbers: payload.mealItemsIdNumbers,
+      note: payload.note ?? null,
+      specialInstructions: payload.specialInstructions ?? payload.note ?? null,
     }),
   });
 }
@@ -718,6 +724,8 @@ export async function replaceOrderApi(
     userId: string;
     status?: string;
     mealItemsIdNumbers: string;
+    note?: string | null;
+    specialInstructions?: string | null;
   }
 ): Promise<MealOrderResponse> {
   return request<MealOrderResponse>(`/mealOrders/${orderId}`, {
@@ -728,6 +736,8 @@ export async function replaceOrderApi(
       userId: payload.userId,
       status: payload.status ?? "pending",
       mealItemsIdNumbers: payload.mealItemsIdNumbers,
+      note: payload.note ?? null,
+      specialInstructions: payload.specialInstructions ?? payload.note ?? null,
     }),
   });
 }
