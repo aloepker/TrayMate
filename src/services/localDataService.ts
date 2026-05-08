@@ -548,13 +548,27 @@ export const MealService = {
   },
 
   getMealsByTag: async (tag: string): Promise<Meal[]> => {
-    // const meals = await fetchMealsFromApi();
+    const normalizedTag = tag.toLowerCase();
+    const matchesTag = (meal: Meal) =>
+      meal.isAvailable &&
+      meal.tags.some((t) => t.toLowerCase() === normalizedTag);
+
     const meals = await fetchAvailableMealsFromApi();
-    return meals.filter(
-      (m) =>
-        m.isAvailable &&
-        m.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
-    );
+    const taggedMeals = meals.filter(matchesTag);
+
+    if (normalizedTag !== "soft bite") {
+      return taggedMeals;
+    }
+
+    // Live backend deploys can lag behind the mobile bundle. Keep the new
+    // Soft Bite tab populated from the bundled seed until the DB seeder has
+    // inserted the same rows upstream.
+    const seenNames = new Set(taggedMeals.map((m) => m.name.toLowerCase()));
+    const fallbackSoftBiteMeals = FALLBACK_MEALS
+      .filter(matchesTag)
+      .filter((m) => !seenNames.has(m.name.toLowerCase()));
+
+    return [...taggedMeals, ...fallbackSoftBiteMeals];
   },
 
   getMealsGroupedByPeriod: async () => {
