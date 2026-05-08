@@ -179,9 +179,15 @@ export const MEAL_IMAGES: Record<string, any> = {
 /**
  * Safe accessor – returns `null` when no bundled image exists,
  * so the UI can fall back to the emoji placeholder.
+ * Case-insensitive so AI-returned names ("caesar salad with chicken")
+ * still resolve to the correct asset key.
  */
-export const getMealImage = (mealName: string): any | null =>
-  MEAL_IMAGES[mealName] ?? null;
+export const getMealImage = (mealName: string): any | null => {
+  if (MEAL_IMAGES[mealName]) return MEAL_IMAGES[mealName];
+  const lower = mealName.toLowerCase();
+  const key = Object.keys(MEAL_IMAGES).find(k => k.toLowerCase() === lower);
+  return key ? MEAL_IMAGES[key] : null;
+};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Service → display mapping

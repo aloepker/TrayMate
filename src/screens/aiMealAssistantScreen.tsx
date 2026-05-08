@@ -88,6 +88,8 @@ const RichText = ({
   onOrderMeal?: (meal: ServiceMeal) => void;
 }) => {
   const lines = text.split('\n');
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/['']/g, "'").replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
   return (
     <View>
@@ -96,13 +98,18 @@ const RichText = ({
         const mealCardMatch = line.match(
           /^(?:\d+\.\s*|[•]\s*)?\*\*(.+?)\*\*(.*)$/,
         );
-        const requestedMealName = mealCardMatch?.[1].toLowerCase().trim();
+        const requestedMealName = mealCardMatch ? norm(mealCardMatch[1]) : '';
         const matchedMeal = mealCardMatch
-          ? allMeals.find(
-              m =>
-                m.name.toLowerCase() === requestedMealName ||
-                translateMealName(m.name, language).toLowerCase() === requestedMealName,
-            )
+          ? allMeals.find(m => {
+              const n1 = norm(m.name);
+              const n2 = norm(translateMealName(m.name, language));
+              if (!requestedMealName) return false;
+              if (n1 === requestedMealName || n2 === requestedMealName) return true;
+              if (requestedMealName.length >= 4 && (n1.includes(requestedMealName) || n2.includes(requestedMealName))) return true;
+              if (n1.length >= 4 && requestedMealName.includes(n1)) return true;
+              if (n2.length >= 4 && requestedMealName.includes(n2)) return true;
+              return false;
+            })
           : null;
 
         if (matchedMeal && !isUser) {
@@ -453,7 +460,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
     const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
 
     if (isMenuQuery) {
-      return `${t.heresTheMenu} 📋\n\n${menuItems}\n\n${t.aiOfflineMenuAvailable}`;
+      return `${t.heresTheMenu} 📋\n\n${menuItems}`;
     }
     if (isRecommendQuery) {
       const recs = await RecommendationService.getRecommendations(residentId, null, 3);

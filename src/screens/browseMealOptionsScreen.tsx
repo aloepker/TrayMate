@@ -78,12 +78,14 @@ const ChatRichText = ({
   scaled,
   language,
   allMeals = [],
+  onMealTap,
 }: {
   text: string;
   isUser: boolean;
   scaled: (base: number) => number;
   language: 'English' | 'Español' | 'Français' | '中文';
   allMeals?: ServiceMeal[];
+  onMealTap?: (meal: ServiceMeal) => void;
 }) => {
   const lines = text.split('\n');
   const norm = (s: string) =>
@@ -121,31 +123,38 @@ const ChatRichText = ({
           const realImg = getMealImage(matchedMeal.name);
           const suffixText = mealCardMatch?.[2]?.replace(/^\s*[—–-]\s*/, '').trim() || '';
           return (
-            <View key={lineIdx} style={chatRichStyles.mealCard} accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}`}>
-              <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                {realImg ? (
-                  <Image source={realImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
-                ) : (
-                  <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
-                )}
-              </View>
-              <View style={chatRichStyles.mealCardInfo}>
-                <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(16) }]}>
-                  {translateMealName(matchedMeal.name, language)}
-                </Text>
-                <Text style={[chatRichStyles.mealCardMeta, { fontSize: scaled(13) }]}>
-                  {translateMealPeriod(matchedMeal.mealPeriod, language)} · {translateMealTimeRange(matchedMeal.timeRange, language)}
-                </Text>
-                <Text style={[chatRichStyles.mealCardNutrition, { fontSize: scaled(12) }]}>
-                  {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium · {matchedMeal.nutrition.protein} protein
-                </Text>
-                {suffixText !== '' && (
-                  <Text style={[chatRichStyles.mealCardReason, { fontSize: scaled(12) }]}>
-                    {suffixText}
+            <TouchableOpacity
+              key={lineIdx}
+              activeOpacity={onMealTap ? 0.75 : 1}
+              onPress={onMealTap ? () => onMealTap(matchedMeal) : undefined}
+              accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}. Tap to view details.`}
+            >
+              <View style={chatRichStyles.mealCard}>
+                <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
+                  {realImg ? (
+                    <Image source={realImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
+                  ) : (
+                    <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
+                  )}
+                </View>
+                <View style={chatRichStyles.mealCardInfo}>
+                  <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(16) }]}>
+                    {translateMealName(matchedMeal.name, language)}
                   </Text>
-                )}
+                  <Text style={[chatRichStyles.mealCardMeta, { fontSize: scaled(13) }]}>
+                    {translateMealPeriod(matchedMeal.mealPeriod, language)} · {translateMealTimeRange(matchedMeal.timeRange, language)}
+                  </Text>
+                  <Text style={[chatRichStyles.mealCardNutrition, { fontSize: scaled(12) }]}>
+                    {matchedMeal.nutrition.calories} cal · {matchedMeal.nutrition.sodium} sodium · {matchedMeal.nutrition.protein} protein
+                  </Text>
+                  {suffixText !== '' && (
+                    <Text style={[chatRichStyles.mealCardReason, { fontSize: scaled(12) }]}>
+                      {suffixText}
+                    </Text>
+                  )}
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }
 
@@ -299,6 +308,7 @@ const AIAssistantChat = ({
   dietaryRestrictions = [],
   foodAllergies = [],
   medicalConditions = [],
+  onMealTap,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -307,6 +317,7 @@ const AIAssistantChat = ({
   dietaryRestrictions?: string[];
   foodAllergies?: string[];
   medicalConditions?: string[];
+  onMealTap?: (meal: ServiceMeal) => void;
 }) => {
   const { t, scaled, language } = useSettings();
     const [aiAvailable, setAiAvailable] = useState<boolean>(false);
@@ -421,7 +432,7 @@ const AIAssistantChat = ({
     const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
 
     if (isMenuQuery) {
-      return `${t.heresTheMenu} 📋\n\n${menuItems}\n\n${t.aiOfflineMenuAvailable}`;
+      return `${t.heresTheMenu} 📋\n\n${menuItems}`;
     }
     if (isRecommendQuery) {
       const recs = await RecommendationService.getRecommendations(residentId, null, 3);
@@ -648,6 +659,7 @@ const AIAssistantChat = ({
                     scaled={scaled}
                     language={language}
                     allMeals={chatMeals}
+                    onMealTap={message.role === 'assistant' ? onMealTap : undefined}
                   />
                   <Text style={[
                     chatStyles.timestamp,
@@ -2555,6 +2567,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         dietaryRestrictions={route?.params?.dietaryRestrictions ?? []}
         foodAllergies={route?.params?.foodAllergies ?? []}
         medicalConditions={route?.params?.medicalConditions ?? []}
+        onMealTap={(serviceMeal) => {
+          setShowAIChat(false);
+          openMealDetail(mapServiceMeal(serviceMeal));
+        }}
       />
 
       {/* Pending Auto-Order Panel — opens from the bell in the header */}
