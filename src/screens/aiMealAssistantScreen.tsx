@@ -383,8 +383,22 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  // Pick a menu question that matches the wall clock — inside a serving
+  // window we ask about that period, between meals (or after dinner) we
+  // ask about the next one coming up.
+  const getMenuNowQuestion = (): string => {
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    if (mins >= 7 * 60 && mins <= 10 * 60) return "What's for breakfast?";
+    if (mins >= 11 * 60 && mins <= 14 * 60) return "What's for lunch?";
+    if (mins >= 16 * 60 && mins <= 19 * 60) return "What's for dinner?";
+    if (mins < 7 * 60) return "What's for breakfast?";
+    if (mins < 11 * 60) return "What's for lunch?";
+    if (mins < 16 * 60) return "What's for dinner?";
+    return "What's for breakfast tomorrow?";
+  };
   const QUICK_QUESTIONS = [
-    t.whatsOnMenuToday,
+    getMenuNowQuestion(),
     t.recommendAMeal,
     t.viewDietaryRestrictionsPrompt,
     t.whatMealsLowSodium,
@@ -449,18 +463,35 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   // Minimal fallback for when ALL Gemini models are down
   const generateFallbackResponse = async (userMessage: string): Promise<string> => {
     const lower = userMessage.toLowerCase();
-    const menuItems = allMeals
+
+    // Detect a specific period in the question so the fallback shows
+    // only the relevant slice — matches Granny BT's time-aware behavior.
+    let periodFilter: ServiceMeal['mealPeriod'] | null = null;
+    let periodHeader: string | null = null;
+    if (lower.includes('breakfast')) {
+      periodFilter = 'Breakfast';
+      periodHeader = lower.includes('tomorrow') ? "Here's tomorrow's breakfast" : "Here's breakfast";
+    } else if (lower.includes('lunch')) {
+      periodFilter = 'Lunch';
+      periodHeader = "Here's lunch";
+    } else if (lower.includes('dinner')) {
+      periodFilter = 'Dinner';
+      periodHeader = "Here's dinner";
+    }
+    const filteredMeals = periodFilter ? allMeals.filter((m) => m.mealPeriod === periodFilter) : allMeals;
+    const menuItems = filteredMeals
       .map(
         (m: ServiceMeal) =>
           `• **${translateMealName(m.name, language)}** (${translateMealPeriod(m.mealPeriod, language)}, ${translateMealTimeRange(m.timeRange, language)})`,
       )
       .join('\n');
 
-    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes(t.whatsOnMenuToday.toLowerCase());
+    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') || lower.includes(t.whatsOnMenuToday.toLowerCase());
     const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
 
     if (isMenuQuery) {
-      return `${t.heresTheMenu} 📋\n\n${menuItems}`;
+      const header = periodHeader ? `${periodHeader}! 📋` : `${t.heresTheMenu} 📋`;
+      return `${header}\n\n${menuItems}`;
     }
     if (isRecommendQuery) {
       const recs = await RecommendationService.getRecommendations(residentId, null, 3);

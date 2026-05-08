@@ -196,18 +196,18 @@ const chatRichStyles = StyleSheet.create({
   textUser: { color: '#FFFFFF' },
   bold: { fontWeight: '700', color: '#111827' },
   mealCard: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
+    flexDirection: 'column',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    marginVertical: 6,
+    marginVertical: 8,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  mealCardImage: { width: 80, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  mealCardRealImage: { width: 80, height: 80 },
-  mealCardEmoji: { fontSize: 30 },
-  mealCardInfo: { flex: 1, padding: 12 },
+  mealCardImage: { width: '100%', height: 130, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  mealCardRealImage: { width: '100%', height: 130 },
+  mealCardEmoji: { fontSize: 44 },
+  mealCardInfo: { padding: 12 },
   mealCardName: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 3 },
   mealCardMeta: { fontSize: 13, color: '#6B7280', marginBottom: 3 },
   mealCardNutrition: { fontSize: 12, color: '#b77f3f', fontWeight: '600' },
@@ -321,8 +321,23 @@ const AIAssistantChat = ({
 }) => {
   const { t, scaled, language } = useSettings();
     const [aiAvailable, setAiAvailable] = useState<boolean>(false);
+  // Pick a menu question that matches the wall clock — inside a serving
+  // window we ask about that period, between meals (or after dinner) we
+  // ask about the next one coming up. Avoids "what's on the menu today"
+  // when there's nothing left to order today.
+  const getMenuNowQuestion = (): string => {
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    if (mins >= 7 * 60 && mins <= 10 * 60) return "What's for breakfast?";
+    if (mins >= 11 * 60 && mins <= 14 * 60) return "What's for lunch?";
+    if (mins >= 16 * 60 && mins <= 19 * 60) return "What's for dinner?";
+    if (mins < 7 * 60) return "What's for breakfast?";
+    if (mins < 11 * 60) return "What's for lunch?";
+    if (mins < 16 * 60) return "What's for dinner?";
+    return "What's for breakfast tomorrow?";
+  };
   const QUICK_QUESTIONS = [
-    t.whatsOnMenuToday,
+    getMenuNowQuestion(),
     t.recommendAMeal,
     t.viewDietaryRestrictionsPrompt,
     t.placeLunchOrder,
@@ -421,18 +436,37 @@ const AIAssistantChat = ({
   const generateFallbackResponse = async (userMessage: string): Promise<string> => {
     const lower = userMessage.toLowerCase();
     const allServiceMeals = await MealService.getAllMeals();
-    const menuItems = allServiceMeals
+
+    // Detect a specific period in the question so the fallback shows
+    // only the relevant slice (matches Granny BT's time-aware behavior).
+    let periodFilter: ServiceMeal['mealPeriod'] | null = null;
+    let periodHeader: string | null = null;
+    if (lower.includes('breakfast')) {
+      periodFilter = 'Breakfast';
+      periodHeader = lower.includes('tomorrow') ? "Here's tomorrow's breakfast" : "Here's breakfast";
+    } else if (lower.includes('lunch')) {
+      periodFilter = 'Lunch';
+      periodHeader = "Here's lunch";
+    } else if (lower.includes('dinner')) {
+      periodFilter = 'Dinner';
+      periodHeader = "Here's dinner";
+    }
+    const filteredMeals = periodFilter
+      ? allServiceMeals.filter((m) => m.mealPeriod === periodFilter)
+      : allServiceMeals;
+    const menuItems = filteredMeals
       .map(
         (m: ServiceMeal) =>
           `• **${translateMealName(m.name, language)}** (${translateMealPeriod(m.mealPeriod, language)}, ${translateMealTimeRange(m.timeRange, language)})`,
       )
       .join('\n');
 
-    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes(t.whatsOnMenuToday.toLowerCase());
+    const isMenuQuery = lower.includes('menu') || lower.includes('today') || lower.includes('available') || lower.includes('breakfast') || lower.includes('lunch') || lower.includes('dinner') || lower.includes(t.whatsOnMenuToday.toLowerCase());
     const isRecommendQuery = lower.includes('recommend') || lower.includes('suggest') || lower.includes(t.recommendAMeal.toLowerCase());
 
     if (isMenuQuery) {
-      return `${t.heresTheMenu} 📋\n\n${menuItems}`;
+      const header = periodHeader ? `${periodHeader}! 📋` : `${t.heresTheMenu} 📋`;
+      return `${header}\n\n${menuItems}`;
     }
     if (isRecommendQuery) {
       const recs = await RecommendationService.getRecommendations(residentId, null, 3);
