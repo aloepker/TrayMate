@@ -2312,6 +2312,30 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     </View>
   );
 
+  const formatRecommendationLead = (reason: string, targetPeriod?: string): string => {
+    const periodText = targetPeriod ? translateMealPeriod(targetPeriod, language) : t.meals.toLowerCase();
+    const withPeriod = (template: string) => template.replace('{period}', periodText);
+    const cleaned = (reason || '').trim();
+
+    if (/^Only safe option in the current/i.test(cleaned)) {
+      return withPeriod(t.recommendationOnlySafeOption);
+    }
+    if (/^A safe option from today's/i.test(cleaned)) {
+      return withPeriod(t.recommendationSafeOptionToday);
+    }
+    if (/^A great fit for your profile/i.test(cleaned)) {
+      return t.recommendationGreatFit;
+    }
+
+    // Legacy fallback reasons are generated in English. When the resident
+    // language is not English, prefer a fully localized lead instead of a
+    // mixed-language sentence around the translated meal name.
+    return language === 'English' ? cleaned : t.recommendationGreatFit;
+  };
+
+  const formatAvailableAt = (timeText: string): string =>
+    t.availableAt.replace('{time}', timeText);
+
   const listFooter = (
     <View style={styles.bottomCard}>
       {/* Grandma avatar */}
@@ -2323,7 +2347,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         {/* Recommendation row */}
         <View>
           <Text style={[styles.bottomCardLabel, { fontSize: scaled(13) }]}>
-            Granny BT · {residentName}
+            {t.grannyBT} · {residentName}
           </Text>
           {recLoading ? (
             <ActivityIndicator color="#4A5C2A" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
@@ -2345,6 +2369,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               const isServing = targetSched
                 ? nowMins >= targetSched.start && nowMins <= targetSched.end
                 : true;
+              const availableTimeText = targetSched
+                ? recMeal?.time_range
+                  ? translateMealTimeRange(recMeal.time_range, language)
+                  : (() => {
+                      const sh = targetSched.start / 60;
+                      const eh = targetSched.end / 60;
+                      return `${sh}am – ${eh > 12 ? (eh - 12) + 'pm' : eh + 'am'}`;
+                    })()
+                : '';
               return (
                 <TouchableOpacity
                   activeOpacity={0.75}
@@ -2353,28 +2386,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.bottomCardRecText, { fontSize: scaled(17), lineHeight: scaled(24) }]}>
-                      {recommendation.reason}{' '}
+                      {formatRecommendationLead(recommendation.reason, recommendation.targetPeriod)}{' '}
                       <Text style={styles.bottomCardMealName}>
                         {translateMealName(recommendation.meal_name, language)}
                       </Text>
                     </Text>
                     {isServing ? (
                       <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(13), color: '#4A7A60' }]}>
-                        ✓ Available now
+                        ✓ {t.availableNow}
                       </Text>
                     ) : targetSched ? (
                       <Text style={[styles.bottomCardAvailBadge, { fontSize: scaled(13) }]}>
-                        Not serving now · Available {recMeal?.time_range ? translateMealTimeRange(recMeal.time_range, language) : (() => {
-                          const sh = targetSched.start / 60;
-                          const eh = targetSched.end / 60;
-                          return `${sh}am – ${eh > 12 ? (eh - 12) + 'pm' : eh + 'am'}`;
-                        })()}
+                        {t.notServingNow} · {formatAvailableAt(availableTimeText)}
                       </Text>
                     ) : null}
                   </View>
                   <View style={styles.bottomCardOrderBtn}>
                     <Feather name="plus" size={18} color="#FFF" />
-                    <Text style={[styles.bottomCardOrderBtnText, { fontSize: scaled(17) }]}>Order</Text>
+                    <Text style={[styles.bottomCardOrderBtnText, { fontSize: scaled(17) }]}>{t.order}</Text>
                   </View>
                 </TouchableOpacity>
               );

@@ -79,6 +79,13 @@ export type TranslationKeys = {
   seasonal: string;
   tapToAdd: string;
   meals: string;
+  order: string;
+  availableNow: string;
+  notServingNow: string;
+  availableAt: string;
+  recommendationOnlySafeOption: string;
+  recommendationSafeOptionToday: string;
+  recommendationGreatFit: string;
   // Cart
   yourCart: string;
   cartEmpty: string;
@@ -208,6 +215,13 @@ const EN: TranslationKeys = {
   seasonal: 'Seasonal',
   tapToAdd: 'Tap to add to order',
   meals: 'Meals',
+  order: 'Order',
+  availableNow: 'Available now',
+  notServingNow: 'Not serving now',
+  availableAt: 'Available {time}',
+  recommendationOnlySafeOption: 'Only safe option in the current {period} — we recommend the',
+  recommendationSafeOptionToday: "A safe option from today's {period} — we recommend the",
+  recommendationGreatFit: 'A great fit for your profile — we recommend the',
   yourCart: 'Your Cart',
   cartEmpty: 'Your cart is empty',
   cartEmptyDesc: 'Add meals from the menu to get started',
@@ -330,6 +344,13 @@ const ES: TranslationKeys = {
   seasonal: 'De Temporada',
   tapToAdd: 'Toque para agregar al pedido',
   meals: 'Comidas',
+  order: 'Pedir',
+  availableNow: 'Disponible ahora',
+  notServingNow: 'No disponible ahora',
+  availableAt: 'Disponible {time}',
+  recommendationOnlySafeOption: 'Única opción segura para este periodo de {period} — recomendamos',
+  recommendationSafeOptionToday: 'Opción segura del menú de {period} de hoy — recomendamos',
+  recommendationGreatFit: 'Buena opción para su perfil — recomendamos',
   yourCart: 'Tu Carrito',
   cartEmpty: 'Tu carrito está vacío',
   cartEmptyDesc: 'Agrega comidas del menú para comenzar',
@@ -452,6 +473,13 @@ const FR: TranslationKeys = {
   seasonal: 'Saisonnier',
   tapToAdd: 'Appuyez pour ajouter',
   meals: 'Repas',
+  order: 'Commander',
+  availableNow: 'Disponible maintenant',
+  notServingNow: 'Non servi maintenant',
+  availableAt: 'Disponible {time}',
+  recommendationOnlySafeOption: 'Seule option sûre pour ce service de {period} — nous recommandons',
+  recommendationSafeOptionToday: "Option sûre du menu de {period} aujourd'hui — nous recommandons",
+  recommendationGreatFit: 'Bon choix pour son profil — nous recommandons',
   yourCart: 'Votre Panier',
   cartEmpty: 'Votre panier est vide',
   cartEmptyDesc: 'Ajoutez des repas depuis le menu',
@@ -574,6 +602,13 @@ const ZH: TranslationKeys = {
   seasonal: '时令',
   tapToAdd: '点击添加到订单',
   meals: '餐食',
+  order: '下单',
+  availableNow: '现在可用',
+  notServingNow: '当前未供应',
+  availableAt: '{time} 可用',
+  recommendationOnlySafeOption: '当前{period}唯一安全选项，推荐',
+  recommendationSafeOptionToday: '今日{period}的安全选择，推荐',
+  recommendationGreatFit: '适合该档案的选择，推荐',
   yourCart: '您的购物车',
   cartEmpty: '购物车为空',
   cartEmptyDesc: '从菜单中添加餐食开始',
