@@ -392,17 +392,18 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
   const [isTyping, setIsTyping] = useState(false);
   // Pick a menu question that matches the wall clock — inside a serving
   // window we ask about that period, between meals (or after dinner) we
-  // ask about the next one coming up.
+  // ask about the next one coming up. Uses translated strings so the
+  // button matches the active language.
   const getMenuNowQuestion = (): string => {
     const now = new Date();
     const mins = now.getHours() * 60 + now.getMinutes();
-    if (mins >= 7 * 60 && mins <= 10 * 60) return "What's for breakfast?";
-    if (mins >= 11 * 60 && mins <= 14 * 60) return "What's for lunch?";
-    if (mins >= 16 * 60 && mins <= 19 * 60) return "What's for dinner?";
-    if (mins < 7 * 60) return "What's for breakfast?";
-    if (mins < 11 * 60) return "What's for lunch?";
-    if (mins < 16 * 60) return "What's for dinner?";
-    return "What's for breakfast tomorrow?";
+    if (mins >= 7 * 60 && mins <= 10 * 60) return t.whatsForBreakfast;
+    if (mins >= 11 * 60 && mins <= 14 * 60) return t.whatsForLunch;
+    if (mins >= 16 * 60 && mins <= 19 * 60) return t.whatsForDinner;
+    if (mins < 7 * 60) return t.whatsForBreakfast;
+    if (mins < 11 * 60) return t.whatsForLunch;
+    if (mins < 16 * 60) return t.whatsForDinner;
+    return t.whatsForBreakfastTomorrow;
   };
   const QUICK_QUESTIONS = [
     getMenuNowQuestion(),

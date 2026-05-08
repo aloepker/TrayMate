@@ -126,6 +126,10 @@ export type TranslationKeys = {
   typeYourMessage: string;
   somethingWentWrong: string;
   whatsOnMenuToday: string;
+  whatsForBreakfast: string;
+  whatsForLunch: string;
+  whatsForDinner: string;
+  whatsForBreakfastTomorrow: string;
   recommendAMeal: string;
   viewDietaryRestrictionsPrompt: string;
   whatMealsLowSodium: string;
@@ -241,6 +245,10 @@ const EN: TranslationKeys = {
   typeYourMessage: 'Type your message...',
   somethingWentWrong: 'Something went wrong — please try again! 😅',
   whatsOnMenuToday: "What's on the menu today?",
+  whatsForBreakfast: "What's for breakfast?",
+  whatsForLunch: "What's for lunch?",
+  whatsForDinner: "What's for dinner?",
+  whatsForBreakfastTomorrow: "What's for breakfast tomorrow?",
   recommendAMeal: 'Recommend a meal',
   viewDietaryRestrictionsPrompt: 'View dietary restrictions',
   whatMealsLowSodium: 'What meals are low sodium?',
@@ -355,6 +363,10 @@ const ES: TranslationKeys = {
   typeYourMessage: 'Escribe tu mensaje...',
   somethingWentWrong: 'Algo salió mal. ¡Inténtalo de nuevo! 😅',
   whatsOnMenuToday: '¿Qué hay en el menú hoy?',
+  whatsForBreakfast: '¿Qué hay para el desayuno?',
+  whatsForLunch: '¿Qué hay para el almuerzo?',
+  whatsForDinner: '¿Qué hay para la cena?',
+  whatsForBreakfastTomorrow: '¿Qué hay para el desayuno mañana?',
   recommendAMeal: 'Recomiéndame una comida',
   viewDietaryRestrictionsPrompt: 'Ver restricciones dietéticas',
   whatMealsLowSodium: '¿Qué comidas son bajas en sodio?',
@@ -469,6 +481,10 @@ const FR: TranslationKeys = {
   typeYourMessage: 'Tapez votre message...',
   somethingWentWrong: "Une erreur s'est produite — veuillez réessayer ! 😅",
   whatsOnMenuToday: "Qu'y a-t-il au menu aujourd'hui ?",
+  whatsForBreakfast: 'Que mange-t-on au petit-déjeuner ?',
+  whatsForLunch: 'Que mange-t-on au déjeuner ?',
+  whatsForDinner: 'Que mange-t-on au dîner ?',
+  whatsForBreakfastTomorrow: 'Que mange-t-on au petit-déjeuner demain ?',
   recommendAMeal: 'Recommander un repas',
   viewDietaryRestrictionsPrompt: 'Voir les restrictions alimentaires',
   whatMealsLowSodium: 'Quels repas sont faibles en sodium ?',
@@ -583,6 +599,10 @@ const ZH: TranslationKeys = {
   typeYourMessage: '输入你的消息...',
   somethingWentWrong: '出错了，请重试！😅',
   whatsOnMenuToday: '今天菜单有什么？',
+  whatsForBreakfast: '早餐吃什么？',
+  whatsForLunch: '午餐吃什么？',
+  whatsForDinner: '晚餐吃什么？',
+  whatsForBreakfastTomorrow: '明天早餐吃什么？',
   recommendAMeal: '推荐一份餐食',
   viewDietaryRestrictionsPrompt: '查看饮食限制',
   whatMealsLowSodium: '哪些餐食低钠？',
