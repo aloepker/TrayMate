@@ -975,6 +975,11 @@ export async function getChats(): Promise<ChatPreview[]> {
   return request<ChatPreview[]>("/messages/chats");
 }
 
+// GET messages received by the current user without marking them as read
+export async function getInbox(): Promise<Message[]> {
+  return request<Message[]>("/messages/inbox");
+}
+
 // GET conversation between users
 export async function getConversation(otherUserId: string): Promise<Message[]> {
   return request<Message[]>(`/messages/conversation/${otherUserId}`);

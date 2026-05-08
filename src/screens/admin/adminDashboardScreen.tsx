@@ -40,7 +40,7 @@ import {
   createCaregiver,
   createKitchenStaff,
   deleteEntity,
-  getChats,
+  getInbox,
   sendMessage,
   getMe,
   listCoverageAlertsApi,
@@ -103,27 +103,27 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       // clicked Messages would otherwise complete and re-set the badge.
       if (modalOpenRef.current) return;
       try {
-        const chats = await getChats();
-        if (modalOpenRef.current) return;
-        if (!Array.isArray(chats)) return;
         const me = await getMe();
         if (modalOpenRef.current) return;
         const myId = String(me.id);
+        const inbox = await getInbox();
+        if (modalOpenRef.current) return;
+        if (!Array.isArray(inbox)) return;
         // Exclude self-messages — they have no real partner thread the
         // modal can mark read, so they would leave the badge stuck at "1".
-        const unreadChats = chats.filter(
-          c => !c.isRead
-            && String(c.receiverId) === myId
-            && String(c.senderId)   !== myId
+        const unreadMessages = inbox.filter(
+          m => !m.isRead
+            && String(m.receiverId) === myId
+            && String(m.senderId)   !== myId
         );
-        const count = unreadChats.length;
+        const count = unreadMessages.length;
         setMsgUnread(count);
 
         // If we have *new* unread messages since the last poll, scan them
         // for pending auto-order requests and surface the Approve/Deny
         // Alert. Caregivers do the same on their dashboard — both can act.
         if (lastUnreadRef.current !== null && count > lastUnreadRef.current) {
-          const newest = [...unreadChats]
+          const newest = [...unreadMessages]
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
           if (newest && !handledAlertsRef.current.has(String(newest.id))) {
             const pending = decodePendingAutoOrder(newest.content || '');

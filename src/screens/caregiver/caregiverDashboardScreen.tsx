@@ -28,7 +28,7 @@ import {
 } from "../../services/api";
 import { useKitchenMessages } from "../context/KitchenMessageContext";
 import MessagesModal from "../components/messaging/MessagesModal";
-import { getChats, getMe, sendMessage } from "../../services/api";
+import { getInbox, getMe, sendMessage } from "../../services/api";
 import { decodePendingAutoOrder, confirmPendingAutoOrder } from "../../services/autoOrderRequest";
 import InAppNotificationBanner from "../components/InAppNotificationBanner";
 import { clearAuth, getCaregiverResidentList } from "../../services/storage";
@@ -119,30 +119,30 @@ export default function CaregiverDashboardScreen({
       // poll started before the click also bails.
       if (modalOpenRef.current) return;
       try {
-        const chats = await getChats();
-        if (modalOpenRef.current) return;
-        if (!Array.isArray(chats)) return;
-
         if (!myIdCache) {
           const me = await getMe();
           myIdCache = String(me.id);
         }
 
+        const inbox = await getInbox();
+        if (modalOpenRef.current) return;
+        if (!Array.isArray(inbox)) return;
+
         // Only count messages where I am the receiver and they are unread.
         // Exclude self-messages (sender == receiver == me) — those are
         // notes-to-self artefacts that the modal hides and would otherwise
         // leave the red badge stuck at "1" with no thread to clear it from.
-        const unreadChats = chats.filter(
-          c => !c.isRead
-            && String(c.receiverId) === myIdCache
-            && String(c.senderId)   !== myIdCache
+        const unreadMessages = inbox.filter(
+          m => !m.isRead
+            && String(m.receiverId) === myIdCache
+            && String(m.senderId)   !== myIdCache
         );
-        const count = unreadChats.length;
+        const count = unreadMessages.length;
         setMsgUnread(count);
 
         // Show banner if unread count has increased since last poll
         if (lastUnreadRef.current !== null && count > lastUnreadRef.current) {
-          const newest = unreadChats.sort(
+          const newest = unreadMessages.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )[0];
           if (newest) {
@@ -192,7 +192,7 @@ export default function CaregiverDashboardScreen({
               // Legacy "already placed" notification — keep simple ack flow
               Alert.alert(
                 "New Order",
-                `${newest.senderName || "A resident"}: ${content}`,
+                `A resident: ${content}`,
                 [
                   { text: "Deny", style: "destructive", onPress: async () => {
                     try { await sendMessage(newest.senderId, "Your auto-placed order has been reviewed and cancelled by your caregiver. Please place a new order manually."); } catch {}
@@ -203,7 +203,7 @@ export default function CaregiverDashboardScreen({
                 ],
               );
             } else {
-              setBannerSender(newest.senderName || "A resident");
+              setBannerSender("New message");
               setBannerPreview(content || "Sent you a message");
               setBannerVisible(true);
             }
