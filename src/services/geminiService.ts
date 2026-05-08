@@ -450,14 +450,35 @@ export class GeminiChatService {
     residentOverride?: ResidentOverride,
     favoriteMealIds?: number[],
   ): Promise<void> {
+    // Stash init args so sendMessage can lazily retry init if a previous
+    // attempt didn't populate systemPrompt (e.g. /admin/residents 401'd).
+    this.lastInitArgs = { residentId, language, residentOverride, favoriteMealIds };
+    // Resolve-always wrapper: if buildSystemPrompt throws, we DON'T let
+    // the promise reject. Callers awaiting this would otherwise re-throw
+    // and flip the chat into offline mode for one round-trip even though
+    // the next sendMessage could succeed with a minimal fallback prompt.
     this.initPromise = (async () => {
-      this.systemPrompt = await buildSystemPrompt(residentId, language, residentOverride, favoriteMealIds);
-      this.history = [];
-      this.currentModel = GEMINI_CONFIG.models[0];
-      console.log('[Granny BT] Chat initialized, system prompt length:', this.systemPrompt.length);
+      try {
+        this.systemPrompt = await buildSystemPrompt(residentId, language, residentOverride, favoriteMealIds);
+        this.history = [];
+        this.currentModel = GEMINI_CONFIG.models[0];
+        console.log('[Granny BT] Chat initialized, system prompt length:', this.systemPrompt.length);
+      } catch (err: any) {
+        console.warn('[Granny BT] init had issues, will retry on first send:', err?.message ?? err);
+        // Leave systemPrompt empty so sendMessage uses the minimal
+        // fallback prompt below — but resolve so awaiters don't re-throw.
+      }
     })();
     return this.initPromise;
   }
+
+  // Stored so sendMessage can re-init if the first try didn't yield a prompt.
+  private lastInitArgs: {
+    residentId: string;
+    language: string;
+    residentOverride?: ResidentOverride;
+    favoriteMealIds?: number[];
+  } | null = null;
 
   /**
    * Send a message and get a response, with automatic model fallback.
@@ -468,8 +489,21 @@ export class GeminiChatService {
     if (this.initPromise) {
       await this.initPromise;
     }
+    // If init didn't populate the system prompt (network blip on resident
+    // lookup, /menu 401, etc.), retry it once silently before giving up.
+    if (!this.systemPrompt && this.lastInitArgs) {
+      const args = this.lastInitArgs;
+      try {
+        this.systemPrompt = await buildSystemPrompt(args.residentId, args.language, args.residentOverride, args.favoriteMealIds);
+      } catch (err: any) {
+        console.warn('[Granny BT] retry init failed, using minimal prompt:', err?.message ?? err);
+      }
+    }
+    // Final fallback: a tiny prompt that at least lets the model speak.
+    // Better than throwing — keeps the user out of the offline flicker
+    // cycle when buildSystemPrompt has a transient backend failure.
     if (!this.systemPrompt) {
-      throw new Error('Chat not initialized. Call initialize() first.');
+      this.systemPrompt = `You are Granny BT, a friendly meal planning assistant for residents of a senior living facility. Be warm and concise (2-3 sentences max). If you don't have meal data, say so plainly and suggest the user check the menu screen.`;
     }
 
     let lastError: Error | null = null;

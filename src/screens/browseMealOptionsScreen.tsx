@@ -485,14 +485,23 @@ const AIAssistantChat = ({
         try {
           responseText = await geminiChat.sendMessage(userMessage.content);
           responseText = injectMealBold(responseText);
+          // Successful send → we're clearly online. Reset any stale
+          // offline state from a prior transient failure.
           setAiAvailable(true);
         } catch (apiError) {
-          console.warn('Gemini API error:', apiError);
-          setAiAvailable(false);
+          // A single send failure is usually a quota/cooldown blip.
+          // Don't flip the badge to "Offline" — Granny's self-heal +
+          // model fallback chain will pick up the next send. We only
+          // visually mark offline if BUILD-TIME isConfigured() returns
+          // false (no API key at all), which is handled in the else
+          // branch below.
+          console.warn('Gemini send failed, falling back to local response (badge stays online):', apiError);
           responseText = await generateFallbackResponse(userMessage.content);
           responseText = injectMealBold(responseText);
         }
       } else {
+        // No API key configured — genuinely offline.
+        setAiAvailable(false);
         responseText = await generateFallbackResponse(userMessage.content);
         responseText = injectMealBold(responseText);
       }
@@ -537,11 +546,14 @@ const AIAssistantChat = ({
             responseText = await geminiChat.sendMessage(question);
             setAiAvailable(true);
           } catch (apiError) {
-            console.warn('Gemini API error:', apiError);
-            setAiAvailable(false);
+            // Same self-heal as handleSend — don't flip badge offline
+            // for transient send failures. isConfigured() is the source
+            // of truth for the AI/Offline pill.
+            console.warn('Gemini quick-question failed, falling back locally:', apiError);
             responseText = await generateFallbackResponse(question);
           }
         } else {
+          setAiAvailable(false);
           responseText = await generateFallbackResponse(question);
         }
 
