@@ -1971,7 +1971,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           <View style={styles.unavailableOverlay}>
             <Feather name={kitchenEnabled ? "clock" : "slash"} size={15} color="#717644" />
             <Text style={[styles.unavailableText, { fontSize: scaled(14) }]}>
-              {kitchenEnabled ? `Not available · ${item.time_range}` : 'Not available today'}
+              {kitchenEnabled ? `${t.notAvailable} · ${translateMealTimeRange(item.time_range, language)}` : t.notAvailableToday}
             </Text>
           </View>
         )}
@@ -1986,7 +1986,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           <View style={styles.preorderOverlay}>
             <Feather name="sunrise" size={15} color="#FFFFFF" />
             <Text style={[styles.preorderOverlayText, { fontSize: scaled(13) }]} numberOfLines={1}>
-              Tomorrow&apos;s breakfast
+              {t.tomorrowsBreakfast}
             </Text>
           </View>
         )}
@@ -1994,7 +1994,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           <View style={styles.unsafeChip}>
             <Feather name="alert-triangle" size={11} color="#FFFFFF" />
             <Text style={[styles.unsafeChipText, { fontSize: scaled(11) }]} numberOfLines={1}>
-              Restricted
+              {t.restricted}
             </Text>
           </View>
         )}
@@ -2036,7 +2036,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             {isUnsafe && (
               <View style={styles.restrictionBadge}>
                 <Feather name="alert-triangle" size={11} color="#DC2626" />
-                <Text style={[styles.restrictionBadgeText, { fontSize: scaled(11) }]}>Restricted</Text>
+                <Text style={[styles.restrictionBadgeText, { fontSize: scaled(11) }]}>{t.restricted}</Text>
               </View>
             )}
           </View>
@@ -2652,7 +2652,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                         <View style={styles.detailRestrictionBanner}>
                           <Feather name="alert-triangle" size={15} color="#DC2626" />
                           <Text style={[styles.detailRestrictionText, { fontSize: scaled(13) }]}>
-                            Restricted: {detailUnsafeReason}
+                            {t.restricted}: {detailUnsafeReason}
                           </Text>
                         </View>
                         <TouchableOpacity

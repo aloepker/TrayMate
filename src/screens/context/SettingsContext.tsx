@@ -131,6 +131,11 @@ export type TranslationKeys = {
   whatsForDinner: string;
   whatsForBreakfastTomorrow: string;
   recommendAMeal: string;
+  // Card / detail badges
+  notAvailable: string;
+  notAvailableToday: string;
+  tomorrowsBreakfast: string;
+  restricted: string;
   viewDietaryRestrictionsPrompt: string;
   whatMealsLowSodium: string;
   placeLunchOrder: string;
@@ -250,6 +255,10 @@ const EN: TranslationKeys = {
   whatsForDinner: "What's for dinner?",
   whatsForBreakfastTomorrow: "What's for breakfast tomorrow?",
   recommendAMeal: 'Recommend a meal',
+  notAvailable: 'Not available',
+  notAvailableToday: 'Not available today',
+  tomorrowsBreakfast: "Tomorrow's breakfast",
+  restricted: 'Restricted',
   viewDietaryRestrictionsPrompt: 'View dietary restrictions',
   whatMealsLowSodium: 'What meals are low sodium?',
   placeLunchOrder: 'Place lunch order',
@@ -368,6 +377,10 @@ const ES: TranslationKeys = {
   whatsForDinner: '¿Qué hay para la cena?',
   whatsForBreakfastTomorrow: '¿Qué hay para el desayuno mañana?',
   recommendAMeal: 'Recomiéndame una comida',
+  notAvailable: 'No disponible',
+  notAvailableToday: 'No disponible hoy',
+  tomorrowsBreakfast: 'Desayuno de mañana',
+  restricted: 'Restringido',
   viewDietaryRestrictionsPrompt: 'Ver restricciones dietéticas',
   whatMealsLowSodium: '¿Qué comidas son bajas en sodio?',
   placeLunchOrder: 'Pedir almuerzo',
@@ -486,6 +499,10 @@ const FR: TranslationKeys = {
   whatsForDinner: 'Que mange-t-on au dîner ?',
   whatsForBreakfastTomorrow: 'Que mange-t-on au petit-déjeuner demain ?',
   recommendAMeal: 'Recommander un repas',
+  notAvailable: 'Non disponible',
+  notAvailableToday: "Non disponible aujourd'hui",
+  tomorrowsBreakfast: 'Petit-déjeuner de demain',
+  restricted: 'Restreint',
   viewDietaryRestrictionsPrompt: 'Voir les restrictions alimentaires',
   whatMealsLowSodium: 'Quels repas sont faibles en sodium ?',
   placeLunchOrder: 'Commander le déjeuner',
@@ -604,6 +621,10 @@ const ZH: TranslationKeys = {
   whatsForDinner: '晚餐吃什么？',
   whatsForBreakfastTomorrow: '明天早餐吃什么？',
   recommendAMeal: '推荐一份餐食',
+  notAvailable: '不可用',
+  notAvailableToday: '今日不可用',
+  tomorrowsBreakfast: '明日早餐',
+  restricted: '受限',
   viewDietaryRestrictionsPrompt: '查看饮食限制',
   whatMealsLowSodium: '哪些餐食低钠？',
   placeLunchOrder: '下单午餐',

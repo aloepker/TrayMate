@@ -215,33 +215,66 @@ export function setCachedTagTranslations(
  * (so we don't waste an API call on it).
  */
 export function hasMealNameTranslation(name: string): boolean {
-  return name in MEAL_NAME_TRANSLATIONS || name in DYNAMIC_NAME_CACHE;
+  const lower = name.toLowerCase();
+  return (
+    name in MEAL_NAME_TRANSLATIONS ||
+    name in DYNAMIC_NAME_CACHE ||
+    Object.keys(MEAL_NAME_TRANSLATIONS).some((k) => k.toLowerCase() === lower) ||
+    Object.keys(DYNAMIC_NAME_CACHE).some((k) => k.toLowerCase() === lower)
+  );
 }
 
 export function hasMealDescriptionTranslation(description: string): boolean {
-  return description in MEAL_DESCRIPTION_TRANSLATIONS || description in DYNAMIC_DESCRIPTION_CACHE;
+  const lower = description.toLowerCase();
+  return (
+    description in MEAL_DESCRIPTION_TRANSLATIONS ||
+    description in DYNAMIC_DESCRIPTION_CACHE ||
+    Object.keys(MEAL_DESCRIPTION_TRANSLATIONS).some((k) => k.toLowerCase() === lower) ||
+    Object.keys(DYNAMIC_DESCRIPTION_CACHE).some((k) => k.toLowerCase() === lower)
+  );
 }
 
 export function hasTagTranslation(tag: string): boolean {
   return tag in TAG_TRANSLATIONS || tag in DYNAMIC_TAG_CACHE;
 }
 
+// Case-insensitive lookup helper. Backend meals sometimes ship with
+// minor casing differences (e.g. "Caesar Salad with chicken" vs the
+// static "Caesar Salad with Chicken") and we don't want a single
+// lowercase letter to drop the meal back to English.
+const findKeyCaseInsensitive = (
+  store: Record<string, Partial<Record<AppLanguage, string>>>,
+  needle: string,
+): string | undefined => {
+  if (store[needle]) return needle;
+  const lower = needle.toLowerCase();
+  return Object.keys(store).find((k) => k.toLowerCase() === lower);
+};
+
 export const translateMealName = (name: string, language: AppLanguage): string => {
   if (language === 'English') return name;
-  return (
-    MEAL_NAME_TRANSLATIONS[name]?.[language] ??
-    DYNAMIC_NAME_CACHE[name]?.[language] ??
-    name
-  );
+  const staticKey = findKeyCaseInsensitive(MEAL_NAME_TRANSLATIONS, name);
+  if (staticKey && MEAL_NAME_TRANSLATIONS[staticKey][language]) {
+    return MEAL_NAME_TRANSLATIONS[staticKey][language] as string;
+  }
+  const dynKey = findKeyCaseInsensitive(DYNAMIC_NAME_CACHE, name);
+  if (dynKey && DYNAMIC_NAME_CACHE[dynKey][language]) {
+    return DYNAMIC_NAME_CACHE[dynKey][language] as string;
+  }
+  return name;
 };
 
 export const translateMealDescription = (description: string, language: AppLanguage): string => {
   if (language === 'English') return description;
-  return (
-    MEAL_DESCRIPTION_TRANSLATIONS[description]?.[language] ??
-    DYNAMIC_DESCRIPTION_CACHE[description]?.[language] ??
-    description
-  );
+  const staticKey = findKeyCaseInsensitive(MEAL_DESCRIPTION_TRANSLATIONS, description);
+  if (staticKey && MEAL_DESCRIPTION_TRANSLATIONS[staticKey][language]) {
+    return MEAL_DESCRIPTION_TRANSLATIONS[staticKey][language] as string;
+  }
+  const dynKey = findKeyCaseInsensitive(DYNAMIC_DESCRIPTION_CACHE, description);
+  if (dynKey && DYNAMIC_DESCRIPTION_CACHE[dynKey][language]) {
+    return DYNAMIC_DESCRIPTION_CACHE[dynKey][language] as string;
+  }
+  return description;
 };
 
 export const translateMealTag = (tag: string, language: AppLanguage): string => {
