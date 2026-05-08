@@ -127,6 +127,8 @@ interface ApiOrder {
     note?: string;
     specialInstructions?: string;
   };
+  residentName?: string | null;
+  residentRoom?: string | null;
   meals: Array<{
     id: number;
     name: string;
@@ -1469,12 +1471,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     const item = orders.find((o) => o.order.id === orderId);
     if (!item) return;
     const resident = findResident(item.order.userId);
-    const roomStr = resident?.room ? ` (Room ${resident.room})` : "";
+    const orderResidentName = String(item.residentName ?? "").trim();
+    const orderResidentRoom = String(item.residentRoom ?? "").trim();
+    const safeRoomValue = resident?.room?.trim() || orderResidentRoom;
+    const roomStr = safeRoomValue ? ` (Room ${safeRoomValue})` : "";
     // Prefer the resident record ID so caregiver filtering matches reliably.
     const ridForMsg = String(resident?.id ?? item.order.userId);
     // Safe display name — never leak raw userId into user-facing strings.
-    const safeName = resident?.name?.trim() || "Resident";
-    const safeRoom = resident?.room?.trim() || "—";
+    const safeName = resident?.name?.trim() || orderResidentName || "Resident";
+    const safeRoom = safeRoomValue || "—";
     const trimmed = replyText.trim();
     const isSubstitution = /^substitution/i.test(trimmed);
     const kitchenName = loggedInEmail ?? "Kitchen Staff";
@@ -1483,7 +1488,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     sendMessage({
       residentId: ridForMsg,
       residentName: safeName,
-      residentRoom: resident?.room ?? "",
+      residentRoom: safeRoomValue,
       orderId,
       fromRole: "kitchen",
       fromName: kitchenName,
@@ -1497,7 +1502,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       sendMessage({
         residentId: ridForMsg,
         residentName: safeName,
-        residentRoom: resident?.room ?? "",
+        residentRoom: safeRoomValue,
         orderId,
         fromRole: "kitchen",
         fromName: `Kitchen · ${kitchenName}`,
@@ -1746,7 +1751,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const allergies = resident?.foodAllergies ?? [];
             const dietary   = resident?.dietaryRestrictions ?? [];
             const medical   = resident?.medicalConditions ?? [];
-            const residentDisplayName = resident?.name?.trim() || "";
+            const apiResidentName = String(item.residentName ?? "").trim();
+            const apiResidentRoom = String(item.residentRoom ?? "").trim();
+            const residentDisplayName = resident?.name?.trim() || apiResidentName;
             // Room display falls back to the coverage-alert payload when
             // the resident cache hasn't hydrated this user yet — alerts
             // arrive with residentRoom embedded, so they fill the gap
@@ -1756,12 +1763,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             );
             const roomDisplay =
               resident?.room?.trim() ||
+              apiResidentRoom ||
               coverageAlertForUser?.residentRoom?.trim() ||
               "—";
-            const initials  = (resident?.name ?? "?").slice(0, 2).toUpperCase();
+            const initials  = (residentDisplayName || "?").slice(0, 2).toUpperCase();
             const orderPeriod = item.order.mealOfDay || "Breakfast";
             const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
-            const rawOrderNote = item.order.note || item.order.specialInstructions || "";
+            const rawOrderNote = String(item.order.note || item.order.specialInstructions || "");
             // Pre-order marker — set by the resident browse screen when ordering
             // breakfast after 7 PM the previous evening. Kitchen needs to queue
             // these for the NEXT morning's tray run, not today's batch.
@@ -1775,10 +1783,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             // Falls back to all resident messages if no tag prefix found
             const orderTag = `[Order #${item.order.id}]`;
             const orderMessages = messages.filter(
-              (m) => m.residentId === item.order.userId &&
-                     (m.text.startsWith(orderTag) || !m.text.match(/^\[Order #\d+\]/))
+              (m) => {
+                const sameResident = String(m.residentId).trim() === String(item.order.userId).trim();
+                const taggedOrderId = m.orderId ?? Number(m.text.match(/^\[Order #(\d+)\]/)?.[1]);
+                const taggedToThisOrder = Number(taggedOrderId) === Number(item.order.id);
+                const untaggedResidentMessage = sameResident && !m.text.match(/^\[Order #\d+\]/);
+                return sameResident && (taggedToThisOrder || m.text.startsWith(orderTag) || untaggedResidentMessage);
+              }
             );
             const unreadOrderMsgs = orderMessages.filter((m) => !m.read).length;
+            const orderBellCount = unreadOrderMsgs + (orderNote ? 1 : 0);
 
             return (
               <View key={item.order.id} style={s.card}>
@@ -1823,24 +1837,42 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   </View>
                   {/* Per-order notification bell */}
                   <TouchableOpacity
-                    style={[s.orderBellBtn, unreadOrderMsgs > 0 && s.orderBellBtnActive]}
+                    style={[s.orderBellBtn, orderBellCount > 0 && s.orderBellBtnActive]}
                     onPress={() => {
-                      if (orderMessages.length === 0) {
+                      const noteHeader = [
+                        roomDisplay !== "—" ? `Room ${roomDisplay}` : "",
+                        residentDisplayName,
+                      ].filter(Boolean).join(" · ");
+                      const residentNoteLine = orderNote
+                        ? `Resident order note${noteHeader ? ` (${noteHeader})` : ""}:\n${orderNote}`
+                        : "";
+                      const messageLines = orderMessages.map((m) => {
+                        const cleanText = m.text.startsWith(orderTag)
+                          ? m.text.replace(orderTag, '').trim()
+                          : m.text;
+                        const fromLabel = m.fromRole === "kitchen" ? "Kitchen" : (m.fromName || "Resident");
+                        const messageRoom = m.residentRoom || (roomDisplay !== "—" ? roomDisplay : "");
+                        const roomLabel = messageRoom ? ` · Room ${messageRoom}` : "";
+                        return `${fromLabel}${roomLabel}: ${cleanText}`;
+                      });
+                      const lines = [residentNoteLine, ...messageLines].filter(Boolean);
+
+                      if (lines.length === 0) {
                         Alert.alert("No Messages", `No messages for order #${item.order.id}`);
                       } else {
                         Alert.alert(
                           `Messages · Order #${item.order.id}`,
-                          orderMessages.map((m) => `${m.fromRole === "kitchen" ? "🍳" : "👤"} ${m.fromName}: ${m.text}`).join("\n\n")
+                          lines.join("\n\n")
                         );
                         // Mark messages for this resident as read
                         orderMessages.forEach((m) => { if (!m.read) markRead(m.id); });
                       }
                     }}
                   >
-                    <Feather name="bell" size={15} color={unreadOrderMsgs > 0 ? C.danger : C.textMuted} />
-                    {unreadOrderMsgs > 0 && (
+                    <Feather name="bell" size={15} color={orderBellCount > 0 ? C.danger : C.textMuted} />
+                    {orderBellCount > 0 && (
                       <View style={s.orderBellDot}>
-                        <Text style={s.orderBellDotText}>{unreadOrderMsgs}</Text>
+                        <Text style={s.orderBellDotText}>{orderBellCount}</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -1980,11 +2012,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                               // reliably surfaces this alert.
                               const ridForMsg = String(resident?.id ?? item.order.userId);
                               const kitchenName = loggedInEmail ?? 'Kitchen Staff';
+                              const safeResidentName = residentDisplayName || 'Resident';
+                              const safeResidentRoom = roomDisplay !== "—" ? roomDisplay : "";
                               // 1) Notify resident (shown on their upcoming-meals screen)
                               sendMessage({
                                 residentId: ridForMsg,
-                                residentName: resident?.name?.trim() || 'Resident',
-                                residentRoom: resident?.room ?? '',
+                                residentName: safeResidentName,
+                                residentRoom: safeResidentRoom,
                                 orderId: item.order.id,
                                 fromRole: 'kitchen',
                                 fromName: kitchenName,
@@ -1998,12 +2032,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                               // prominently on their bell icon.
                               sendMessage({
                                 residentId: ridForMsg,
-                                residentName: resident?.name?.trim() || 'Resident',
-                                residentRoom: resident?.room ?? '',
+                                residentName: safeResidentName,
+                                residentRoom: safeResidentRoom,
                                 orderId: item.order.id,
                                 fromRole: 'kitchen',
                                 fromName: `Kitchen · ${kitchenName}`,
-                                text: `[Caregiver Alert] Order #${item.order.id} for ${resident?.name?.trim() || 'resident'} (Room ${resident?.room?.trim() || '—'}) was CANCELLED by the kitchen at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+                                text: `[Caregiver Alert] Order #${item.order.id} for ${safeResidentName} (Room ${safeResidentRoom || '—'}) was CANCELLED by the kitchen at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
                                 channel: 'order',
                               });
                             },
@@ -2032,10 +2066,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 {(() => {
                   const orderTag = `[Order #${item.order.id}]`;
                   const residentMsgs = messages.filter(
-                    m => m.residentId === item.order.userId &&
-                         m.fromRole === 'resident' &&
-                         m.channel === 'order' &&
-                         m.text.startsWith(orderTag)
+                    m => {
+                      const taggedOrderId = m.orderId ?? Number(m.text.match(/^\[Order #(\d+)\]/)?.[1]);
+                      return String(m.residentId).trim() === String(item.order.userId).trim() &&
+                        m.fromRole === 'resident' &&
+                        m.channel === 'order' &&
+                        (Number(taggedOrderId) === Number(item.order.id) || m.text.startsWith(orderTag));
+                    }
                   );
                   if (residentMsgs.length === 0) return null;
                   return (
@@ -2046,12 +2083,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       </View>
                       {residentMsgs.map(msg => {
                         const clean = msg.text.replace(orderTag, '').trim();
+                        const messageRoom = msg.residentRoom || (roomDisplay !== "—" ? roomDisplay : "");
                         if (!msg.read) markRead(msg.id);
                         return (
                           <View key={msg.id} style={s.residentMsgBubble}>
                             <Text style={s.residentMsgText}>{clean}</Text>
                             <Text style={s.residentMsgMeta}>
-                              {msg.fromName} · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {msg.fromName}{messageRoom ? ` · Room ${messageRoom}` : ''} · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </Text>
                           </View>
                         );

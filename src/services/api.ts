@@ -617,6 +617,8 @@ export type BackendMealItem = {
 export type MealOrderWithMeals = {
   order: MealOrderResponse;
   meals: BackendMealItem[];
+  residentName?: string | null;
+  residentRoom?: string | null;
 };
 
 /**

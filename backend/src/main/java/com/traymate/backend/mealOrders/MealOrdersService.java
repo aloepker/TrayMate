@@ -176,13 +176,9 @@ public class MealOrdersService {
         List<MealOrders> orders = mealOrdersRepository.findByUserId(userId);
 
         // 2. Transform each order into a DTO that includes the full Meal objects
-        return orders.stream().map(order -> {
-            // Use your existing "Key" function to get the list of Meals
-            List<Meal> meals = getDetailedMealsForOrder(order.getMealItemsIdNumbers());
-            
-            // Return the combined object
-            return new OrderResponseDTO(order, meals);
-        }).collect(Collectors.toList());
+        return orders.stream()
+                .map(this::toOrderResponse)
+                .collect(Collectors.toList());
     }
   
     // Inside MealOrdersService
@@ -191,10 +187,42 @@ public class MealOrdersService {
         List<MealOrders> orders = mealOrdersRepository.findByMealOfDayAndDate(mealOfDay, date);
 
         // 2. Hydrate them into DTOs
-        return orders.stream().map(order -> {
-            List<Meal> meals = getDetailedMealsForOrder(order.getMealItemsIdNumbers());
-            return new OrderResponseDTO(order, meals);
-        }).collect(Collectors.toList());
+        return orders.stream()
+                .map(this::toOrderResponse)
+                .collect(Collectors.toList());
+    }
+
+    private OrderResponseDTO toOrderResponse(MealOrders order) {
+        List<Meal> meals = getDetailedMealsForOrder(order.getMealItemsIdNumbers());
+        Optional<Resident> resident = findResidentForOrder(order);
+        String residentName = resident
+                .map(this::formatResidentName)
+                .filter(name -> !name.isBlank())
+                .orElse(null);
+        String residentRoom = resident
+                .map(Resident::getRoomNumber)
+                .filter(room -> room != null && !room.isBlank())
+                .orElse(null);
+
+        return new OrderResponseDTO(order, meals, residentName, residentRoom);
+    }
+
+    private Optional<Resident> findResidentForOrder(MealOrders order) {
+        if (order.getUserId() == null || order.getUserId().isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return residentRepository.findById(Integer.parseInt(order.getUserId().trim()));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    private String formatResidentName(Resident resident) {
+        return Arrays.asList(resident.getFirstName(), resident.getMiddleName(), resident.getLastName())
+                .stream()
+                .filter(part -> part != null && !part.isBlank())
+                .collect(Collectors.joining(" "));
     }
   
 }
