@@ -2,7 +2,7 @@
 
 import { getAuthToken } from "./storage";
 
-const BASE_URL = "https://traymate-auth.onrender.com";
+export const BASE_URL = "https://traymate-auth.onrender.com";
 
 async function getAuthHeaders() {
   const token = await getAuthToken();

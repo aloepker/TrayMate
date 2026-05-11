@@ -27,6 +27,7 @@ import AddResidentModal from "../components/AddResidentModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import MessagesModal from "../components/messaging/MessagesModal";
 import ChipMultiSelect from "../components/ChipMultiSelect";
+import SystemDiagnosticsModal from "../components/SystemDiagnosticsModal";
 import { COMMON_ALLERGENS, COMMON_MEDICAL_CONDITIONS } from "../../services/mealSafetyService";
 
 import {
@@ -63,6 +64,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
   const [alertActiveCount, setAlertActiveCount] = useState(0);
+  // Hidden diagnostics panel — opens when admin taps the granny logo.
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Mirror modal-open state in a ref so async polling closures see the
   // latest value without forcing the polling effect to retrigger.
@@ -671,11 +674,21 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       {/* HEADER SECTION */}
       <View style={styles.topBar}>
         <View style={styles.brand}>
-          <Image
-            source={grandmaLogo}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          {/* Tapping the granny logo opens a hidden System Diagnostics
+              modal (backend / AI / auth / network checks). No visible
+              affordance — admins know about it; residents/caregivers
+              don't have a reason to. */}
+          <Pressable
+            onPress={() => setShowDiagnostics(true)}
+            hitSlop={8}
+            accessibilityLabel="Open system diagnostics"
+          >
+            <Image
+              source={grandmaLogo}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </Pressable>
           <View>
             <Text style={styles.brandTitle}>TrayMate</Text>
             <Text style={styles.brandSub}>Admin Portal</Text>
@@ -1226,6 +1239,11 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       <MessagesModal
         visible={showMessagesModal}
         onClose={() => { setShowMessagesModal(false); setMsgUnread(0); }}
+      />
+
+      <SystemDiagnosticsModal
+        visible={showDiagnostics}
+        onClose={() => setShowDiagnostics(false)}
       />
 
     </SafeAreaView>
