@@ -2276,7 +2276,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 // Cross-cutting tag tab — filters by the "Soft Bite"
                 // tag instead of meal period, so kitchen can quickly
                 // see every dysphagia-safe option in one place.
-                { key: "Soft Bite", label: "Soft Bite", icon: "heart" as const, color: "#8B5CF6" },
+                { key: "Soft Bite", label: "Soft Bite", icon: "cloud" as const, color: "#8B5CF6" },
               ].map(({ key, label, icon, color }) => {
                 const active = menuFilter === key;
                 const count =
