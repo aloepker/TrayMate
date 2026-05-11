@@ -161,8 +161,6 @@ const PERIOD_OPTIONS: {
   { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
 ];
 
-const COVERAGE_ALERT_PERIODS = ["Breakfast", "Lunch", "Dinner"] as const;
-
 function getPeriodColor(period: string): string {
   const norm = normalizePeriod(period);
   const map: Record<string, string> = {
@@ -1487,18 +1485,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       ? menuMeals.filter(hasSoftBiteTag)
       : menuMeals.filter((m) => normalizePeriod(m.mealperiod || m.mealPeriod) === menuFilter);
 
-  const coverageAlertsByPeriod = useMemo(() => {
-    const grouped: Record<string, MealCoverageAlert[]> = Object.fromEntries(
-      COVERAGE_ALERT_PERIODS.map((period) => [period, [] as MealCoverageAlert[]]),
-    );
-    for (const alert of coverageAlerts) {
-      const period = alert.mealPeriod?.trim() || "";
-      if (!grouped[period]) grouped[period] = [];
-      grouped[period].push(alert);
-    }
-    return grouped;
-  }, [coverageAlerts]);
-
   // ── send message to resident (per-order) ──
   const handleSendReply = (orderId: number) => {
     if (!replyText.trim()) return;
@@ -1626,83 +1612,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           ))}
         </View>
 
-        {coverageAlerts.length > 0 && (
-          <View style={s.coverageBanner}>
-            <View style={s.coverageBannerHeader}>
-              <View style={s.coverageBannerTitleRow}>
-                <View style={s.coverageBannerIcon}>
-                  <Feather name="alert-triangle" size={18} color={C.warning} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.coverageBannerTitle}>Meal coverage alerts</Text>
-                  <Text style={s.coverageBannerSub}>
-                    These residents currently have no safe meal in at least one served period.
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={s.coverageBannerCta}
-                onPress={() => navigation?.navigate("MealCoverageAlerts")}
-              >
-                <Text style={s.coverageBannerCtaText}>Open list</Text>
-                <Feather name="chevron-right" size={15} color={C.warning} />
-              </TouchableOpacity>
-            </View>
-
-            {COVERAGE_ALERT_PERIODS
-              .filter((period) => (coverageAlertsByPeriod[period] ?? []).length > 0)
-              .map((period) => {
-                const alerts = coverageAlertsByPeriod[period] ?? [];
-                const accent = PERIOD_ACCENT[period] ?? PERIOD_ACCENT.Breakfast;
-                return (
-                  <View key={period} style={s.coverageGroup}>
-                    <View style={s.coverageGroupHeader}>
-                      <View style={[s.coverageGroupPill, { backgroundColor: accent.light, borderColor: accent.color }]}>
-                        <Feather name={accent.icon as any} size={12} color={accent.color} />
-                        <Text style={[s.coverageGroupPillText, { color: accent.color }]}>{period}</Text>
-                      </View>
-                      <Text style={s.coverageGroupCount}>
-                        {alerts.length} resident{alerts.length === 1 ? "" : "s"}
-                      </Text>
-                    </View>
-
-                    <View style={s.coverageResidentRow}>
-                      {alerts.map((alert) => {
-                        const isActive = alert.status === "ACTIVE";
-                        // Privacy: show room only, never the resident's name.
-                        const roomLabel = alert.residentRoom
-                          ? `Room ${alert.residentRoom}`
-                          : "Room —";
-                        return (
-                          <View
-                            key={alert.id}
-                            style={[
-                              s.coverageResidentChip,
-                              isActive ? s.coverageResidentChipActive : s.coverageResidentChipAcked,
-                            ]}
-                          >
-                            <Feather
-                              name={isActive ? "alert-circle" : "eye"}
-                              size={12}
-                              color={isActive ? C.danger : C.textMuted}
-                            />
-                            <Text
-                              style={[
-                                s.coverageResidentText,
-                                isActive ? s.coverageResidentTextActive : s.coverageResidentTextAcked,
-                              ]}
-                            >
-                              {roomLabel}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              })}
-          </View>
-        )}
+        {/* Meal coverage alerts intentionally hidden here — the kitchen
+            can't act on them (admin must approve the override), so we
+            avoid the noise. The coverageAlerts state is still loaded
+            because individual order cards use it below to fill in a
+            resident's room when the resident cache hasn't hydrated. */}
 
         {/* ── Seasonal Meals ── */}
         {tabSeasonalMeals.length > 0 && (
