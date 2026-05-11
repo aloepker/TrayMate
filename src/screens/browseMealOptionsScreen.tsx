@@ -2614,7 +2614,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         <FlatList
           key={`meal-list-cols-2`}
           data={sortMealsByAvailability(meals, currentTime)}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item) => `${item.id}-${item.name}`}
           renderItem={renderMeal}
           numColumns={2}
           columnWrapperStyle={styles.gridRow}

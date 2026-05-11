@@ -2398,7 +2398,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 const imgUrl = meal.imageUrl?.trim();
                 const placeholder = getMealPlaceholder(meal.name);
                 return (
-                  <TouchableOpacity key={meal.id} style={manageMenu.mealRow} onPress={() => openEditMeal(meal)} activeOpacity={0.7}>
+                  <TouchableOpacity key={`${meal._local ? "local" : "srv"}-${meal.id}`} style={manageMenu.mealRow} onPress={() => openEditMeal(meal)} activeOpacity={0.7}>
                     {/* Image */}
                     {localImg ? (
                       <Image source={localImg} style={manageMenu.mealImg} resizeMode="cover" />
