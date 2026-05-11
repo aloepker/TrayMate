@@ -1190,3 +1190,19 @@ export async function getDietaryAuditLog(residentId: string | number): Promise<D
   const data = await request<DietaryAuditEntry[]>(`/residents/${residentId}/dietary-audit`);
   return Array.isArray(data) ? data : [];
 }
+
+// ========================= ADMIN SEED ACTIONS =========================
+
+export type SoftBiteReseedResult = {
+  status: "ok" | "error";
+  durationMs?: number;
+  message?: string;
+};
+
+/**
+ * Re-runs the SoftBiteMealSeeder on the backend without needing a
+ * redeploy. Idempotent — upserts each meal by name. Admin-only.
+ */
+export async function reseedSoftBiteMeals(): Promise<SoftBiteReseedResult> {
+  return await request<SoftBiteReseedResult>("/admin/seed/soft-bite", { method: "POST" });
+}

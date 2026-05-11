@@ -25,7 +25,7 @@ import {
 } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 
-import { BASE_URL } from "../../services/api";
+import { BASE_URL, reseedSoftBiteMeals } from "../../services/api";
 import { getAuthToken } from "../../services/storage";
 import { GEMINI_CONFIG } from "../../config/geminiConfig";
 import { FALLBACK_MEALS } from "../../services/localDataService";
@@ -188,9 +188,16 @@ const INITIAL_CHECKS: CheckResult[] = [
   { key: "local", label: "Local data", description: "Bundled meals + residents", status: "pending" },
 ];
 
+type SeedState =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "ok"; detail: string }
+  | { status: "error"; detail: string };
+
 export default function SystemDiagnosticsModal({ visible, onClose }: Props) {
   const [checks, setChecks] = useState<CheckResult[]>(INITIAL_CHECKS);
   const [running, setRunning] = useState(false);
+  const [seed, setSeed] = useState<SeedState>({ status: "idle" });
 
   const updateCheck = useCallback(
     (key: string, patch: Partial<CheckResult>) => {
@@ -233,6 +240,25 @@ export default function SystemDiagnosticsModal({ visible, onClose }: Props) {
     if (visible) runAll();
   }, [visible, runAll]);
 
+  const reseed = useCallback(async () => {
+    setSeed({ status: "running" });
+    try {
+      const result = await reseedSoftBiteMeals();
+      if (result?.status === "ok") {
+        setSeed({
+          status: "ok",
+          detail: typeof result.durationMs === "number"
+            ? `Seed complete in ${result.durationMs}ms`
+            : "Seed complete",
+        });
+      } else {
+        setSeed({ status: "error", detail: result?.message ?? "Unknown error" });
+      }
+    } catch (e: any) {
+      setSeed({ status: "error", detail: e?.message ?? "Request failed" });
+    }
+  }, []);
+
   const summary = (() => {
     const fail = checks.filter((c) => c.status === "fail").length;
     const slow = checks.filter((c) => c.status === "slow").length;
@@ -270,6 +296,47 @@ export default function SystemDiagnosticsModal({ visible, onClose }: Props) {
             {checks.map((c) => (
               <CheckRow key={c.key} check={c} />
             ))}
+
+            <View style={s.actionsSection}>
+              <Text style={s.actionsTitle}>Admin actions</Text>
+
+              <Pressable
+                onPress={reseed}
+                disabled={seed.status === "running"}
+                style={({ pressed }) => [
+                  s.actionBtn,
+                  seed.status === "running" && { opacity: 0.6 },
+                  pressed && seed.status !== "running" && { opacity: 0.85 },
+                ]}
+              >
+                {seed.status === "running" ? (
+                  <ActivityIndicator size="small" color="#6D6B3B" />
+                ) : (
+                  <Feather name="database" size={15} color="#6D6B3B" />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={s.actionBtnLabel}>Re-seed Soft Bite meals</Text>
+                  <Text style={s.actionBtnDesc}>
+                    Idempotent — upserts the 13 bundled rows into the DB.
+                  </Text>
+                </View>
+              </Pressable>
+
+              {seed.status === "ok" && (
+                <View style={[s.actionResult, { borderColor: "#A8D5BA", backgroundColor: "#E8F5EC" }]}>
+                  <Feather name="check-circle" size={14} color="#2E7D32" />
+                  <Text style={[s.actionResultText, { color: "#2E7D32" }]}>{seed.detail}</Text>
+                </View>
+              )}
+              {seed.status === "error" && (
+                <View style={[s.actionResult, { borderColor: "#F0B5B0", backgroundColor: "#FBEAE8" }]}>
+                  <Feather name="alert-circle" size={14} color="#C0392B" />
+                  <Text style={[s.actionResultText, { color: "#C0392B" }]} numberOfLines={3}>
+                    {seed.detail}
+                  </Text>
+                </View>
+              )}
+            </View>
           </ScrollView>
 
           <View style={s.footer}>
@@ -402,4 +469,43 @@ const s = StyleSheet.create({
     borderColor: "#D9D0A0",
   },
   rerunBtnText: { fontSize: 13, fontWeight: "700", color: "#6D6B3B" },
+  actionsSection: {
+    marginTop: 6,
+    paddingTop: 14,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#EDE5C2",
+  },
+  actionsTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#888",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#F0E9CC",
+    borderWidth: 1,
+    borderColor: "#D9D0A0",
+  },
+  actionBtnLabel: { fontSize: 13, fontWeight: "700", color: "#3F3F1F" },
+  actionBtnDesc: { fontSize: 11, color: "#6D6B3B", marginTop: 1 },
+  actionResult: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  actionResultText: { flex: 1, fontSize: 12, fontWeight: "600" },
 });
