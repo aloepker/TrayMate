@@ -316,45 +316,31 @@ function matchesAllergenKeywords(allergy: string, meal: SafetyMeal, haystack: st
   return keywords.some((kw) => haystack.includes(kw));
 }
 
-function isSoftBiteFriendly(haystack: string): boolean {
-  const hardTextureWords = [
-    "crunchy",
-    "crispy",
-    "crisp",
-    "crouton",
-    "chips",
-    "nuts",
-    "granola",
-    "raw",
-    "toast",
-    "toasted",
-  ];
-  if (hardTextureWords.some((word) => haystack.includes(word))) return false;
+// Soft-Bite / Dysphagia is a medical safety call — only meals that have
+// been explicitly tagged by the kitchen are considered friendly.
+// Previously we text-matched description words like "stew" / "soup" /
+// "soft " (with trailing space), which mis-classified any untagged
+// "Beef Stew" or "Tomato Soup" as safe for a dysphagia resident.
+const SOFT_BITE_TAGS = new Set([
+  "soft bite",
+  "soft-bite",
+  "softbite",
+  "bite-sized",
+  "bite sized",
+  "easy chew",
+  "easy-chew",
+  "easy-to-chew",
+  "easy to chew",
+  "dysphagia friendly",
+  "dysphagia-friendly",
+  "texture modified",
+  "texture-modified",
+  "pureed",
+]);
 
-  const softTextureWords = [
-    "soft bite",
-    "soft-bite",
-    "bite-sized",
-    "dysphagia friendly",
-    "easy chew",
-    "easy-to-chew",
-    "texture modified",
-    "soft ",
-    " tender",
-    "mashed",
-    "stew",
-    "oatmeal",
-    "porridge",
-    "pudding",
-    "soup",
-    "smoothie",
-    "casserole",
-    "scrambled",
-    "creamy",
-    "puree",
-    "pureed",
-  ];
-  return softTextureWords.some((word) => haystack.includes(word));
+function isSoftBiteFriendly(meal: SafetyMeal): boolean {
+  const tags = (meal.tags ?? []).map(norm);
+  return tags.some((t) => SOFT_BITE_TAGS.has(t));
 }
 
 /**
@@ -441,7 +427,7 @@ export function getAllUnsafeReasons(
 
     // 2d. Soft Bite / Dysphagia → texture-modified foods only
     if (condition.includes("soft bite") || condition.includes("dysphagia")) {
-      if (!isSoftBiteFriendly(haystack)) {
+      if (!isSoftBiteFriendly(meal)) {
         violations.push({
           severity: "medical",
           category: "condition-texture",

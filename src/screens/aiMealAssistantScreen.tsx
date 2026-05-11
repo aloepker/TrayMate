@@ -29,7 +29,7 @@ import {
 } from '../services/mealLocalization';
 import { createGeminiChat, GeminiChatService } from '../services/geminiService';
 import { getDefaultMealsApi, getResidentById as fetchResidentApi } from '../services/api';
-import { getMealImage } from '../services/mealDisplayService';
+import { getMealImage, MEAL_PLACEHOLDER_COLORS } from '../services/mealDisplayService';
 import { isMealSafe, SafetyResident } from '../services/mealSafetyService';
 import { useSettings } from './context/SettingsContext';
 
@@ -51,23 +51,11 @@ const COLORS = {
 };
 
 // ---------- Meal Placeholder Map ----------
-const MEAL_PLACEHOLDERS: Record<string, { bg: string; emoji: string }> = {
-  'Banana-Chocolate Pancakes': { bg: '#FEF3C7', emoji: '🥞' },
-  'Broccoli-Cheddar Quiche': { bg: '#DCFCE7', emoji: '🥧' },
-  'Caesar Salad with Chicken': { bg: '#D1FAE5', emoji: '🥗' },
-  'Citrus Butter Salmon': { bg: '#DBEAFE', emoji: '🐟' },
-  'Chicken Bruschetta': { bg: '#FEE2E2', emoji: '🍗' },
-  'Breakfast Banana Split': { bg: '#FCE7F3', emoji: '🍌' },
-  'Herb Baked Chicken': { bg: '#FEF3C7', emoji: '🍗' },
-  'Garden Vegetable Medley': { bg: '#DCFCE7', emoji: '🥦' },
-  'Strawberry Belgian Waffle': { bg: '#FCE7F3', emoji: '🧇' },
-  'Spring Menu Special': { bg: '#E0E7FF', emoji: '🌸' },
-  'Grilled Salmon Fillet': { bg: '#CFFAFE', emoji: '🐟' },
-  'Oatmeal Bowl': { bg: '#FEF3C7', emoji: '🥣' },
-};
-
+// Pulls from the shared map in mealDisplayService so soft-bite meals
+// (and anything else the kitchen adds) get proper backgrounds/emoji
+// without us maintaining a parallel copy that goes stale.
 const getMealPlaceholder = (name: string) =>
-  MEAL_PLACEHOLDERS[name] || { bg: COLORS.primaryLight, emoji: '🍽' };
+  MEAL_PLACEHOLDER_COLORS[name] ?? { bg: COLORS.primaryLight, emoji: '🍽' };
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

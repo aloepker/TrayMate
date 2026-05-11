@@ -2084,7 +2084,11 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       {residentMsgs.map(msg => {
                         const clean = msg.text.replace(orderTag, '').trim();
                         const messageRoom = msg.residentRoom || (roomDisplay !== "—" ? roomDisplay : "");
-                        if (!msg.read) markRead(msg.id);
+                        // Defer the side-effect off the render tick — calling
+                        // markRead() synchronously here triggers the "cannot
+                        // update component while rendering another component"
+                        // warning when KitchenMessageContext writes state.
+                        if (!msg.read) setTimeout(() => markRead(msg.id), 0);
                         return (
                           <View key={msg.id} style={s.residentMsgBubble}>
                             <Text style={s.residentMsgText}>{clean}</Text>

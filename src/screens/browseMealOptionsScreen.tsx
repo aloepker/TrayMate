@@ -2411,9 +2411,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 ? recMeal?.time_range
                   ? translateMealTimeRange(recMeal.time_range, language)
                   : (() => {
-                      const sh = targetSched.start / 60;
-                      const eh = targetSched.end / 60;
-                      return `${sh}am – ${eh > 12 ? (eh - 12) + 'pm' : eh + 'am'}`;
+                      // Convert minute-of-day → "7am" / "4pm" / "12pm".
+                      // Previously the start hour was never 12h-converted, so
+                      // Dinner (16-19) printed as "16am – 7pm".
+                      const fmt = (totalMin: number): string => {
+                        const h24 = Math.floor(totalMin / 60);
+                        const m = totalMin % 60;
+                        const period = h24 >= 12 ? 'pm' : 'am';
+                        const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                        return m === 0
+                          ? `${h12}${period}`
+                          : `${h12}:${String(m).padStart(2, '0')}${period}`;
+                      };
+                      return `${fmt(targetSched.start)} – ${fmt(targetSched.end)}`;
                     })()
                 : '';
               return (
