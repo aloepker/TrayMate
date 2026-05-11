@@ -1186,6 +1186,41 @@ function buildPendingAutoOrder(
   };
 }
 
+/**
+ * Image with graceful fallback chain:
+ *   remote URL → bundled require() → grandma sentinel
+ * Falls back automatically when the remote URL 404s. Used in the meal
+ * card grid so we never show an empty coloured rectangle when a
+ * Wikipedia/Pexels link goes stale.
+ */
+const MealCardImage: React.FC<{
+  remoteUri: string | null;
+  localImg: any | null;
+  imgStyle: any;
+}> = ({ remoteUri, localImg, imgStyle }) => {
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  if (remoteUri && !remoteFailed) {
+    return (
+      <Image
+        source={{ uri: remoteUri }}
+        style={imgStyle}
+        resizeMode="cover"
+        onError={() => setRemoteFailed(true)}
+      />
+    );
+  }
+  if (localImg) {
+    return <Image source={localImg} style={imgStyle} resizeMode="cover" />;
+  }
+  return (
+    <Image
+      source={require('../styles/pictures/grandma.png')}
+      style={{ width: 60, height: 60, opacity: 0.3 }}
+      resizeMode="contain"
+    />
+  );
+};
+
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
@@ -2159,13 +2194,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         )}
         <View style={[styles.mealImageContainer, { backgroundColor: ph.bg }]}>
-          {remoteUri ? (
-            <Image source={{ uri: remoteUri }} style={styles.mealRealImage} resizeMode="cover" />
-          ) : localImg ? (
-            <Image source={localImg} style={styles.mealRealImage} resizeMode="cover" />
-          ) : (
-            <Image source={require('../styles/pictures/grandma.png')} style={{ width: 60, height: 60, opacity: 0.3 }} resizeMode="contain" />
-          )}
+          <MealCardImage
+            remoteUri={remoteUri}
+            localImg={localImg}
+            imgStyle={styles.mealRealImage}
+          />
           {/* Light frost over image for unavailable meals — image stays visible */}
           {!available && (
             <View style={styles.imageFrost} />

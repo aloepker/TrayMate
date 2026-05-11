@@ -588,6 +588,49 @@ interface MessagePanelProps {
   unreadCount: number;
 }
 
+/**
+ * Thumbnail for a Manage Menu row. Prefers a bundled require() (most
+ * reliable), then a remote URL, then the emoji placeholder. If the
+ * remote URL fails to load, swaps to the placeholder so we never show
+ * an empty 80x80 box — important for the soft-bite meals whose
+ * Wikipedia URLs may 404.
+ */
+const MenuRowThumb: React.FC<{
+  localImg: any | null;
+  imgUrl: string | undefined;
+  placeholder: { bg: string; emoji: string };
+}> = ({ localImg, imgUrl, placeholder }) => {
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  if (localImg) {
+    return (
+      <Image
+        source={localImg}
+        style={{ width: 80, height: 80, borderRadius: 14, marginRight: 14 }}
+        resizeMode="cover"
+      />
+    );
+  }
+  if (imgUrl && !remoteFailed) {
+    return (
+      <Image
+        source={{ uri: imgUrl }}
+        style={{ width: 80, height: 80, borderRadius: 14, marginRight: 14 }}
+        resizeMode="cover"
+        onError={() => setRemoteFailed(true)}
+      />
+    );
+  }
+  return (
+    <View style={{
+      width: 80, height: 80, borderRadius: 14, marginRight: 14,
+      alignItems: "center", justifyContent: "center",
+      backgroundColor: placeholder.bg,
+    }}>
+      <Text style={{ fontSize: 28 }}>{placeholder.emoji}</Text>
+    </View>
+  );
+};
+
 const formatTime = (date: Date) => {
   const d = new Date(date);
   const now = new Date();
@@ -2333,16 +2376,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 const placeholder = getMealPlaceholder(meal.name);
                 return (
                   <TouchableOpacity key={`${meal._local ? "local" : "srv"}-${meal.id}`} style={manageMenu.mealRow} onPress={() => openEditMeal(meal)} activeOpacity={0.7}>
-                    {/* Image */}
-                    {localImg ? (
-                      <Image source={localImg} style={manageMenu.mealImg} resizeMode="cover" />
-                    ) : imgUrl ? (
-                      <Image source={{ uri: imgUrl }} style={manageMenu.mealImg} resizeMode="cover" />
-                    ) : (
-                      <View style={[manageMenu.mealImgPlaceholder, { backgroundColor: placeholder.bg }]}>
-                        <Text style={{ fontSize: 28 }}>{placeholder.emoji}</Text>
-                      </View>
-                    )}
+                    {/* Image — falls back to emoji placeholder when a
+                        remote URL 404s (the bundled require() path can't
+                        fail, but external Wikipedia/Pexels URLs can). */}
+                    <MenuRowThumb
+                      localImg={localImg}
+                      imgUrl={imgUrl}
+                      placeholder={placeholder}
+                    />
 
                     {/* Info */}
                     <View style={{ flex: 1 }}>
