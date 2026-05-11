@@ -97,6 +97,47 @@ public class MealImageSeeder {
         Map.entry("Rice Pudding",             "Sides")
     );
 
+    /**
+     * Mapping of meal name → fully-qualified image URL for meals that
+     * don't have a bundled local image in this repo. These are hand-picked
+     * from Wikipedia Commons / Pexels and mirror the URLs used in the
+     * mobile bundle (FALLBACK_MEALS in localDataService.ts). Kept here so
+     * the kitchen and resident screens render the same picture for these
+     * dishes once the seeder runs.
+     *
+     * Some URLs may 404 — they need verifying against the live image host
+     * after the first deploy. Any missing image falls through to the
+     * emoji placeholder in the UI, so a broken URL is not catastrophic.
+     */
+    private static Map<String, String> buildExternalImageMap() {
+        Map<String, String> m = new HashMap<>();
+        m.put("Strawberry Belgian Waffle",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/Belgian-Waffles-Strawberries.jpg/800px-Belgian-Waffles-Strawberries.jpg");
+        m.put("Spring Menu Special",
+            "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=900");
+        m.put("Grilled Salmon Fillet",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Salmon_dish.jpg/800px-Salmon_dish.jpg");
+        m.put("Oatmeal Bowl",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Porridge_with_blueberries.jpg/800px-Porridge_with_blueberries.jpg");
+        m.put("Turkey & Avocado Wrap",
+            "https://images.pexels.com/photos/793785/pexels-photo-793785.jpeg?auto=compress&cs=tinysrgb&w=900");
+        m.put("Tomato Basil Omelette",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Tomato_omelette.jpg/800px-Tomato_omelette.jpg");
+        m.put("Beef Pot Roast",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Pot_roast.jpg/800px-Pot_roast.jpg");
+        m.put("Lentil Vegetable Soup",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Lentil_soup_with_lemon.jpg/800px-Lentil_soup_with_lemon.jpg");
+        m.put("French Toast",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/French_toast.jpg/800px-French_toast.jpg");
+        m.put("Baked Mac & Cheese",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Original_Mac_n_Cheese_running.jpg/800px-Original_Mac_n_Cheese_running.jpg");
+        m.put("Shrimp Stir-Fry",
+            "https://images.pexels.com/photos/2347311/pexels-photo-2347311.jpeg?auto=compress&cs=tinysrgb&w=900");
+        m.put("Avocado Toast",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Avocado_toast.jpg/800px-Avocado_toast.jpg");
+        return m;
+    }
+
     /** Mapping of meal name → bundled image filename (relative to REPO_RAW). */
     private static Map<String, String> buildImageMap() {
         Map<String, String> m = new HashMap<>();
@@ -142,6 +183,7 @@ public class MealImageSeeder {
     public void backfillMissingImages() {
         try {
             final Map<String, String> images = buildImageMap();
+            final Map<String, String> external = buildExternalImageMap();
             final List<Meal> meals = mealRepository.findAll();
             int imagesPatched = 0;
             int periodsPatched = 0;
@@ -152,9 +194,17 @@ public class MealImageSeeder {
                 // ── image_url ───────────────────────────────────────────
                 final String currentUrl = meal.getImageUrl();
                 if (currentUrl == null || currentUrl.trim().isEmpty()) {
+                    // Prefer bundled local images (GitHub Raw). For meals
+                    // without a local file, fall back to a hand-picked
+                    // external URL.
                     final String relative = images.get(meal.getName());
+                    final String extUrl = external.get(meal.getName());
                     if (relative != null) {
                         meal.setImageUrl(REPO_RAW + "/" + relative);
+                        imagesPatched++;
+                        dirty = true;
+                    } else if (extUrl != null) {
+                        meal.setImageUrl(extUrl);
                         imagesPatched++;
                         dirty = true;
                     }
