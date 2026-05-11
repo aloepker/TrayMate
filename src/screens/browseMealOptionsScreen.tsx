@@ -2075,6 +2075,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const isUnsafe = unsafeReason !== null;
     // Restricted meals are still tappable — tap opens the override request flow
     const canTap = available;
+    // Build a one-line description for screen readers so the entire card
+    // reads as a single coherent option instead of fragmented children.
+    const a11yLabel = (() => {
+      const parts: string[] = [item.name];
+      if (isUnsafe) parts.push(`unsafe: ${unsafeReason}`);
+      else if (!kitchenEnabled) parts.push("not available today");
+      else if (!available) parts.push(`available ${translateMealTimeRange(item.time_range, language)}`);
+      if (isPreorder) parts.push("preorder for tomorrow");
+      return parts.join(", ");
+    })();
+    const a11yHint = isUnsafe
+      ? "Tapping will offer to request a medical override"
+      : available
+        ? "Opens meal details"
+        : undefined;
     return (
       <TouchableOpacity
         style={[
@@ -2084,6 +2099,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           isUnsafe && styles.cardUnsafe,
         ]}
         activeOpacity={canTap ? 0.7 : 1}
+        accessibilityRole="button"
+        accessibilityLabel={a11yLabel}
+        accessibilityHint={a11yHint}
+        accessibilityState={{ disabled: !available && !isUnsafe }}
         onPress={() => {
           if (!available) return;
           if (isUnsafe) {

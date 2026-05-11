@@ -157,8 +157,19 @@ const HomeScreen = ({ navigation, route }: any) => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={[styles.greeting, { fontSize: scaled(16), color: theme.textSecondary }]}>{greeting},</Text>
-            <Text style={[styles.userName, { fontSize: scaled(28), color: theme.textPrimary }]}>{residentName}</Text>
+            <Text
+              style={[styles.greeting, { fontSize: scaled(16), color: theme.textSecondary }]}
+              accessibilityRole="text"
+            >
+              {greeting},
+            </Text>
+            <Text
+              style={[styles.userName, { fontSize: scaled(28), color: theme.textPrimary }]}
+              accessibilityRole="header"
+              accessibilityLabel={`${greeting}, ${residentName}`}
+            >
+              {residentName}
+            </Text>
             {dietaryRestrictions.length > 0 && (
               <View style={styles.dietaryRow}>
                 {dietaryRestrictions.map((tag, i) => (
@@ -175,12 +186,21 @@ const HomeScreen = ({ navigation, route }: any) => {
               style={[styles.bellButton, { minHeight: touchTarget, minWidth: touchTarget }]}
               onPress={openNotifCenter}
               accessibilityRole="button"
-              accessibilityLabel="Notifications"
+              accessibilityLabel={
+                unreadResidentMsgs > 0
+                  ? `Notifications, ${unreadResidentMsgs} unread`
+                  : "Notifications"
+              }
+              accessibilityHint="Opens the notifications panel"
             >
               <Feather name="bell" size={22} color="#717644" />
               {unreadResidentMsgs > 0 && (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>
+                <View
+                  style={styles.bellBadge}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={styles.bellBadgeText} allowFontScaling={false}>
                     {unreadResidentMsgs > 9 ? '9+' : unreadResidentMsgs}
                   </Text>
                 </View>
@@ -189,6 +209,9 @@ const HomeScreen = ({ navigation, route }: any) => {
             <TouchableOpacity
               style={[styles.avatarButton, { minHeight: touchTarget, minWidth: touchTarget }]}
               onPress={() => navWithResident('Settings')}
+              accessibilityRole="button"
+              accessibilityLabel={residentName ? `Settings, signed in as ${residentName}` : "Settings"}
+              accessibilityHint="Opens your settings"
             >
               <Text style={[styles.avatarText, { fontSize: scaled(16) }]}>{initials}</Text>
             </TouchableOpacity>
@@ -199,7 +222,7 @@ const HomeScreen = ({ navigation, route }: any) => {
         {activeOrders.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>{t.upcomingMeals}</Text>
+              <Text style={[styles.sectionTitle, { fontSize: scaled(18), color: theme.textPrimary }]} accessibilityRole="header">{t.upcomingMeals}</Text>
               <TouchableOpacity
                 onPress={() => navWithResident('UpcomingMeals')}
               >
@@ -225,12 +248,20 @@ const HomeScreen = ({ navigation, route }: any) => {
                     : order.status === 'preparing'
                       ? '#fef3c7'
                       : '#dcfce7';
+                const statusWord =
+                  order.status === 'confirmed' ? t.confirmed :
+                  order.status === 'preparing' ? t.preparing : t.ready;
+                const previewMealName = firstItem ? translateMealName(firstItem.name, language) : 'Order';
+                const previewExtra = order.items.length > 1 ? `, plus ${order.items.length - 1} more` : '';
                 return (
                   <TouchableOpacity
                     key={order.id}
                     style={[styles.mealPreviewCard, { backgroundColor: theme.surface }]}
                     onPress={() => navWithResident('UpcomingMeals')}
                     activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${previewMealName}${previewExtra}, status ${statusWord}`}
+                    accessibilityHint="Opens the upcoming meals screen"
                   >
                     <View
                       style={[
@@ -270,13 +301,15 @@ const HomeScreen = ({ navigation, route }: any) => {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { fontSize: scaled(18), marginBottom: 14, color: theme.textPrimary }]}>{t.quickActions}</Text>
+          <Text style={[styles.sectionTitle, { fontSize: scaled(18), marginBottom: 14, color: theme.textPrimary }]} accessibilityRole="header">{t.quickActions}</Text>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: theme.surface }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface, minHeight: Math.max(72, touchTarget * 1.3) }]}
             onPress={() => navWithResident('BrowseMealOptions')}
             activeOpacity={0.75}
             accessibilityRole="button"
+            accessibilityLabel={`${t.browseMenu}, 12 ${t.mealsAvailable}`}
+            accessibilityHint="Opens the full meal menu"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#F6C94E' }]}>
               <Feather name="book-open" size={24} color="#FFFFFF" />
@@ -285,14 +318,16 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.browseMenu}</Text>
               <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>12 {t.mealsAvailable}</Text>
             </View>
-            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: theme.surface }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface, minHeight: Math.max(72, touchTarget * 1.3) }]}
             onPress={() => navWithResident('UpcomingMeals')}
             activeOpacity={0.75}
             accessibilityRole="button"
+            accessibilityLabel={`${t.upcomingMeals}, ${activeOrders.length} active`}
+            accessibilityHint="Shows your scheduled and active meals"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#5AAAEC' }]}>
               <Feather name="calendar" size={24} color="#FFFFFF" />
@@ -303,14 +338,16 @@ const HomeScreen = ({ navigation, route }: any) => {
                 {activeOrders.length} {activeOrders.length === 1 ? t.activeOrders.split(' ')[0] : t.activeOrders.split(' ').slice(0, -1).join(' ')}
               </Text>
             </View>
-            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: theme.surface }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface, minHeight: Math.max(72, touchTarget * 1.3) }]}
             onPress={() => navWithResident('AIMealAssistant')}
             activeOpacity={0.75}
             accessibilityRole="button"
+            accessibilityLabel={`${t.grannyBT}, ${t.aiMealAssistant}`}
+            accessibilityHint="Chat with the AI meal assistant for recommendations"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#A47DE8' }]}>
               <Feather name="message-circle" size={24} color="#FFFFFF" />
@@ -319,14 +356,16 @@ const HomeScreen = ({ navigation, route }: any) => {
               <Text style={[styles.actionLabel, { fontSize: scaled(20), color: theme.textPrimary }]}>{t.grannyBT}</Text>
               <Text style={[styles.actionSub, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.aiMealAssistant}</Text>
             </View>
-            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: theme.surface }]}
+            style={[styles.actionCard, { backgroundColor: theme.surface, minHeight: Math.max(72, touchTarget * 1.3) }]}
             onPress={() => navWithResident('Cart')}
             activeOpacity={0.75}
             accessibilityRole="button"
+            accessibilityLabel={`${t.myCart}, ${cartCount} ${cartCount === 1 ? "item" : "items"}`}
+            accessibilityHint="Opens your cart to review and place orders"
           >
             <View style={[styles.actionIconCircle, { backgroundColor: '#4CAF7D' }]}>
               <Feather name="shopping-cart" size={24} color="#FFFFFF" />
@@ -337,7 +376,7 @@ const HomeScreen = ({ navigation, route }: any) => {
                 {cartCount} {cartCount === 1 ? t.itemsReady.split(' ')[0] : t.itemsReady.split(' ').slice(0, -1).join(' ')}
               </Text>
             </View>
-            <Text style={[styles.actionChevron, { color: theme.textSecondary }]}>›</Text>
+            <Text style={[styles.actionChevron, { color: theme.textSecondary }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">›</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

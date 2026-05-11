@@ -225,12 +225,20 @@ const CartScreen = ({ navigation, route }: any) => {
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { minHeight: touchTarget }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Back to ${backLabel}`}
+          hitSlop={8}
         >
           <Feather name="chevron-left" size={22} color={COLORS.primary} />
           <Text style={[styles.backText, { fontSize: scaled(16) }]}>{backLabel}</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { fontSize: scaled(26) }]}>{t.yourCart}</Text>
+          <Text
+            style={[styles.headerTitle, { fontSize: scaled(26) }]}
+            accessibilityRole="header"
+          >
+            {t.yourCart}
+          </Text>
           <Text style={[styles.headerSubtitle, { fontSize: scaled(14) }]}>
             {cartItems.length} {cartItems.length === 1 ? t.itemsReady.split(' ')[0] : t.itemsReady}
           </Text>
@@ -266,8 +274,11 @@ const CartScreen = ({ navigation, route }: any) => {
           <Text style={[styles.emptyTitle, { fontSize: scaled(22) }]}>{t.cartEmpty}</Text>
           <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.cartEmptyDesc}</Text>
           <TouchableOpacity
-            style={styles.browseButton}
+            style={[styles.browseButton, { minHeight: touchTarget }]}
             onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel={t.browseMenu}
+            accessibilityHint="Returns to the meal menu"
           >
             <Feather name="book-open" size={18} color="#FFFFFF" />
             <Text style={[styles.browseButtonText, { fontSize: scaled(16) }]}>{t.browseMenu}</Text>
@@ -278,7 +289,11 @@ const CartScreen = ({ navigation, route }: any) => {
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
             {/* Safety banner — appears when any cart item is unsafe for the resident */}
             {hasUnsafe && (
-              <View style={styles.safetyBanner}>
+              <View
+                style={styles.safetyBanner}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+              >
                 <View style={styles.safetyBannerIconWrap}>
                   <Feather name="alert-triangle" size={20} color={COLORS.danger} />
                 </View>
@@ -295,6 +310,8 @@ const CartScreen = ({ navigation, route }: any) => {
                 <TouchableOpacity
                   style={[styles.safetyBannerBtn, { minHeight: touchTarget, justifyContent: 'center' }]}
                   onPress={removeAllUnsafe}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove all ${unsafeEntries.length} unsafe meals from cart`}
                 >
                   <Text style={[styles.safetyBannerBtnText, { fontSize: scaled(13) }]}>Remove</Text>
                 </TouchableOpacity>
@@ -327,6 +344,8 @@ const CartScreen = ({ navigation, route }: any) => {
                   <TouchableOpacity
                     style={[styles.removeButton, { minHeight: touchTarget, justifyContent: 'center' }]}
                     onPress={() => removeFromCart(index)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${item.name} from cart`}
                   >
                     <Feather name="x" size={16} color={COLORS.danger} />
                     <Text style={styles.removeText}>{t.remove}</Text>
@@ -385,6 +404,18 @@ const CartScreen = ({ navigation, route }: any) => {
                 hasUnsafe && styles.confirmButtonDisabled,
               ]}
               onPress={confirmOrder}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: hasUnsafe }}
+              accessibilityLabel={
+                hasUnsafe
+                  ? `Cannot place order — ${unsafeEntries.length} unsafe meal${unsafeEntries.length === 1 ? '' : 's'} in cart`
+                  : `${t.confirmOrder}, ${cartItems.length} ${cartItems.length === 1 ? "meal" : "meals"}, ${totals.calories} calories`
+              }
+              accessibilityHint={
+                hasUnsafe
+                  ? "Remove unsafe meals to enable ordering"
+                  : "Places your order with the kitchen"
+              }
             >
               <Feather
                 name={hasUnsafe ? 'alert-triangle' : 'check-circle'}
