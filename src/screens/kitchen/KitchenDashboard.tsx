@@ -1281,29 +1281,50 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     setMenuLoading(true);
     try {
       const meals = await getAllMenuMeals();
+      // Shape used when we surface a bundled meal alongside backend rows.
+      // _local: true marks meals that aren't in the DB yet so the
+      // edit/delete paths can show a sensible message instead of
+      // pretending the row will persist.
+      const mapBundled = (m: typeof FALLBACK_MEALS[number]) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        mealperiod: m.mealPeriod,
+        mealtype: m.mealType,
+        calories: m.nutrition?.calories,
+        sodium: m.nutrition?.sodium,
+        protein: m.nutrition?.protein,
+        tags: Array.isArray(m.tags) ? m.tags.join(", ") : (m.tags ?? ""),
+        allergenInfo: Array.isArray(m.allergenInfo) ? m.allergenInfo.join(", ") : (m.allergenInfo ?? ""),
+        available: m.isAvailable,
+        seasonal: m.isSeasonal,
+        imageUrl: m.imageUrl,
+        _local: true,
+      });
+
       if (Array.isArray(meals) && meals.length > 0) {
-        setMenuMeals(meals);
+        // Backend served the menu — merge in any bundled meals (e.g.
+        // the 13 Soft Bite rows) that haven't been seeded upstream yet.
+        // De-dupe by lower-cased name so we don't duplicate when both
+        // sides have the same dish.
+        const backendNames = new Set(
+          meals.map((m: any) => String(m?.name ?? "").toLowerCase()).filter(Boolean),
+        );
+        const missingFromBackend = FALLBACK_MEALS
+          .filter((m) => !backendNames.has(m.name.toLowerCase()))
+          .map(mapBundled);
+        setMenuMeals([...meals, ...missingFromBackend]);
+        // Banner is reserved for "backend unreachable" — when the
+        // backend served meals and we just topped up with bundled
+        // rows, the _local: true flag on each merged row already gates
+        // edit/delete with a sensible message. No need to alarm the
+        // kitchen.
         setMenuUsingFallback(false);
       } else {
         // Backend returned empty (or 403 swallowed inside getAllMenuMeals).
         // Show the bundled seed list so the kitchen sees something to work
         // with, and flag it in the UI so they know edits won't persist.
-        setMenuMeals(FALLBACK_MEALS.map((m) => ({
-          id: m.id,
-          name: m.name,
-          description: m.description,
-          mealperiod: m.mealPeriod,
-          mealtype: m.mealType,
-          calories: m.nutrition?.calories,
-          sodium: m.nutrition?.sodium,
-          protein: m.nutrition?.protein,
-          tags: Array.isArray(m.tags) ? m.tags.join(", ") : (m.tags ?? ""),
-          allergenInfo: Array.isArray(m.allergenInfo) ? m.allergenInfo.join(", ") : (m.allergenInfo ?? ""),
-          available: m.isAvailable,
-          seasonal: m.isSeasonal,
-          imageUrl: m.imageUrl,
-          _local: true,
-        })));
+        setMenuMeals(FALLBACK_MEALS.map(mapBundled));
         setMenuUsingFallback(true);
       }
     } catch (e: any) {

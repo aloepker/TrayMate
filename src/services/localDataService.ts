@@ -204,10 +204,28 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 5000) {
   }
 }
 
+/**
+ * Top up a backend meal list with any bundled meals that the server
+ * doesn't have yet. Matches by case-insensitive name so duplicates
+ * never sneak in when both sides ship the same dish.
+ *
+ * Use case: the Soft Bite roll-out — we ship 13 new meals in the
+ * mobile bundle ahead of the backend seeder running in production, so
+ * the kitchen / resident screens still see them.
+ */
+function mergeBundledIntoBackend(backend: Meal[], bundled: Meal[]): Meal[] {
+  const backendNames = new Set(
+    backend.map((m) => m.name.toLowerCase()).filter(Boolean),
+  );
+  const missing = bundled.filter((m) => !backendNames.has(m.name.toLowerCase()));
+  return [...backend, ...missing];
+}
+
 async function fetchAllMealsFromApi(): Promise<Meal[]> {
   try {
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu`);
-    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    return mergeBundledIntoBackend(list, FALLBACK_MEALS);
   } catch (error) {
     console.warn("Backend /menu unreachable, using fallback meals:", error);
     return FALLBACK_MEALS;
@@ -220,7 +238,8 @@ async function fetchAvailableMealsFromApi(): Promise<Meal[]> {
   // `isAvailable` flag is preserved on each meal for the screen to use.
   try {
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu`);
-    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    return mergeBundledIntoBackend(list, FALLBACK_MEALS);
   } catch (error) {
     console.warn("Backend /menu unreachable, using fallback meals:", error);
     return FALLBACK_MEALS;
@@ -228,39 +247,48 @@ async function fetchAvailableMealsFromApi(): Promise<Meal[]> {
 }
 
 async function fetchMealsByPeriodFromApi(period: Meal["mealPeriod"]): Promise<Meal[]> {
+  // Filter bundled by period (same rules as the empty-backend fallback)
+  // so we can top up the backend list with anything the server hasn't
+  // seeded yet for this period — e.g. Soft Bite breakfasts.
+  const bundledForPeriod = FALLBACK_MEALS.filter((m) => {
+    if (!m.isAvailable) return false;
+    if (m.mealPeriod === "All Day") return true;
+    return m.mealPeriod === period;
+  });
   try {
     const encodedPeriod = encodeURIComponent(period);
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/${encodedPeriod}`);
-    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    return mergeBundledIntoBackend(list, bundledForPeriod);
   } catch (error) {
     console.warn(`Backend /menu/period/${period} unreachable, using fallback meals:`, error);
-    return FALLBACK_MEALS.filter((m) => {
-      if (!m.isAvailable) return false;
-      if (m.mealPeriod === "All Day") return true;
-      return m.mealPeriod === period;
-    });
+    return bundledForPeriod;
   }
 }
 
 async function fetchDrinksFromApi(): Promise<Meal[]> {
+  const bundledDrinks = FALLBACK_MEALS.filter((m) => m.mealPeriod === "Drinks");
   // Keep unavailable drinks in the list so the UI can show them greyed-out.
   try {
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/drinks`);
-    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    return mergeBundledIntoBackend(list, bundledDrinks);
   } catch (error) {
     console.warn("Backend /menu/period/drinks unreachable, using fallback drinks:", error);
-    return FALLBACK_MEALS.filter((m) => m.mealPeriod === "Drinks");
+    return bundledDrinks;
   }
 }
 
 async function fetchSidesFromApi(): Promise<Meal[]> {
+  const bundledSides = FALLBACK_MEALS.filter((m) => m.mealPeriod === "Sides");
   // Keep unavailable sides in the list so the UI can show them greyed-out.
   try {
     const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/sides`);
-    return Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+    return mergeBundledIntoBackend(list, bundledSides);
   } catch (error) {
     console.warn("Backend /menu/period/sides unreachable, using fallback sides:", error);
-    return FALLBACK_MEALS.filter((m) => m.mealPeriod === "Sides");
+    return bundledSides;
   }
 }
 // Fallback meals for when the API is unreachable
