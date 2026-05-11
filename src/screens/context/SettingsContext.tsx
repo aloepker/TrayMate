@@ -144,6 +144,12 @@ export type TranslationKeys = {
   notAvailableToday: string;
   tomorrowsBreakfast: string;
   restricted: string;
+  // Suggested Auto-Order bell panel
+  suggestedAutoOrder: string;
+  autoOrderConfirmSub: string;
+  autoOrderApprovalNote: string;
+  dismiss: string;
+  placeOrder: string;
   viewDietaryRestrictionsPrompt: string;
   whatMealsLowSodium: string;
   placeLunchOrder: string;
@@ -275,6 +281,11 @@ const EN: TranslationKeys = {
   notAvailableToday: 'Not available today',
   tomorrowsBreakfast: "Tomorrow's breakfast",
   restricted: 'Restricted',
+  suggestedAutoOrder: 'Suggested Auto-Order',
+  autoOrderConfirmSub: 'Confirm or dismiss this safe {period} suggestion',
+  autoOrderApprovalNote: 'Filtered against allergies and medical conditions. Confirming will send this order.',
+  dismiss: 'Dismiss',
+  placeOrder: 'Place Order',
   viewDietaryRestrictionsPrompt: 'View dietary restrictions',
   whatMealsLowSodium: 'What meals are low sodium?',
   placeLunchOrder: 'Place lunch order',
@@ -405,6 +416,11 @@ const ES: TranslationKeys = {
   notAvailableToday: 'No disponible hoy',
   tomorrowsBreakfast: 'Desayuno de mañana',
   restricted: 'Restringido',
+  suggestedAutoOrder: 'Pedido automático sugerido',
+  autoOrderConfirmSub: 'Confirma o descarta esta sugerencia segura para {period}',
+  autoOrderApprovalNote: 'Filtrado contra alergias y condiciones médicas. Al confirmar se enviará el pedido.',
+  dismiss: 'Descartar',
+  placeOrder: 'Hacer pedido',
   viewDietaryRestrictionsPrompt: 'Ver restricciones dietéticas',
   whatMealsLowSodium: '¿Qué comidas son bajas en sodio?',
   placeLunchOrder: 'Pedir almuerzo',
@@ -535,6 +551,11 @@ const FR: TranslationKeys = {
   notAvailableToday: "Non disponible aujourd'hui",
   tomorrowsBreakfast: 'Petit-déjeuner de demain',
   restricted: 'Restreint',
+  suggestedAutoOrder: 'Commande automatique suggérée',
+  autoOrderConfirmSub: 'Confirmer ou rejeter cette suggestion sûre pour le {period}',
+  autoOrderApprovalNote: 'Filtré selon les allergies et conditions médicales. Confirmer enverra la commande.',
+  dismiss: 'Rejeter',
+  placeOrder: 'Passer la commande',
   viewDietaryRestrictionsPrompt: 'Voir les restrictions alimentaires',
   whatMealsLowSodium: 'Quels repas sont faibles en sodium ?',
   placeLunchOrder: 'Commander le déjeuner',
@@ -665,6 +686,11 @@ const ZH: TranslationKeys = {
   notAvailableToday: '今日不可用',
   tomorrowsBreakfast: '明日早餐',
   restricted: '受限',
+  suggestedAutoOrder: '建议自动下单',
+  autoOrderConfirmSub: '确认或忽略此安全的{period}建议',
+  autoOrderApprovalNote: '已根据过敏和医疗条件过滤。确认后将发送订单。',
+  dismiss: '忽略',
+  placeOrder: '下单',
   viewDietaryRestrictionsPrompt: '查看饮食限制',
   whatMealsLowSodium: '哪些餐食低钠？',
   placeLunchOrder: '下单午餐',

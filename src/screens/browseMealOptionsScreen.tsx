@@ -2893,10 +2893,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.autoOrderHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.autoOrderTitle, { fontSize: scaled(20) }]}>
-                  Suggested Auto-Order
+                  {t.suggestedAutoOrder}
                 </Text>
                 <Text style={[styles.autoOrderSub, { fontSize: scaled(14) }]}>
-                  Confirm or dismiss this safe {pendingAutoOrder?.period?.toLowerCase()} suggestion
+                  {t.autoOrderConfirmSub.replace(
+                    '{period}',
+                    pendingAutoOrder?.period
+                      ? translateMealPeriod(pendingAutoOrder.period, language).toLowerCase()
+                      : '',
+                  )}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowAutoOrderPanel(false)} hitSlop={10}>
@@ -2935,7 +2940,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </ScrollView>
 
             <Text style={[styles.autoOrderApprovalNote, { fontSize: scaled(12) }]}>
-              Filtered against allergies and medical conditions. Confirming will send this order.
+              {t.autoOrderApprovalNote}
             </Text>
 
             <View style={styles.autoOrderActions}>
@@ -2945,7 +2950,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 activeOpacity={0.85}
               >
                 <Feather name="x-circle" size={16} color="#DC2626" />
-                <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(14) }]}>Dismiss</Text>
+                <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(14) }]}>{t.dismiss}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.autoOrderBtn, styles.autoOrderBtnApprove]}
@@ -2953,7 +2958,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 activeOpacity={0.85}
               >
                 <Feather name="check-circle" size={16} color="#FFFFFF" />
-                <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(14) }]}>Place Order</Text>
+                <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(14) }]}>{t.placeOrder}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4264,10 +4269,10 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
   },
   scheduleCardTime: {
-    fontSize: 30,
+    fontSize: 14,
     color: '#6B7280',
     flex: 1,
-    alignItems: 'center',
+    textAlign: 'right',
   },
   scheduleActiveDot: {
     width: 8,
@@ -4276,7 +4281,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#22C55E',
   },
   scheduleKitchenNote: {
-    fontSize: 30,
+    fontSize: 13,
     color: '#5e636c',
     marginTop: 10,
     textAlign: 'center',
