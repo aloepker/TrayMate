@@ -1470,9 +1470,22 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     }
   };
 
+  // Tags arrive as a comma-joined string (from mapBundled / backend
+  // serializer) but defensively handle the array shape too.
+  const hasSoftBiteTag = (m: any): boolean => {
+    const tags = m?.tags;
+    if (Array.isArray(tags)) {
+      return tags.some((t: any) => typeof t === "string" && t.toLowerCase().includes("soft bite"));
+    }
+    if (typeof tags === "string") return tags.toLowerCase().includes("soft bite");
+    return false;
+  };
+
   const filteredMenuMeals = menuFilter === "All"
     ? menuMeals
-    : menuMeals.filter((m) => normalizePeriod(m.mealperiod || m.mealPeriod) === menuFilter);
+    : menuFilter === "Soft Bite"
+      ? menuMeals.filter(hasSoftBiteTag)
+      : menuMeals.filter((m) => normalizePeriod(m.mealperiod || m.mealPeriod) === menuFilter);
 
   const coverageAlertsByPeriod = useMemo(() => {
     const grouped: Record<string, MealCoverageAlert[]> = Object.fromEntries(
@@ -2260,9 +2273,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
               {[
                 { key: "All", label: "All", icon: "grid" as const, color: C.primary },
                 ...PERIOD_OPTIONS.map(o => ({ key: o.value, label: o.label, icon: o.icon, color: o.color })),
+                // Cross-cutting tag tab — filters by the "Soft Bite"
+                // tag instead of meal period, so kitchen can quickly
+                // see every dysphagia-safe option in one place.
+                { key: "Soft Bite", label: "Soft Bite", icon: "heart" as const, color: "#8B5CF6" },
               ].map(({ key, label, icon, color }) => {
                 const active = menuFilter === key;
-                const count = key === "All" ? menuMeals.length : menuMeals.filter(m => normalizePeriod(m.mealperiod || m.mealPeriod) === key).length;
+                const count =
+                  key === "All" ? menuMeals.length :
+                  key === "Soft Bite" ? menuMeals.filter(hasSoftBiteTag).length :
+                  menuMeals.filter(m => normalizePeriod(m.mealperiod || m.mealPeriod) === key).length;
                 return (
                   <TouchableOpacity
                     key={key}
