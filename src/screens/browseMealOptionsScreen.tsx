@@ -140,13 +140,12 @@ const ChatRichText = ({
             >
               <View style={chatRichStyles.mealCard}>
                 <View style={[chatRichStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                  {remoteUri ? (
-                    <Image source={{ uri: remoteUri }} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
-                  ) : localImg ? (
-                    <Image source={localImg} style={chatRichStyles.mealCardRealImage} resizeMode="cover" />
-                  ) : (
-                    <Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>
-                  )}
+                  <MealCardImage
+                    remoteUri={remoteUri}
+                    localImg={localImg}
+                    imgStyle={chatRichStyles.mealCardRealImage}
+                    finalFallback={<Text style={chatRichStyles.mealCardEmoji}>{ph.emoji}</Text>}
+                  />
                 </View>
                 <View style={chatRichStyles.mealCardInfo}>
                   <Text style={[chatRichStyles.mealCardName, { fontSize: scaled(16) }]}>
@@ -1188,16 +1187,19 @@ function buildPendingAutoOrder(
 
 /**
  * Image with graceful fallback chain:
- *   remote URL → bundled require() → grandma sentinel
+ *   remote URL → bundled require() → caller-supplied final fallback
  * Falls back automatically when the remote URL 404s. Used in the meal
- * card grid so we never show an empty coloured rectangle when a
- * Wikipedia/Pexels link goes stale.
+ * card grid, detail modal, and chat rich cards so we never show an
+ * empty coloured rectangle when a Wikipedia/Pexels link goes stale.
  */
 const MealCardImage: React.FC<{
   remoteUri: string | null;
   localImg: any | null;
   imgStyle: any;
-}> = ({ remoteUri, localImg, imgStyle }) => {
+  /** Rendered if both remote and bundled images are missing/failed.
+   *  Defaults to the grandma sentinel image. */
+  finalFallback?: React.ReactNode;
+}> = ({ remoteUri, localImg, imgStyle, finalFallback }) => {
   const [remoteFailed, setRemoteFailed] = useState(false);
   if (remoteUri && !remoteFailed) {
     return (
@@ -1212,6 +1214,7 @@ const MealCardImage: React.FC<{
   if (localImg) {
     return <Image source={localImg} style={imgStyle} resizeMode="cover" />;
   }
+  if (finalFallback !== undefined) return <>{finalFallback}</>;
   return (
     <Image
       source={require('../styles/pictures/grandma.png')}
@@ -2735,13 +2738,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 <>
                   {/* Image */}
                   <View style={[styles.detailImageWrap, { backgroundColor: ph.bg }]}>
-                    {detailRemoteUri ? (
-                      <Image source={{ uri: detailRemoteUri }} style={styles.detailRealImage} resizeMode="cover" />
-                    ) : detailLocalImg ? (
-                      <Image source={detailLocalImg} style={styles.detailRealImage} resizeMode="cover" />
-                    ) : (
-                      <Image source={require('../styles/pictures/grandma.png')} style={{ width: 80, height: 80, opacity: 0.3 }} resizeMode="contain" />
-                    )}
+                    <MealCardImage
+                      remoteUri={detailRemoteUri}
+                      localImg={detailLocalImg}
+                      imgStyle={styles.detailRealImage}
+                    />
                   </View>
                   {/* Info */}
                   <View style={styles.detailBody}>
@@ -2978,13 +2979,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 return (
                   <View key={String(item.id)} style={styles.autoOrderItem}>
                     <View style={styles.autoOrderItemImg}>
-                      {remoteUri ? (
-                        <Image source={{ uri: remoteUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                      ) : localImg ? (
-                        <Image source={localImg} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                      ) : (
-                        <Image source={require('../styles/pictures/grandma.png')} style={{ width: 40, height: 40, opacity: 0.3 }} resizeMode="contain" />
-                      )}
+                      <MealCardImage
+                        remoteUri={remoteUri}
+                        localImg={localImg}
+                        imgStyle={{ width: '100%', height: '100%' }}
+                        finalFallback={
+                          <Image
+                            source={require('../styles/pictures/grandma.png')}
+                            style={{ width: 40, height: 40, opacity: 0.3 }}
+                            resizeMode="contain"
+                          />
+                        }
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.autoOrderItemName, { fontSize: scaled(15) }]} numberOfLines={1}>

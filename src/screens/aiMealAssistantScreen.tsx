@@ -59,6 +59,35 @@ const getMealPlaceholder = (name: string) =>
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * Image with onError fallback to bundled image, then to a caller-
+ * supplied final element. Same pattern as MealCardImage in the
+ * browse screen — kept inline here to avoid a shared-module
+ * refactor for one consumer.
+ */
+const ChatMealImage: React.FC<{
+  remoteUri: string | null;
+  localImg: any | null;
+  imgStyle: any;
+  finalFallback: React.ReactNode;
+}> = ({ remoteUri, localImg, imgStyle, finalFallback }) => {
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  if (remoteUri && !remoteFailed) {
+    return (
+      <Image
+        source={{ uri: remoteUri }}
+        style={imgStyle}
+        resizeMode="cover"
+        onError={() => setRemoteFailed(true)}
+      />
+    );
+  }
+  if (localImg) {
+    return <Image source={localImg} style={imgStyle} resizeMode="cover" />;
+  }
+  return <>{finalFallback}</>;
+};
+
 // ---------- Rich Text Renderer ----------
 // Parses **bold**, meal names (renders inline cards), and bullet points.
 // onOrderMeal — optional callback so meal cards inside chat bubbles can
@@ -130,13 +159,12 @@ const RichText = ({
               accessibilityLabel={`${matchedMeal.name}, ${matchedMeal.nutrition.calories} calories${suffixText ? `, ${suffixText}` : ''}. Tap to order this meal.`}
             >
               <View style={[richStyles.mealCardImage, { backgroundColor: ph.bg }]}>
-                {remoteUri ? (
-                  <Image source={{ uri: remoteUri }} style={richStyles.mealCardRealImage} resizeMode="cover" />
-                ) : localImg ? (
-                  <Image source={localImg} style={richStyles.mealCardRealImage} resizeMode="cover" />
-                ) : (
-                  <Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>
-                )}
+                <ChatMealImage
+                  remoteUri={remoteUri}
+                  localImg={localImg}
+                  imgStyle={richStyles.mealCardRealImage}
+                  finalFallback={<Text style={richStyles.mealCardEmoji}>{ph.emoji}</Text>}
+                />
               </View>
               <View style={richStyles.mealCardInfo}>
                 <Text style={[richStyles.mealCardName, { fontSize: scaled(17) }]}>
