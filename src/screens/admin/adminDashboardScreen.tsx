@@ -28,6 +28,7 @@ import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import MessagesModal from "../components/messaging/MessagesModal";
 import ChipMultiSelect from "../components/ChipMultiSelect";
 import SystemDiagnosticsModal from "../components/SystemDiagnosticsModal";
+import { ResidentTabletModeToggle, TabletPinButton } from "../components/TabletModeAdminControls";
 import { COMMON_ALLERGENS, COMMON_MEDICAL_CONDITIONS } from "../../services/mealSafetyService";
 
 import {
@@ -730,6 +731,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
               </View>
             )}
           </Pressable>
+          <TabletPinButton />
           <Pressable
             style={styles.logoutBtn}
             onPress={handleLogout}
@@ -857,6 +859,9 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       <Text style={styles.restrictionsMuted}>No dietary restrictions</Text>
                     )}
                   </View>
+
+                  {/* ── Tablet Mode toggle ── */}
+                  <ResidentTabletModeToggle residentId={r.id} residentName={r.name} />
 
                   {/* ── Divider ── */}
                   <View style={styles.assignDivider} />

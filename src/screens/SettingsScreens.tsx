@@ -13,7 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
-import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, isTabletModeOn } from '../services/storage';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PAD = 20;
@@ -73,6 +73,18 @@ function SettingsScreen({ navigation, route }: any) {
       ].filter((v, i, arr) => v && arr.indexOf(v) === i); // dedupe
 
   // Assigned caregiver — passed via route params; persisted to/from storage
+  // When Tablet Mode is on for this resident the logout row is hidden
+  // — caregivers reach login by long-pressing the resident's name on
+  // the home screen + entering the PIN. This is checked once on mount;
+  // the resident can't toggle it themselves so we don't need to react
+  // to changes here.
+  const [tabletLocked, setTabletLocked] = useState(false);
+  useEffect(() => {
+    const rid = route?.params?.residentId;
+    if (!rid) return;
+    isTabletModeOn(rid).then(setTabletLocked);
+  }, [route?.params?.residentId]);
+
   const [caregiverId,   setCaregiverId]   = useState<string | null>(route?.params?.caregiverId   ?? null);
   const [caregiverName, setCaregiverName] = useState<string | null>(route?.params?.caregiverName ?? null);
   const [assignedCaregivers, setAssignedCaregivers] = useState<Array<{ caregiverId: string; caregiverName: string }>>([]);
@@ -352,19 +364,21 @@ function SettingsScreen({ navigation, route }: any) {
         </View>
 
         {/* ==================== ACCOUNT ==================== */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+        {!tabletLocked && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { fontSize: scaled(14), color: theme.textSecondary }]}>{t.account}</Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
 
-            <TouchableOpacity
-              style={[styles.accountRow, { minHeight: touchTarget }]}
-              onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.danger }]}>{t.logOut}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.accountRow, { minHeight: touchTarget }]}
+                onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.accountLabel, { fontSize: scaled(16), color: theme.danger }]}>{t.logOut}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
       </ScrollView>
 
     </View>

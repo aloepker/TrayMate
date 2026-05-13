@@ -1,0 +1,281 @@
+// components/TabletModeAdminControls.tsx
+//
+// Two small admin-only pieces:
+//   - ResidentTabletModeToggle: per-resident on/off switch for Tablet Mode
+//   - TabletPinButton: header button + modal to view / change the staff
+//     unlock PIN (default 1234)
+//
+// Both are deliberately self-contained so they can drop into the admin
+// dashboard without threading state through the whole screen.
+
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import Feather from "react-native-vector-icons/Feather";
+
+import {
+  getTabletModePin,
+  isTabletModeOn,
+  setTabletMode,
+  setTabletModePin,
+} from "../../services/storage";
+
+// ─────────────────────────────────────────────────────────────
+// Per-resident toggle
+// ─────────────────────────────────────────────────────────────
+
+export function ResidentTabletModeToggle({
+  residentId,
+  residentName,
+}: {
+  residentId: string | number;
+  residentName?: string;
+}) {
+  const [on, setOn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    isTabletModeOn(residentId).then((v) => {
+      if (!cancelled) setOn(v);
+    });
+    return () => { cancelled = true; };
+  }, [residentId]);
+
+  const handleToggle = useCallback(async (next: boolean) => {
+    setOn(next); // optimistic
+    try {
+      await setTabletMode(residentId, next);
+    } catch (e: any) {
+      setOn(!next);
+      Alert.alert("Couldn't update Tablet Mode", e?.message ?? "unknown error");
+    }
+  }, [residentId]);
+
+  return (
+    <View style={s.toggleRow}>
+      <View style={s.toggleIcon}>
+        <Feather name={on ? "lock" : "unlock"} size={13} color={on ? "#6D6B3B" : "#888"} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={s.toggleLabel}>Tablet Mode</Text>
+        <Text style={s.toggleSub}>
+          {on
+            ? `Logout hidden${residentName ? ` for ${residentName}` : ""}`
+            : "Tablet behaves normally"}
+        </Text>
+      </View>
+      {on === null ? (
+        <ActivityIndicator size="small" color="#888" />
+      ) : (
+        <Switch
+          value={on}
+          onValueChange={handleToggle}
+          trackColor={{ false: "#D9D0A0", true: "#6D6B3B88" }}
+          thumbColor={on ? "#6D6B3B" : "#FFF"}
+        />
+      )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// PIN editor (header button + modal)
+// ─────────────────────────────────────────────────────────────
+
+export function TabletPinButton() {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    getTabletModePin().then((v) => {
+      setCurrent(v);
+      setDraft(v);
+    });
+  }, [open]);
+
+  const save = useCallback(async () => {
+    if (!/^\d{4,6}$/.test(draft)) {
+      Alert.alert("Invalid PIN", "PIN must be 4-6 digits.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await setTabletModePin(draft);
+      setCurrent(draft);
+      Alert.alert("PIN updated", `Tablet Mode PIN is now ${draft}.`);
+      setOpen(false);
+    } catch (e: any) {
+      Alert.alert("Couldn't save PIN", e?.message ?? "unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }, [draft]);
+
+  return (
+    <>
+      <Pressable style={s.headerBtn} onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel="Change Tablet Mode PIN">
+        <Feather name="key" size={14} color="#6D6B3B" />
+        <Text style={s.headerBtnText}>Tablet PIN</Text>
+      </Pressable>
+
+      <Modal visible={open} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
+        <View style={s.backdrop}>
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.cardTitle}>Tablet Mode PIN</Text>
+                <Text style={s.cardSub}>Staff PIN to unlock a locked resident dashboard</Text>
+              </View>
+              <Pressable onPress={() => setOpen(false)} hitSlop={12} style={s.closeBtn}>
+                <Feather name="x" size={18} color="#6D6B3B" />
+              </Pressable>
+            </View>
+
+            <Text style={s.fieldLabel}>Current PIN</Text>
+            <Text style={s.currentPin}>{current ?? "…"}</Text>
+
+            <Text style={[s.fieldLabel, { marginTop: 14 }]}>New PIN (4-6 digits)</Text>
+            <TextInput
+              style={s.input}
+              value={draft}
+              onChangeText={(t) => setDraft(t.replace(/[^0-9]/g, "").slice(0, 6))}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="1234"
+              placeholderTextColor="#ABABAB"
+              secureTextEntry={false}
+            />
+
+            <Pressable
+              onPress={save}
+              disabled={saving || draft === current}
+              style={({ pressed }) => [
+                s.saveBtn,
+                (saving || draft === current) && { opacity: 0.5 },
+                pressed && !saving && { opacity: 0.85 },
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Feather name="check" size={16} color="#FFF" />
+              )}
+              <Text style={s.saveBtnText}>{saving ? "Saving…" : "Save PIN"}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  // toggle row
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#F8F5E8",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5DDB8",
+    marginTop: 8,
+  },
+  toggleIcon: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: "#F0E9CC",
+    alignItems: "center", justifyContent: "center",
+  },
+  toggleLabel: { fontSize: 13, fontWeight: "700", color: "#3F3F1F" },
+  toggleSub: { fontSize: 11, color: "#6D6B3B", marginTop: 1 },
+
+  // header button
+  headerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#F0E9CC",
+    borderWidth: 1,
+    borderColor: "#D9D0A0",
+  },
+  headerBtnText: { fontSize: 12, fontWeight: "700", color: "#6D6B3B" },
+
+  // modal
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#FBF7E8",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E5DDB8",
+    padding: 20,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  cardTitle: { fontSize: 18, fontWeight: "800", color: "#3F3F1F" },
+  cardSub: { fontSize: 12, color: "#6D6B3B", marginTop: 2, fontWeight: "600" },
+  closeBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: "#F0E9CC",
+    alignItems: "center", justifyContent: "center",
+  },
+  fieldLabel: { fontSize: 11, fontWeight: "800", color: "#888", textTransform: "uppercase", letterSpacing: 0.6 },
+  currentPin: {
+    fontSize: 24, fontWeight: "800", color: "#3F3F1F",
+    letterSpacing: 4, marginTop: 4,
+  },
+  input: {
+    fontSize: 22, fontWeight: "700", color: "#3F3F1F",
+    backgroundColor: "#F0E9CC",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#D9D0A0",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 6,
+    letterSpacing: 4,
+    textAlign: "center",
+  },
+  saveBtn: {
+    marginTop: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "#6D6B3B",
+  },
+  saveBtnText: { fontSize: 14, fontWeight: "800", color: "#FFF" },
+});
