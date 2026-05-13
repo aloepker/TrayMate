@@ -1947,9 +1947,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   const handleDenyPendingAuto = () => {
-    setAutoSuggestDismissed(true);
-    setAutoSuggest(null);
-    setPendingAutoOrder(null);
+    // Dismiss the modal but keep the bell + pending suggestion alive
+    // so the resident can reopen it later. The suggestion clears
+    // automatically once the meal period ends or an order is placed.
     setShowAutoOrderPanel(false);
   };
 
@@ -2520,7 +2520,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         {autoSuggest && !autoSuggestDismissed && (
           <>
             <View style={styles.bottomCardDivider} />
-            {/* Header row */}
+            {/* Header row. No dismiss X here — the suggestion is
+                meant to stay visible until the meal period ends or the
+                resident actually places the order. The panel still
+                auto-clears after a successful placeOrder upstream. */}
             <View style={styles.bottomCardSuggestHeader}>
               <Feather name="clock" size={16} color="#4A5C2A" />
               <Text style={[styles.bottomCardSuggestTitle, { fontSize: scaled(14) }]}>
@@ -2529,9 +2532,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   : `Next meal: ${autoSuggest.period} in ${formatMinsUntil(autoSuggest.minsUntil)}`}
                 {' — safe pick from past orders'}
               </Text>
-              <TouchableOpacity onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }} hitSlop={10}>
-                <Feather name="x" size={18} color="#9CA3AF" />
-              </TouchableOpacity>
             </View>
             {/* Main meal row */}
             <View style={styles.bottomCardSuggestRow}>
