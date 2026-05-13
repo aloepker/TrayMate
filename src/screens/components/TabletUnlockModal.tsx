@@ -135,7 +135,7 @@ export default function TabletUnlockModal({ visible, onClose, onSuccess }: Props
             </Text>
           ) : (
             <Text style={s.hintText}>
-              Default PIN is 1234. Ask the administrator if it's been changed.
+              Ask a staff member if you don't know the PIN.
             </Text>
           )}
 
