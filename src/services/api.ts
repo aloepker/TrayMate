@@ -1206,3 +1206,34 @@ export type SoftBiteReseedResult = {
 export async function reseedSoftBiteMeals(): Promise<SoftBiteReseedResult> {
   return await request<SoftBiteReseedResult>("/admin/seed/soft-bite", { method: "POST" });
 }
+
+// ========================= TABLET MODE =========================
+
+export type TabletModePin = { pin: string };
+
+/** Read the facility-wide Tablet Mode unlock PIN. Admin-only. */
+export async function getTabletPin(): Promise<string> {
+  const data = await request<TabletModePin>("/admin/settings/tablet-pin");
+  return data?.pin ?? "1234";
+}
+
+/** Update the facility-wide Tablet Mode unlock PIN. Admin-only. */
+export async function setTabletPin(pin: string): Promise<string> {
+  const data = await request<TabletModePin>("/admin/settings/tablet-pin", {
+    method: "PUT",
+    body: JSON.stringify({ pin }),
+  });
+  return data?.pin ?? pin;
+}
+
+/** Toggle Tablet Mode on/off for one resident. Admin-only. */
+export async function setResidentTabletMode(
+  residentId: string | number,
+  enabled: boolean,
+): Promise<boolean> {
+  const data = await request<{ tabletMode: boolean }>(
+    `/admin/residents/${residentId}/tablet-mode`,
+    { method: "PUT", body: JSON.stringify({ enabled }) },
+  );
+  return data?.tabletMode ?? enabled;
+}

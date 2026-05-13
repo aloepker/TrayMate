@@ -123,6 +123,13 @@ public class Resident {
     @Column(name = "room_number")
     private String roomNumber;
 
+    // Kiosk lockdown. When true, the resident's tablet hides the
+    // logout flow; a staff PIN is required to unlock. Default false
+    // so existing residents are unaffected by the schema change.
+    @Column(name = "tablet_mode", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Builder.Default
+    private Boolean tabletMode = false;
+
     //to assign caregivers to residents
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "caregiver_id")

@@ -28,6 +28,11 @@ import {
   setTabletMode,
   setTabletModePin,
 } from "../../services/storage";
+import {
+  getTabletPin as apiGetPin,
+  setTabletPin as apiSetPin,
+  setResidentTabletMode as apiSetResidentTabletMode,
+} from "../../services/api";
 
 // ─────────────────────────────────────────────────────────────
 // Per-resident toggle
@@ -52,13 +57,23 @@ export function ResidentTabletModeToggle({
 
   const handleToggle = useCallback(async (next: boolean) => {
     setOn(next); // optimistic
+    // Persist to backend first so other tablets pick it up; mirror to
+    // local storage so the same tablet shows the right state even
+    // while offline. If the backend write fails, fall back to local-
+    // only so the admin can keep working until the network is back.
     try {
+      await apiSetResidentTabletMode(residentId, next);
       await setTabletMode(residentId, next);
     } catch (e: any) {
-      setOn(!next);
-      Alert.alert("Couldn't update Tablet Mode", e?.message ?? "unknown error");
+      try {
+        await setTabletMode(residentId, next);
+        console.warn("[TabletMode] backend save failed, saved locally only:", e?.message);
+      } catch (e2: any) {
+        setOn(!on);
+        Alert.alert("Couldn't update Tablet Mode", e2?.message ?? e?.message ?? "unknown error");
+      }
     }
-  }, [residentId]);
+  }, [residentId, on]);
 
   return (
     <View style={s.toggleRow}>
@@ -99,10 +114,21 @@ export function TabletPinButton() {
 
   useEffect(() => {
     if (!open) return;
-    getTabletModePin().then((v) => {
-      setCurrent(v);
-      setDraft(v);
-    });
+    // Prefer the live value from the backend so the admin sees the
+    // PIN that's actually in effect across the facility. Fall back to
+    // the locally-cached value if the backend is unreachable.
+    (async () => {
+      try {
+        const remote = await apiGetPin();
+        setCurrent(remote);
+        setDraft(remote);
+        await setTabletModePin(remote); // refresh local cache
+      } catch {
+        const local = await getTabletModePin();
+        setCurrent(local);
+        setDraft(local);
+      }
+    })();
   }, [open]);
 
   const save = useCallback(async () => {
@@ -112,12 +138,27 @@ export function TabletPinButton() {
     }
     setSaving(true);
     try {
+      // Push to backend so every tablet in the facility uses the same
+      // PIN; mirror to local cache so this device works offline.
+      await apiSetPin(draft);
       await setTabletModePin(draft);
       setCurrent(draft);
       Alert.alert("PIN updated", `Tablet Mode PIN is now ${draft}.`);
       setOpen(false);
     } catch (e: any) {
-      Alert.alert("Couldn't save PIN", e?.message ?? "unknown error");
+      // Backend unreachable — store locally so this admin's tablet
+      // still uses the new PIN. Warn so they know it didn't sync.
+      try {
+        await setTabletModePin(draft);
+        setCurrent(draft);
+        Alert.alert(
+          "Saved on this device only",
+          "Couldn't reach the server, so other tablets still have the old PIN. Try again when you're back online.",
+        );
+        setOpen(false);
+      } catch (e2: any) {
+        Alert.alert("Couldn't save PIN", e2?.message ?? e?.message ?? "unknown error");
+      }
     } finally {
       setSaving(false);
     }

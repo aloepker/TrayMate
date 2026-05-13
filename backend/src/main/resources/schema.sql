@@ -71,3 +71,23 @@ ALTER TABLE meal_orders
 
 ALTER TABLE meal_orders
     ADD COLUMN IF NOT EXISTS special_instructions VARCHAR(1000) NULL;
+
+-- Tablet (kiosk) mode per resident. When true, the resident's tablet
+-- hides logout and a staff PIN is required to leave the app.
+ALTER TABLE residents
+    ADD COLUMN IF NOT EXISTS tablet_mode BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Facility-wide key/value config (currently just the tablet PIN).
+-- Kept as a single table so future settings don't need a new schema
+-- change every time we add a knob.
+CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key   VARCHAR(64)  NOT NULL,
+    setting_value VARCHAR(255) NOT NULL,
+    updated_at    DATETIME(6)  NOT NULL,
+    PRIMARY KEY (setting_key)
+);
+
+-- Seed the default tablet PIN if no row exists yet.
+INSERT INTO app_settings (setting_key, setting_value, updated_at)
+SELECT 'tablet.pin', '1234', CURRENT_TIMESTAMP(6)
+WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_key = 'tablet.pin');
