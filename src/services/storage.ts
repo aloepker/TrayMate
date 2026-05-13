@@ -135,6 +135,44 @@ export async function getCaregiverResidentList(
   }
 }
 
+// ============== TABLET MODE (kiosk lock) ==============
+//
+// Admin enables Tablet Mode per resident so the tablet stays on that
+// resident's dashboard and can't be logged out by accident. Unlocking
+// requires a PIN (default 1234, editable by admin). The admin-side
+// components write through to the backend; these helpers maintain a
+// local cache so the resident's tablet keeps working when offline.
+
+const TABLET_MODE_PIN_KEY = "tablet_mode_pin";
+const TABLET_MODE_PREFIX  = "tablet_mode_resident_"; // + residentId
+const DEFAULT_TABLET_PIN  = "1234";
+
+export async function getTabletModePin(): Promise<string> {
+  try {
+    const v = await EncryptedStorage.getItem(TABLET_MODE_PIN_KEY);
+    return v && v.trim().length > 0 ? v : DEFAULT_TABLET_PIN;
+  } catch {
+    return DEFAULT_TABLET_PIN;
+  }
+}
+
+export async function setTabletModePin(pin: string): Promise<void> {
+  await EncryptedStorage.setItem(TABLET_MODE_PIN_KEY, pin);
+}
+
+export async function isTabletModeOn(residentId: string | number): Promise<boolean> {
+  try {
+    const v = await EncryptedStorage.getItem(TABLET_MODE_PREFIX + String(residentId));
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
+export async function setTabletMode(residentId: string | number, on: boolean): Promise<void> {
+  await EncryptedStorage.setItem(TABLET_MODE_PREFIX + String(residentId), on ? "1" : "0");
+}
+
 /*import { Platform } from "react-native";
 import EncryptedStorage from "react-native-encrypted-storage";
 
@@ -208,40 +246,4 @@ export async function clearAuth() {
   }
 }
 
-// ============== TABLET MODE (kiosk lock) ==============
-//
-// Admin enables Tablet Mode per resident so the tablet stays on that
-// resident's dashboard and can't be logged out by accident. Unlocking
-// requires a PIN (default 1234, editable by admin). Stored locally —
-// no backend round-trip means it survives offline and demo-time use.
-
-const TABLET_MODE_PIN_KEY = "tablet_mode_pin";
-const TABLET_MODE_PREFIX  = "tablet_mode_resident_"; // + residentId
-const DEFAULT_TABLET_PIN  = "1234";
-
-export async function getTabletModePin(): Promise<string> {
-  try {
-    const v = await EncryptedStorage.getItem(TABLET_MODE_PIN_KEY);
-    return v && v.trim().length > 0 ? v : DEFAULT_TABLET_PIN;
-  } catch {
-    return DEFAULT_TABLET_PIN;
-  }
-}
-
-export async function setTabletModePin(pin: string): Promise<void> {
-  await EncryptedStorage.setItem(TABLET_MODE_PIN_KEY, pin);
-}
-
-export async function isTabletModeOn(residentId: string | number): Promise<boolean> {
-  try {
-    const v = await EncryptedStorage.getItem(TABLET_MODE_PREFIX + String(residentId));
-    return v === "1";
-  } catch {
-    return false;
-  }
-}
-
-export async function setTabletMode(residentId: string | number, on: boolean): Promise<void> {
-  await EncryptedStorage.setItem(TABLET_MODE_PREFIX + String(residentId), on ? "1" : "0");
-}
 */
