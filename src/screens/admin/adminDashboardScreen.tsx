@@ -839,6 +839,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       <Text style={styles.roomPillLabel}>ROOM <Text style={styles.roomPillNum}>{r.room || "—"}</Text></Text>
                     </View>
                     <Text style={[styles.personName, { flex: 1 }]} numberOfLines={1}>{r.name}</Text>
+                    <ResidentTabletModeToggle residentId={r.id} residentName={r.name} />
                     <Pressable style={styles.editIconBtn} onPress={() => openEditResident(r)} hitSlop={10}>
                       <Feather name="edit-2" size={18} color="#6D6B3B" />
                     </Pressable>
@@ -859,9 +860,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       <Text style={styles.restrictionsMuted}>No dietary restrictions</Text>
                     )}
                   </View>
-
-                  {/* ── Tablet Mode toggle ── */}
-                  <ResidentTabletModeToggle residentId={r.id} residentName={r.name} />
 
                   {/* ── Divider ── */}
                   <View style={styles.assignDivider} />

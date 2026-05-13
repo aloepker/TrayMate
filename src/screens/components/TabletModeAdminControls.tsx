@@ -15,7 +15,6 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -38,6 +37,13 @@ import {
 // Per-resident toggle
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Compact lock-icon button sized to match the row's edit / delete
+ * actions. Tap flips the state with optimistic UI; persisted to the
+ * backend and mirrored to local cache. Designed to live in the same
+ * top-right action cluster as the other row icons, not as a separate
+ * banner.
+ */
 export function ResidentTabletModeToggle({
   residentId,
   residentName,
@@ -46,6 +52,7 @@ export function ResidentTabletModeToggle({
   residentName?: string;
 }) {
   const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,12 +62,11 @@ export function ResidentTabletModeToggle({
     return () => { cancelled = true; };
   }, [residentId]);
 
-  const handleToggle = useCallback(async (next: boolean) => {
+  const flip = useCallback(async () => {
+    if (busy) return;
+    const next = !on;
     setOn(next); // optimistic
-    // Persist to backend first so other tablets pick it up; mirror to
-    // local storage so the same tablet shows the right state even
-    // while offline. If the backend write fails, fall back to local-
-    // only so the admin can keep working until the network is back.
+    setBusy(true);
     try {
       await apiSetResidentTabletMode(residentId, next);
       await setTabletMode(residentId, next);
@@ -69,36 +75,42 @@ export function ResidentTabletModeToggle({
         await setTabletMode(residentId, next);
         console.warn("[TabletMode] backend save failed, saved locally only:", e?.message);
       } catch (e2: any) {
-        setOn(!on);
+        setOn(!next);
         Alert.alert("Couldn't update Tablet Mode", e2?.message ?? e?.message ?? "unknown error");
       }
+    } finally {
+      setBusy(false);
     }
-  }, [residentId, on]);
+  }, [busy, on, residentId]);
+
+  const label = on
+    ? `Tablet Mode on${residentName ? ` for ${residentName}` : ""}. Tap to unlock the tablet.`
+    : `Tablet Mode off${residentName ? ` for ${residentName}` : ""}. Tap to lock the tablet to this resident.`;
 
   return (
-    <View style={s.toggleRow}>
-      <View style={s.toggleIcon}>
-        <Feather name={on ? "lock" : "unlock"} size={13} color={on ? "#6D6B3B" : "#888"} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={s.toggleLabel}>Tablet Mode</Text>
-        <Text style={s.toggleSub}>
-          {on
-            ? `Logout hidden${residentName ? ` for ${residentName}` : ""}`
-            : "Tablet behaves normally"}
-        </Text>
-      </View>
-      {on === null ? (
-        <ActivityIndicator size="small" color="#888" />
+    <Pressable
+      onPress={flip}
+      hitSlop={6}
+      disabled={on === null || busy}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: on === true }}
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        s.lockIconBtn,
+        on === true && s.lockIconBtnOn,
+        (pressed || busy) && { opacity: 0.7 },
+      ]}
+    >
+      {on === null || busy ? (
+        <ActivityIndicator size="small" color="#6D6B3B" />
       ) : (
-        <Switch
-          value={on}
-          onValueChange={handleToggle}
-          trackColor={{ false: "#D9D0A0", true: "#6D6B3B88" }}
-          thumbColor={on ? "#6D6B3B" : "#FFF"}
+        <Feather
+          name={on ? "lock" : "unlock"}
+          size={16}
+          color={on ? "#6D6B3B" : "#9A977A"}
         />
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -227,26 +239,17 @@ export function TabletPinButton() {
 // ─────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // toggle row
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#F8F5E8",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5DDB8",
-    marginTop: 8,
-  },
-  toggleIcon: {
-    width: 24, height: 24, borderRadius: 12,
+  // compact lock-icon button (sits in the row's action cluster)
+  lockIconBtn: {
+    width: 36, height: 36, borderRadius: 10,
     backgroundColor: "#F0E9CC",
+    borderWidth: 1, borderColor: "#E5DDB8",
     alignItems: "center", justifyContent: "center",
   },
-  toggleLabel: { fontSize: 13, fontWeight: "700", color: "#3F3F1F" },
-  toggleSub: { fontSize: 11, color: "#6D6B3B", marginTop: 1 },
+  lockIconBtnOn: {
+    backgroundColor: "#E5DDB8",
+    borderColor: "#D9D0A0",
+  },
 
   // header button
   headerBtn: {
