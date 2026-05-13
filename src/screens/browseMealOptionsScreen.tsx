@@ -2341,6 +2341,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               ],
             );
           }}
+          // 5-second long-press on the back arrow is the staff backdoor
+          // when Tablet Mode is on — bypasses the PIN modal entirely.
+          // Hard enough for a resident to trigger by accident, fast
+          // enough for staff who know the gesture to leave without
+          // typing the PIN. Has no effect when the tablet isn't locked.
+          onLongPress={() => { if (tabletLocked) performLogout(); }}
+          delayLongPress={5000}
           style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
           <View style={styles.backArrow}>

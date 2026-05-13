@@ -22,8 +22,6 @@ import {
   scheduleMealtimeReminders,
   cancelAllMealtimeReminders,
 } from '../services/notificationService';
-import { isTabletModeOn } from '../services/storage';
-import TabletUnlockModal from './components/TabletUnlockModal';
 
 const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount, getOrdersForResident } = useCart();
@@ -31,20 +29,6 @@ const HomeScreen = ({ navigation, route }: any) => {
   const { messages: kitchenMessages, markRead: markKitchenMsgRead } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
   const [showNotifCenter, setShowNotifCenter] = useState(false);
-
-  // Tablet (kiosk) mode: when ON for this resident, the home screen
-  // hides destructive nav (no logout shortcut from settings, etc.) and
-  // a 5s long-press on the resident's name reveals the staff PIN unlock.
-  const [tabletLocked, setTabletLocked] = useState(false);
-  const [showUnlock, setShowUnlock] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    if (!route?.params?.residentId) return;
-    isTabletModeOn(route.params.residentId).then((on) => {
-      if (!cancelled) setTabletLocked(on);
-    });
-    return () => { cancelled = true; };
-  }, [route?.params?.residentId]);
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
@@ -179,22 +163,16 @@ const HomeScreen = ({ navigation, route }: any) => {
             >
               {greeting},
             </Text>
-            {/* Long-press the resident's name for 5s while Tablet Mode
-                is ON to reveal the staff PIN unlock. Normal taps do
-                nothing — keeps the gesture invisible to residents who
-                aren't staff. */}
-            <Pressable
-              onLongPress={() => { if (tabletLocked) setShowUnlock(true); }}
-              delayLongPress={5000}
+            {/* Staff PIN unlock now lives on the browse screen's back
+                arrow (long-press 5s) — keeps the lock-out / unlock
+                surface in one place. */}
+            <Text
+              style={[styles.userName, { fontSize: scaled(28), color: theme.textPrimary }]}
               accessibilityRole="header"
               accessibilityLabel={`${greeting}, ${residentName}`}
             >
-              <Text
-                style={[styles.userName, { fontSize: scaled(28), color: theme.textPrimary }]}
-              >
-                {residentName}
-              </Text>
-            </Pressable>
+              {residentName}
+            </Text>
             {dietaryRestrictions.length > 0 && (
               <View style={styles.dietaryRow}>
                 {dietaryRestrictions.map((tag, i) => (
@@ -475,11 +453,6 @@ const HomeScreen = ({ navigation, route }: any) => {
         </Pressable>
       </Modal>
 
-      <TabletUnlockModal
-        visible={showUnlock}
-        onClose={() => setShowUnlock(false)}
-        onSuccess={() => { setShowUnlock(false); setTabletLocked(false); }}
-      />
     </View>
   );
 };
