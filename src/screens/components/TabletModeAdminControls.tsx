@@ -102,12 +102,12 @@ export function ResidentTabletModeToggle({
       ]}
     >
       {on === null || busy ? (
-        <ActivityIndicator size="small" color="#6D6B3B" />
+        <ActivityIndicator size="small" color={on ? "#FFFFFF" : "#6D6B3B"} />
       ) : (
         <Feather
           name={on ? "lock" : "unlock"}
           size={16}
-          color={on ? "#6D6B3B" : "#9A977A"}
+          color={on ? "#FFFFFF" : "#9A977A"}
         />
       )}
     </Pressable>
@@ -240,15 +240,19 @@ export function TabletPinButton() {
 
 const s = StyleSheet.create({
   // compact lock-icon button (sits in the row's action cluster)
+  // Off: light neutral with muted icon — recedes into the row.
+  // On:  primary olive fill with white icon — reads as "engaged",
+  //      clearly distinct from the edit (olive on light) and delete
+  //      (red on pink) siblings at a glance.
   lockIconBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "#F0E9CC",
-    borderWidth: 1, borderColor: "#E5DDB8",
+    backgroundColor: "#F5F3EE",
+    borderWidth: 1, borderColor: "#E2DFD8",
     alignItems: "center", justifyContent: "center",
   },
   lockIconBtnOn: {
-    backgroundColor: "#E5DDB8",
-    borderColor: "#D9D0A0",
+    backgroundColor: "#717644",
+    borderColor: "#5B5F36",
   },
 
   // header button
