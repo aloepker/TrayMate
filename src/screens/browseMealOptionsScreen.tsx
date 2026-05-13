@@ -60,7 +60,7 @@ import {
 import { geminiChat, getAIRecommendation } from "../services/geminiService";
 import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
-import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth } from '../services/storage';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth, isTabletModeOn } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi, getResidentById } from '../services/api';
 
@@ -1278,6 +1278,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   useFocusEffect(
     useCallback(() => {
       const onBackPress = (): boolean => {
+        if (tabletLocked) {
+          // Kiosk mode: swallow the back press silently so the system
+          // can't escape the app. No alert — residents pressing back
+          // shouldn't get a "tablet is locked" speech bubble every
+          // time. Staff know they unlock via the home-screen long-press.
+          return true;
+        }
         Alert.alert(
           'Log Out?',
           'This will end the current session. Continue?',
@@ -1298,7 +1305,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
-    }, [navigation]),
+    }, [navigation, tabletLocked]),
   );
 
   // Re-pick the correct tab every time the screen comes into focus (handles
@@ -1394,6 +1401,17 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     buildSafetyProfileFromLocalResident(localResidentRecord),
   );
   const residentSafetyProfileKey = JSON.stringify(residentSafetyProfile);
+
+  // Tablet (kiosk) mode: when on for this resident, the logout flows
+  // (back arrow + hardware back) become no-ops and instead nudge the
+  // user to long-press the name on the home screen to unlock.
+  const [tabletLocked, setTabletLocked] = useState(false);
+  useEffect(() => {
+    if (!residentId) return;
+    let cancelled = false;
+    isTabletModeOn(residentId).then((v) => { if (!cancelled) setTabletLocked(v); });
+    return () => { cancelled = true; };
+  }, [residentId]);
 
   useEffect(() => {
     setAutoSuggest(null);
@@ -2294,6 +2312,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => {
+            // Tablet Mode swallows the back arrow too — no logout dialog
+            // when the tablet is supposed to stay on this resident.
+            if (tabletLocked) {
+              navigation.navigate('Home' as never, { residentId, residentName } as never);
+              return;
+            }
             // Always log out — iPads stay in resident rooms, so back
             // means "end this session", never "return to admin".
             Alert.alert(
