@@ -13,6 +13,14 @@ export async function setAuth(token: string, role: string) {
   }
 }
 
+export async function getUserRole(): Promise<string | null> {
+  try {
+    return await EncryptedStorage.getItem(ROLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export async function getAuthToken(): Promise<string | null> {
   try {
     return await EncryptedStorage.getItem(TOKEN_KEY);

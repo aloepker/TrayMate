@@ -60,7 +60,7 @@ import {
 import { geminiChat, getAIRecommendation } from "../services/geminiService";
 import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
-import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth, isTabletModeOn } from '../services/storage';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth, isTabletModeOn, getUserRole } from '../services/storage';
 import TabletUnlockModal from './components/TabletUnlockModal';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi, getResidentById } from '../services/api';
@@ -1420,6 +1420,29 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
   }, [navigation]);
 
+  /**
+   * Long-press shortcut: jump straight back to whichever dashboard
+   * the user came from. Reads the cached auth role so we route admin
+   * → AdminDashboard, caregiver → CaregiverDashboard. For a logged-in
+   * resident the only sensible "back" is the login screen, so we
+   * fall back to a normal logout there. Bypasses the PIN modal
+   * entirely — long-press is the staff backdoor.
+   */
+  const jumpToDashboard = useCallback(async () => {
+    const role = await getUserRole();
+    if (role === 'ROLE_ADMIN') {
+      navigation.reset({ index: 0, routes: [{ name: 'AdminDashboard' as never }] });
+    } else if (role === 'ROLE_CAREGIVER') {
+      navigation.reset({ index: 0, routes: [{ name: 'CaregiverDashboard' as never }] });
+    } else if (role === 'ROLE_KITCHEN' || role === 'ROLE_KITCHEN_STAFF') {
+      navigation.reset({ index: 0, routes: [{ name: 'KitchenDashboard' as never }] });
+    } else {
+      // Resident or unknown role — no upstream dashboard to return
+      // to, so end the session like a normal logout would.
+      performLogout();
+    }
+  }, [navigation, performLogout]);
+
   useEffect(() => {
     setAutoSuggest(null);
     setPendingAutoOrder(null);
@@ -2341,12 +2364,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               ],
             );
           }}
-          // 5-second long-press on the back arrow is the staff backdoor
-          // when Tablet Mode is on — bypasses the PIN modal entirely.
-          // Hard enough for a resident to trigger by accident, fast
-          // enough for staff who know the gesture to leave without
-          // typing the PIN. Has no effect when the tablet isn't locked.
-          onLongPress={() => { if (tabletLocked) performLogout(); }}
+          // 5-second long-press = staff shortcut back to the dashboard
+          // they came from (Admin / Caregiver / Kitchen). Works whether
+          // Tablet Mode is on or off — when locked it bypasses the PIN
+          // modal, when unlocked it skips the "Log Out?" alert.
+          onLongPress={jumpToDashboard}
           delayLongPress={5000}
           style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
