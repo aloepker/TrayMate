@@ -61,6 +61,7 @@ import { geminiChat, getAIRecommendation } from "../services/geminiService";
 import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth, isTabletModeOn } from '../services/storage';
+import TabletUnlockModal from './components/TabletUnlockModal';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi, getResidentById } from '../services/api';
 
@@ -1279,10 +1280,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     useCallback(() => {
       const onBackPress = (): boolean => {
         if (tabletLocked) {
-          // Kiosk mode: swallow the back press silently so the system
-          // can't escape the app. No alert — residents pressing back
-          // shouldn't get a "tablet is locked" speech bubble every
-          // time. Staff know they unlock via the home-screen long-press.
+          // Kiosk mode: prompt for the staff PIN. Correct PIN → log out;
+          // cancel → stay on the screen. Residents who hit back by
+          // accident see the PIN dialog briefly and just cancel out.
+          setShowUnlockForLogout(true);
           return true;
         }
         Alert.alert(
@@ -1293,10 +1294,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             {
               text: 'Log Out',
               style: 'destructive',
-              onPress: async () => {
-                try { await clearAuth(); } catch { /* proceed regardless */ }
-                navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-              },
+              onPress: performLogout,
             },
           ],
         );
@@ -1305,7 +1303,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
-    }, [navigation, tabletLocked]),
+    }, [navigation, tabletLocked, performLogout]),
   );
 
   // Re-pick the correct tab every time the screen comes into focus (handles
@@ -1406,12 +1404,21 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // (back arrow + hardware back) become no-ops and instead nudge the
   // user to long-press the name on the home screen to unlock.
   const [tabletLocked, setTabletLocked] = useState(false);
+  // PIN-entry modal opens whenever a logout-y gesture fires while
+  // Tablet Mode is on. Successful PIN → log out + return to Login;
+  // Cancel → stay on this screen.
+  const [showUnlockForLogout, setShowUnlockForLogout] = useState(false);
   useEffect(() => {
     if (!residentId) return;
     let cancelled = false;
     isTabletModeOn(residentId).then((v) => { if (!cancelled) setTabletLocked(v); });
     return () => { cancelled = true; };
   }, [residentId]);
+
+  const performLogout = useCallback(async () => {
+    try { await clearAuth(); } catch { /* proceed regardless */ }
+    navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
+  }, [navigation]);
 
   useEffect(() => {
     setAutoSuggest(null);
@@ -2312,10 +2319,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       <View style={styles.titleRow}>
         <TouchableOpacity
           onPress={() => {
-            // Tablet Mode swallows the back arrow too — no logout dialog
-            // when the tablet is supposed to stay on this resident.
+            // Tablet Mode: prompt for the staff PIN instead of the
+            // logout dialog. Correct PIN logs out; cancel keeps the
+            // resident here.
             if (tabletLocked) {
-              navigation.navigate('Home' as never, { residentId, residentName } as never);
+              setShowUnlockForLogout(true);
               return;
             }
             // Always log out — iPads stay in resident rooms, so back
@@ -2328,10 +2336,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 {
                   text: 'Log Out',
                   style: 'destructive',
-                  onPress: async () => {
-                    try { await clearAuth(); } catch {}
-                    navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-                  },
+                  onPress: performLogout,
                 },
               ],
             );
@@ -3096,6 +3101,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
+
+      <TabletUnlockModal
+        visible={showUnlockForLogout}
+        onClose={() => setShowUnlockForLogout(false)}
+        onSuccess={() => { setShowUnlockForLogout(false); performLogout(); }}
+      />
 
     </SafeAreaView>
   );
