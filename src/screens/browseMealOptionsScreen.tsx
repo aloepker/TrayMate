@@ -1996,21 +1996,24 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return;
     }
     try {
+      // Build items inline and hand them directly to placeOrder. We
+      // deliberately do NOT call addToCart here — within a single
+      // event handler React hasn't re-rendered yet, so placeOrder's
+      // closure-captured `cart` would still be empty and we'd get a
+      // false "Order Failed" while the cart updates land seconds
+      // later (leaving phantom items visible in the cart).
+      const orderItems = items.map((item) => ({
+        id: Number(item.id),
+        name: item.name,
+        meal_period: item.meal_period as any,
+        description: item.description,
+        kcal: item.kcal,
+        sodium_mg: item.sodium_mg,
+        protein_g: item.protein_g,
+        tags: item.tags,
+      }));
       clearCart();
-      for (const item of items) {
-        addToCart({
-          id: Number(item.id),
-          name: item.name,
-          meal_period: item.meal_period as any,
-          description: item.description,
-          kcal: item.kcal,
-          sodium_mg: item.sodium_mg,
-          protein_g: item.protein_g,
-          tags: item.tags,
-        });
-      }
-      await new Promise<void>((r) => setTimeout(r, 100));
-      const result = await placeOrder(residentId, period);
+      const result = await placeOrder(residentId, period, orderItems as any);
       // Distinguish the two common no-order outcomes:
       //   - conflict      → resident already has an order for this period
       //   - complianceBlock → backend safety rule fired

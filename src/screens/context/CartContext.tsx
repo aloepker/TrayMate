@@ -47,7 +47,7 @@ type CartContextType = {
   getTotalNutrition: () => { calories: number; sodium: number; protein: number };
   // Orders
   orders: Order[];
-  placeOrder: (residentId?: string, mealOfDay?: string) => Promise<{ order: Order | null; conflict?: MealOrderResponse; complianceBlock?: ComplianceResult }>;
+  placeOrder: (residentId?: string, mealOfDay?: string, itemsOverride?: Meal[]) => Promise<{ order: Order | null; conflict?: MealOrderResponse; complianceBlock?: ComplianceResult }>;
   replaceOrder: (backendOrderId: number, residentId: string, mealOfDay?: string) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
@@ -161,13 +161,21 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     backendId?: number,
     mealOfDay?: string,
     date?: string,
+    itemsOverride?: Meal[],
   ): Order => {
-    const totals = getTotalNutrition();
+    const itemsToUse = itemsOverride ?? cart;
+    const totals = itemsOverride
+      ? {
+          calories: itemsToUse.reduce((s, m) => s + m.kcal, 0),
+          sodium:   itemsToUse.reduce((s, m) => s + m.sodium_mg, 0),
+          protein:  itemsToUse.reduce((s, m) => s + m.protein_g, 0),
+        }
+      : getTotalNutrition();
     return {
       id: backendId ? `backend_${backendId}` : `order_${Date.now()}`,
       backendId,
       residentId,
-      items: [...cart],
+      items: [...itemsToUse],
       status: 'confirmed',
       placedAt: new Date(),
       totalNutrition: totals,
@@ -183,14 +191,22 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
    */
   const placeOrder = async (
     residentId?: string,
-    mealOfDay?: string
+    mealOfDay?: string,
+    // Callers like the auto-order bell pass items directly because the
+    // cart state hasn't flushed yet by the time they invoke this in
+    // the same event handler. Without this, `cart` reads the stale
+    // closure value (empty) and we'd return `{ order: null }` even
+    // though the addToCart side-effect lands moments later — that
+    // produced the "Order Failed but items show up in cart" bug.
+    itemsOverride?: Meal[],
   ): Promise<{ order: Order | null; conflict?: MealOrderResponse; complianceBlock?: ComplianceResult }> => {
-    if (cart.length === 0) return { order: null };
+    const itemsToUse = itemsOverride && itemsOverride.length > 0 ? itemsOverride : cart;
+    if (itemsToUse.length === 0) return { order: null };
 
     const rid = residentId || 'unknown';
     const meal = mealOfDay || deriveMealOfDay();
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const itemIds = cart.map((m) => String(m.id)).join(', ');
+    const itemIds = itemsToUse.map((m) => String(m.id)).join(', ');
     const orderNote = buildOrderNote();
 
     try {
@@ -204,7 +220,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       });
 
       // Success — backend returned 201
-      const newOrder = buildLocalOrder(rid, response.id, meal, today);
+      const newOrder = buildLocalOrder(rid, response.id, meal, today, itemsToUse);
       setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       return { order: newOrder };
@@ -236,7 +252,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
       // Network error or other failure — fall back to local-only order
       console.warn('Backend order failed, saving locally:', err?.message);
-      const localOrder = buildLocalOrder(rid, undefined, meal, today);
+      const localOrder = buildLocalOrder(rid, undefined, meal, today, itemsToUse);
       setOrders((prev) => [localOrder, ...prev]);
       setCart([]);
       return { order: localOrder };
