@@ -546,11 +546,14 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       {/* Meal rows */}
                       {order.items.map((item, idx) => {
                         const img = getMealImage(item.name);
+                        const remoteUri = (item as any).imageUrl?.trim?.() || null;
                         const ph  = getMealPlaceholder(item.name);
                         return (
                           <View key={`${item.id}-${idx}`} style={styles.mealRow}>
                             {img ? (
                               <Image source={img} style={styles.mealThumb} />
+                            ) : remoteUri ? (
+                              <Image source={{ uri: remoteUri }} style={styles.mealThumb} />
                             ) : (
                               <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
                                 <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
@@ -696,11 +699,14 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                     </View>
                     {order.items.map((item, idx) => {
                       const img = getMealImage(item.name);
+                      const remoteUri = (item as any).imageUrl?.trim?.() || null;
                       const ph  = getMealPlaceholder(item.name);
                       return (
                         <View key={`${item.id}-${idx}`} style={styles.completedRow}>
                           {img ? (
                             <Image source={img} style={styles.completedThumb} />
+                          ) : remoteUri ? (
+                            <Image source={{ uri: remoteUri }} style={styles.completedThumb} />
                           ) : (
                             <View style={[styles.completedThumbPlaceholder, { backgroundColor: ph.bg }]}>
                               <Feather name="coffee" size={14} color={COLORS.primary} />

@@ -308,6 +308,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
             sodium_mg: m.sodium,
             protein_g: m.protein,
             tags: m.tags ? m.tags.split(',').map((t) => t.trim()) : [],
+            // Carry the meal photo through so upcoming-meals + history
+            // screens can render the same image the menu uses, instead
+            // of falling back to the generic fork-and-knife placeholder.
+            imageUrl: (m as any).imageUrl ?? undefined,
           };
         }),
         status: (() => {
@@ -318,17 +322,27 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           if (['confirmed','preparing','ready','completed'].includes(s)) return s as Order['status'];
           return 'confirmed';
         })(),
-        // Prefer the real `createdAt` timestamp (DATETIME on the backend).
-        // Fall back to the old `date` (LocalDate) if an older backend
-        // still serves it — but that path is the one that produced the
-        // "5pm everywhere" bug since `new Date("YYYY-MM-DD")` lands on
-        // UTC midnight and shifts back into the previous day at most
-        // US timezones. Keeping it only as a last resort.
-        placedAt: new Date(
-          (entry.order as any).createdAt
-          ?? (entry.order as any).date
-          ?? Date.now()
-        ),
+        // Prefer the real `createdAt` timestamp (DATETIME on the
+        // backend). If the backend is still on the old schema and only
+        // sends a YYYY-MM-DD `date` string, do NOT parse it directly —
+        // `new Date("2026-05-13")` resolves to UTC midnight and lands
+        // hours earlier in the device's timezone, which is the source
+        // of the "every order shows 5pm" bug. Workaround: if the date
+        // is today, use the device's clock as a best-effort timestamp;
+        // for older dates, use local noon so the date displays correctly
+        // and doesn't shift back into the previous day.
+        placedAt: (() => {
+          const order = entry.order as any;
+          if (order?.createdAt) return new Date(order.createdAt);
+          const rawDate = order?.date;
+          if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            return rawDate === todayStr
+              ? new Date()
+              : new Date(`${rawDate}T12:00:00`);
+          }
+          return new Date(rawDate ?? Date.now());
+        })(),
         totalNutrition: {
           calories: entry.meals.reduce((sum, m) => sum + m.calories, 0),
           sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),
