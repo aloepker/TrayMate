@@ -1237,9 +1237,26 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // resident lands directly on Breakfast / Lunch / Dinner; between meals
   // or after the kitchen closes they land on "All Day" (which includes
   // tomorrow-breakfast pre-order after 7 PM — see loadMenu below).
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(getInitialPeriodFromClock);
+  // If the caller passed an `initialPeriod` route param (e.g. the
+  // Upcoming Meals "Order Breakfast" card), honor it instead of the
+  // clock-based default so the resident lands on the matching tab.
+  const initialPeriodFromRoute: PeriodOption | null = (() => {
+    const requested = route?.params?.initialPeriod;
+    if (!requested) return null;
+    const match = PERIOD_KEYS.find(
+      (p) =>
+        p.key.toLowerCase() === String(requested).toLowerCase()
+        || p.value?.toLowerCase() === String(requested).toLowerCase(),
+    );
+    return match ?? null;
+  })();
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption>(
+    initialPeriodFromRoute ?? getInitialPeriodFromClock(),
+  );
   // True when the user has tapped a tab themselves; suppresses clock-driven auto-advance.
-  const userPickedRef = useRef(false);
+  // Pre-seed it when the route forced a period so the focus effect doesn't
+  // immediately overwrite it back to "current meal of day".
+  const userPickedRef = useRef<boolean>(!!initialPeriodFromRoute);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [_rawServiceMeals, setRawServiceMeals] = useState<ServiceMeal[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
@@ -1319,13 +1336,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }, [navigation, tabletLocked, performLogout]),
   );
 
-  // Re-pick the correct tab every time the screen comes into focus (handles
-  // the case where the screen stayed mounted in the background while time passed).
+  // Re-pick the correct tab every time the screen comes into focus
+  // (handles the case where the screen stayed mounted in the
+  // background while time passed). If the caller asked for a
+  // specific period via route param, honor that instead of the clock.
   useFocusEffect(
     useCallback(() => {
+      if (initialPeriodFromRoute) {
+        userPickedRef.current = true;
+        setSelectedPeriod(initialPeriodFromRoute);
+        return;
+      }
       userPickedRef.current = false;
       setSelectedPeriod(getInitialPeriodFromClock());
-    }, []),
+    // We deliberately re-evaluate this every focus so a fresh
+    // navigation with a new `initialPeriod` jumps to the new tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [route?.params?.initialPeriod]),
   );
 
   // ── Refresh resident profile on focus ──────────────────────────
