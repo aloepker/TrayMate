@@ -217,7 +217,14 @@ function mergeBundledIntoBackend(backend: Meal[], bundled: Meal[]): Meal[] {
   const backendNames = new Set(
     backend.map((m) => m.name.toLowerCase()).filter(Boolean),
   );
-  const missing = bundled.filter((m) => !backendNames.has(m.name.toLowerCase()));
+  // Tag bundled-only meals so the order-placement path can detect they
+  // don't exist on the backend. Without this flag, placing a bundled
+  // meal sends an ID the backend doesn't know about and the order
+  // comes back with that item silently missing (the "auto-order shows
+  // 3 items but Upcoming Meals shows only one" bug).
+  const missing = bundled
+    .filter((m) => !backendNames.has(m.name.toLowerCase()))
+    .map((m) => ({ ...m, _local: true } as Meal & { _local: boolean }));
   return [...backend, ...missing];
 }
 

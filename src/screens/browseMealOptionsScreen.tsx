@@ -1152,6 +1152,11 @@ function pickAutoOrderMeal(
 ): Meal | null {
   const safeCandidates = candidates
     .filter((meal) => meal.isAvailable !== false)
+    // Exclude bundle-only meals — they don't exist on the backend,
+    // so placing them would result in the order coming back missing
+    // those items. Better to suggest something the backend can
+    // actually persist.
+    .filter((meal) => !(meal as any)._local)
     .filter((meal) => isMealSafe(meal as any, profile));
 
   safeCandidates.sort((a, b) => {
