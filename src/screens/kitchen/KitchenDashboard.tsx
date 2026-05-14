@@ -1601,6 +1601,31 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </Text>
         </View>
         <View style={s.headerRight}>
+          {/* Manual refresh — reruns today's orders + coverage alerts.
+              The dashboard already polls and refreshes on focus, but
+              kitchen staff often want to confirm the screen is live
+              after taking an action elsewhere. The spinner replaces
+              the icon while in flight so they get visual feedback. */}
+          <TouchableOpacity
+            style={[s.headerLabelBtn, { backgroundColor: "#EDF2F7", borderColor: "#A0AEC0" }]}
+            onPress={async () => {
+              await Promise.all([
+                fetchAllOrders(),
+                loadCoverageAlerts(),
+              ]);
+            }}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh orders and alerts"
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#2D3748" />
+            ) : (
+              <Feather name="refresh-cw" size={18} color="#2D3748" />
+            )}
+            <Text style={[s.headerLabelBtnText, { color: "#2D3748" }]}>Refresh</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E8F5E9", borderColor: "#81C784" }]} onPress={() => setShowSeasonalModal(true)}>
             <Feather name="plus-circle" size={18} color="#2E7D32" />
             <Text style={[s.headerLabelBtnText, { color: "#2E7D32" }]}>Add Meal</Text>
