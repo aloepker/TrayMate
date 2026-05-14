@@ -425,9 +425,14 @@ export function getAllUnsafeReasons(
       }
     }
 
-    // 2d. Soft Bite / Dysphagia → texture-modified foods only
+    // 2d. Soft Bite / Dysphagia → texture-modified foods only.
+    //     Skip drinks and sides — a smoothie or soup doesn't need a
+    //     "Soft Bite" tag to be safe to swallow, and flagging Apple
+    //     Juice as unsafe for a dysphagia resident is nonsensical.
     if (condition.includes("soft bite") || condition.includes("dysphagia")) {
-      if (!isSoftBiteFriendly(meal)) {
+      const period = (meal.mealPeriod ?? "").toLowerCase();
+      const isDrinkOrSide = period === "drinks" || period === "sides";
+      if (!isDrinkOrSide && !isSoftBiteFriendly(meal)) {
         violations.push({
           severity: "medical",
           category: "condition-texture",

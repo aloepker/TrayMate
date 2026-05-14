@@ -159,6 +159,26 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   const activeOrders    = residentOrders.filter((o) => o.status !== 'completed');
   const completedOrders = residentOrders.filter((o) => o.status === 'completed');
 
+  // Three fixed buckets shown even when empty so the resident can see
+  // at a glance which meals they still need to pick. Matches the
+  // facility's serving cadence — one tray per period per day.
+  const MEAL_BUCKETS: Array<{ key: string; label: string; serves: string }> = [
+    { key: 'Breakfast', label: 'Breakfast', serves: 'Served 7 – 10 AM' },
+    { key: 'Lunch',     label: 'Lunch',     serves: 'Served 11 AM – 2 PM' },
+    { key: 'Dinner',    label: 'Dinner',    serves: 'Served 4 – 7 PM' },
+  ];
+  const matchesPeriod = (order: Order, period: string): boolean => {
+    const mod = (order.mealOfDay ?? '').toLowerCase();
+    return mod === period.toLowerCase()
+        || (period === 'Breakfast' && mod === 'b')
+        || (period === 'Lunch'     && mod === 'l')
+        || (period === 'Dinner'    && mod === 'd');
+  };
+  const bucketedActiveOrders = MEAL_BUCKETS.map((b) => ({
+    ...b,
+    order: activeOrders.find((o) => matchesPeriod(o, b.key)) ?? null,
+  }));
+
   // ── Status config ─────────────────────────────────────────────────────────
   const statusConfig: Record<
     Order['status'],
@@ -361,14 +381,41 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               </View>
             )}
 
-            {/* ── Active Orders ── */}
-            {activeOrders.length > 0 && (
-              <>
-                <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>
-                  {t.activeOrdersLabel}
-                </Text>
-
-                {activeOrders.map((order) => {
+            {/* ── Active Orders, grouped by meal period ──
+                Always render all three sections so the resident sees
+                at a glance which trays still need a pick. The card
+                body for filled buckets is the existing detailed card;
+                empty buckets show a one-tap "Order now" placeholder. */}
+            {bucketedActiveOrders.map((bucket) => {
+              if (!bucket.order) {
+                return (
+                  <View key={`bucket-${bucket.key}`} style={{ marginBottom: 12 }}>
+                    <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>
+                      {bucket.label}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.mealCard, { paddingVertical: 18, alignItems: 'center' }]}
+                      onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions, foodAllergies, initialPeriod: bucket.key })}
+                      activeOpacity={0.85}
+                    >
+                      <Feather name="plus-circle" size={22} color={COLORS.primary} />
+                      <Text style={[{ fontSize: scaled(15), color: COLORS.primary, fontWeight: '700', marginTop: 6 }]}>
+                        Order {bucket.label}
+                      </Text>
+                      <Text style={[{ fontSize: scaled(12), color: '#6B7280', marginTop: 2 }]}>
+                        {bucket.serves}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+              const order = bucket.order;
+              return (
+                <View key={`bucket-${bucket.key}`}>
+                  <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>
+                    {bucket.label}
+                  </Text>
+                  {(() => {
                   const expanded   = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];
                   const minsLeft   = minutesUntilReady(order.placedAt);
@@ -627,9 +674,10 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       )}
                     </TouchableOpacity>
                   );
-                })}
-              </>
-            )}
+                  })()}
+                </View>
+              );
+            })}
 
             {/* ── Completed Orders ── */}
             {completedOrders.length > 0 && (

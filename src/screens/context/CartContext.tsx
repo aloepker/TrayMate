@@ -318,8 +318,17 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           if (['confirmed','preparing','ready','completed'].includes(s)) return s as Order['status'];
           return 'confirmed';
         })(),
-        // Use ISO string from backend directly — preserves actual timestamp
-        placedAt: new Date((entry.order as any).date ?? (entry.order as any).createdAt ?? Date.now()),
+        // Prefer the real `createdAt` timestamp (DATETIME on the backend).
+        // Fall back to the old `date` (LocalDate) if an older backend
+        // still serves it — but that path is the one that produced the
+        // "5pm everywhere" bug since `new Date("YYYY-MM-DD")` lands on
+        // UTC midnight and shifts back into the previous day at most
+        // US timezones. Keeping it only as a last resort.
+        placedAt: new Date(
+          (entry.order as any).createdAt
+          ?? (entry.order as any).date
+          ?? Date.now()
+        ),
         totalNutrition: {
           calories: entry.meals.reduce((sum, m) => sum + m.calories, 0),
           sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),

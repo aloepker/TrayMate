@@ -1835,20 +1835,49 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const candidateMeals = autoOrderMeals.length > 0 ? autoOrderMeals : meals;
     if (autoSuggestDismissed || candidateMeals.length === 0) return;
 
-    const next = getNextMealPeriod(currentTime);
-    if (!next) return;
-    const upcoming = next.period;
-
-    // Check if resident already has a current order for this period
+    // Walk Breakfast → Lunch → Dinner starting from whichever period
+    // is current/upcoming, and pick the first one the resident hasn't
+    // already placed an order for. Previously we only checked the
+    // single "next" period and gave up if it was taken — meaning a
+    // resident who ordered breakfast at 8am stopped seeing any
+    // suggestions until lunch started, when they could have been
+    // preparing the lunch tray hours earlier.
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
     const today = new Date().toISOString().slice(0, 10);
-    const hasOrderForPeriod = hasOrderForPeriodOnDate(resOrders, upcoming.label, today);
-    if (hasOrderForPeriod) {
+
+    const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+    const startIdx = (() => {
+      // Current period if we're inside one, otherwise the next one.
+      for (let i = 0; i < MEAL_SCHEDULE.length; i++) {
+        const s = MEAL_SCHEDULE[i];
+        if (nowMins < s.end) return i;
+      }
+      // After dinner — wrap to tomorrow's breakfast.
+      return 0;
+    })();
+
+    let suggestionSlot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean } | null = null;
+    for (let offset = 0; offset < MEAL_SCHEDULE.length; offset++) {
+      const idx = (startIdx + offset) % MEAL_SCHEDULE.length;
+      const period = MEAL_SCHEDULE[idx];
+      if (hasOrderForPeriodOnDate(resOrders, period.label, today)) continue;
+      const isNow = nowMins >= period.start && nowMins < period.end;
+      const minsUntil = isNow
+        ? period.end - nowMins
+        : (period.start > nowMins
+            ? period.start - nowMins
+            : 24 * 60 - nowMins + period.start);
+      suggestionSlot = { period, minsUntil, isNow };
+      break;
+    }
+    if (!suggestionSlot) {
+      // All three periods are already ordered for today.
       setAutoSuggest(null);
       setPendingAutoOrder(null);
       setShowAutoOrderPanel(false);
       return;
     }
+    const upcoming = suggestionSlot.period;
 
     const allPastItems = resOrders.flatMap((o) => o.items);
 
@@ -1904,8 +1933,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     const suggestion = {
       period: upcoming.label,
-      minsUntil: next.minsUntil,
-      isNow: next.isNow,
+      minsUntil: suggestionSlot.minsUntil,
+      isNow: suggestionSlot.isNow,
       meal: mainMeal,
       drink: suggestDrink,
       dessert: suggestDessert,

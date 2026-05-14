@@ -91,3 +91,15 @@ CREATE TABLE IF NOT EXISTS app_settings (
 INSERT INTO app_settings (setting_key, setting_value, updated_at)
 SELECT 'tablet.pin', '1234', CURRENT_TIMESTAMP(6)
 WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_key = 'tablet.pin');
+
+-- Real timestamp on each order row. The `date` column is LocalDate
+-- (no time), which was being parsed as UTC midnight on the frontend
+-- and rendering as 5/7/8pm depending on the device timezone. Backfill
+-- existing rows to the start of the `date` so old orders still sort
+-- correctly.
+ALTER TABLE meal_orders
+    ADD COLUMN IF NOT EXISTS created_at DATETIME(6) NULL;
+
+UPDATE meal_orders
+   SET created_at = TIMESTAMP(date, '00:00:00')
+ WHERE created_at IS NULL AND date IS NOT NULL;

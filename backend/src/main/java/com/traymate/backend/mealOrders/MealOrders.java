@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "meal_orders")
@@ -38,4 +39,18 @@ public class MealOrders {
 
     @Column(name = "special_instructions", length = 1000)
     private String specialInstructions;
+
+    // Real timestamp of when the order row was created. The existing
+    // `date` field is a LocalDate (no time component) which the
+    // frontend was parsing as UTC midnight — that's the origin of the
+    // "every order shows 5pm" bug across all timezones.
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    public void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
 }
