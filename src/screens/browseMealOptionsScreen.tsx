@@ -2000,6 +2000,33 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       }
       await new Promise<void>((r) => setTimeout(r, 100));
       const result = await placeOrder(residentId, period);
+      // Distinguish the two common no-order outcomes:
+      //   - conflict      → resident already has an order for this period
+      //   - complianceBlock → backend safety rule fired
+      // both return order: null, but each deserves its own message.
+      if (!result.order && result.conflict) {
+        // Stale suggestion — the resident already ordered for this
+        // period (probably via another path or in another tab). Clear
+        // the bell so it re-evaluates against the fresh order list.
+        setAutoSuggest(null);
+        setPendingAutoOrder(null);
+        setShowAutoOrderPanel(false);
+        try { if (residentId) await fetchOrderHistory(residentId); } catch {}
+        Alert.alert(
+          'Already ordered',
+          `There's already a ${period} order on file for today. Open Upcoming Meals to view or change it.`,
+        );
+        return;
+      }
+      if (!result.order && result.complianceBlock) {
+        setAutoSuggest(null);
+        setPendingAutoOrder(null);
+        setShowAutoOrderPanel(false);
+        const firstReason = (result.complianceBlock as any)?.violations?.[0]?.reason
+          ?? 'A dietary rule blocked this meal.';
+        Alert.alert('Restricted', firstReason);
+        return;
+      }
       if (result.order) {
         setAutoSuggestDismissed(true);
         setAutoSuggest(null);
