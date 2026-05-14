@@ -925,7 +925,13 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
                       // Also persist to storage for future navigations
                       setResidentCaregivers(String(r.id), caregiversArray);
-                      navigation.navigate("BrowseMealOptions", {
+                      // Land on Upcoming Meals (the per-period summary)
+                      // instead of the menu. Caregivers and admins
+                      // typically open a resident's session to confirm
+                      // what's been ordered today; the menu is one tap
+                      // deeper via the "Order Breakfast/Lunch/Dinner"
+                      // cards.
+                      navigation.navigate("UpcomingMeals", {
                         residentId: r.id,
                         residentName: r.name,
                         dietaryRestrictions: r.dietaryRestrictions ?? [],
@@ -933,9 +939,6 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                         caregiverId: firstCgId,
                         caregiverName: firstCgName,
                         assignedCaregivers: caregiversArray,
-                        // Marks this navigation as "staff viewing as resident".
-                        // The browse screen reads this to switch the back-button
-                        // behaviour from "log out resident" to "return to admin".
                         viewerRole: 'admin',
                       });
                     }}

@@ -43,7 +43,11 @@ export default function Login({ navigation }: any) {
       case "ROLE_CAREGIVER":    navigation.replace("CaregiverDashboard"); break;
       case "ROLE_KITCHEN":      navigation.replace("KitchenDashboard"); break;
       case "ROLE_KITCHEN_STAFF":navigation.replace("KitchenDashboard"); break;
-      default:                  navigation.replace("Home");
+      // Residents land on Upcoming Meals (the per-period summary). The
+      // menu is reachable from there via the Order Breakfast / Lunch
+      // / Dinner cards, keeping the daily "what am I eating today"
+      // question one screen away.
+      default:                  navigation.replace("UpcomingMeals");
     }
   };
 
