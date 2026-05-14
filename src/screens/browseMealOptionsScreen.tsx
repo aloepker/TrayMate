@@ -2890,22 +2890,41 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   onValueChange={(val) => {
                                     if (val === '__none__') {
                                       setSelectedDrink(null);
-                                    } else {
-                                      const found = availableDrinks.find(d => d.id === val);
-                                      setSelectedDrink(found ?? null);
+                                      return;
                                     }
+                                    const found = availableDrinks.find(d => d.id === val);
+                                    if (!found) { setSelectedDrink(null); return; }
+                                    // Block selection of restricted drinks at the
+                                    // source rather than waiting until the resident
+                                    // hits "Add to cart". The dropdown also marks
+                                    // them with ⚠ below — this is the safety net.
+                                    const reason = getMealUnsafeReason(found);
+                                    if (reason) {
+                                      Alert.alert(
+                                        'Restricted drink',
+                                        `${found.name} is flagged: ${reason}. Pick a different drink, or skip the drink.`,
+                                      );
+                                      setSelectedDrink(null);
+                                      return;
+                                    }
+                                    setSelectedDrink(found);
                                   }}
                                   style={styles.drinkPicker}
                                   itemStyle={styles.drinkPickerItem}
                                 >
                                   <Picker.Item label="— No drink —" value="__none__" />
-                                  {availableDrinks.map(drink => (
-                                    <Picker.Item
-                                      key={drink.id}
-                                      label={`${translateMealName(drink.name, language)}  ·  ${drink.kcal} kcal`}
-                                      value={drink.id}
-                                    />
-                                  ))}
+                                  {availableDrinks.map(drink => {
+                                    const reason = getMealUnsafeReason(drink);
+                                    const prefix = reason ? '⚠ ' : '';
+                                    const suffix = reason ? '  ·  Restricted' : `  ·  ${drink.kcal} kcal`;
+                                    return (
+                                      <Picker.Item
+                                        key={drink.id}
+                                        label={`${prefix}${translateMealName(drink.name, language)}${suffix}`}
+                                        value={drink.id}
+                                      />
+                                    );
+                                  })}
                                 </Picker>
                               </View>
                               {selectedDrink && (
@@ -2935,22 +2954,37 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   onValueChange={(val) => {
                                     if (val === '__none__') {
                                       setSelectedSide(null);
-                                    } else {
-                                      const found = availableSides.find(s => s.id === val);
-                                      setSelectedSide(found ?? null);
+                                      return;
                                     }
+                                    const found = availableSides.find(s => s.id === val);
+                                    if (!found) { setSelectedSide(null); return; }
+                                    const reason = getMealUnsafeReason(found);
+                                    if (reason) {
+                                      Alert.alert(
+                                        'Restricted side',
+                                        `${found.name} is flagged: ${reason}. Pick a different side, or skip the side.`,
+                                      );
+                                      setSelectedSide(null);
+                                      return;
+                                    }
+                                    setSelectedSide(found);
                                   }}
                                   style={styles.drinkPicker}
                                   itemStyle={styles.drinkPickerItem}
                                 >
                                   <Picker.Item label="— No side —" value="__none__" />
-                                  {availableSides.map(side => (
-                                    <Picker.Item
-                                      key={side.id}
-                                      label={`${translateMealName(side.name, language)}  ·  ${side.kcal} kcal`}
-                                      value={side.id}
-                                    />
-                                  ))}
+                                  {availableSides.map(side => {
+                                    const reason = getMealUnsafeReason(side);
+                                    const prefix = reason ? '⚠ ' : '';
+                                    const suffix = reason ? '  ·  Restricted' : `  ·  ${side.kcal} kcal`;
+                                    return (
+                                      <Picker.Item
+                                        key={side.id}
+                                        label={`${prefix}${translateMealName(side.name, language)}${suffix}`}
+                                        value={side.id}
+                                      />
+                                    );
+                                  })}
                                 </Picker>
                               </View>
                               {selectedSide && (
