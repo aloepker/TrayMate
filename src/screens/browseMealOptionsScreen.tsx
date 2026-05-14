@@ -1080,16 +1080,28 @@ const mergeSafetyProfile = (
 ): SafetyResident => {
   const routeProfile = buildSafetyProfileFromParams(params);
   const base = fallback ?? EMPTY_SAFETY_PROFILE;
+  // UNION the lists from both sources rather than picking one. The
+  // bug: when a parent screen forwarded `foodAllergies: []` through
+  // route params, the previous "route wins if key present" logic
+  // overrode the local resident record (which DID have the allergy),
+  // and the auto-suggest filter would happily recommend a dairy meal
+  // for a dairy-allergic resident. Unioning means as long as either
+  // side knows about the allergy, we treat the meal as unsafe.
+  const dedupe = (a: string[] = [], b: string[] = []): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const v of [...a, ...b]) {
+      const norm = String(v ?? '').trim().toLowerCase();
+      if (!norm || seen.has(norm)) continue;
+      seen.add(norm);
+      out.push(String(v).trim());
+    }
+    return out;
+  };
   return {
-    foodAllergies: hasProfileParamKey(params, 'foodAllergies')
-      ? routeProfile.foodAllergies
-      : base.foodAllergies ?? [],
-    dietaryRestrictions: hasProfileParamKey(params, 'dietaryRestrictions')
-      ? routeProfile.dietaryRestrictions
-      : base.dietaryRestrictions ?? [],
-    medicalConditions: hasProfileParamKey(params, 'medicalConditions')
-      ? routeProfile.medicalConditions
-      : base.medicalConditions ?? [],
+    foodAllergies:        dedupe(routeProfile.foodAllergies,        base.foodAllergies),
+    dietaryRestrictions:  dedupe(routeProfile.dietaryRestrictions,  base.dietaryRestrictions),
+    medicalConditions:    dedupe(routeProfile.medicalConditions,    base.medicalConditions),
   };
 };
 
