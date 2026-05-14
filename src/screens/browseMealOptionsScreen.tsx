@@ -284,7 +284,7 @@ const PERIOD_THEMES: Record<string, {
   allDay:    { bg: '#FAFAF8', titleColor: '#1C1C1C', subColor: '#888880', tabActiveBg: '#717644', tabActiveText: '#FFF', tabInactiveBg: 'rgba(0,0,0,0.04)',    tabInactiveText: '#555550', icon: '🍽',  buttonBg: '#FFFFFF', buttonBorder: 'rgba(113,118,68,0.2)'  },
   breakfast: { bg: '#FFFCF5', titleColor: '#3B2A14', subColor: '#8A6A40', tabActiveBg: '#9A7230', tabActiveText: '#FFF', tabInactiveBg: 'rgba(154,114,48,0.08)', tabInactiveText: '#7A5A30', icon: '🌅', buttonBg: '#FFFDF8', buttonBorder: 'rgba(154,114,48,0.2)'  },
   lunch:     { bg: '#F7FAF8', titleColor: '#1A3028', subColor: '#4A6A58', tabActiveBg: '#4A7A60', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,96,0.07)',  tabInactiveText: '#3A5A48', icon: '☀️', buttonBg: '#F5F9F6', buttonBorder: 'rgba(74,122,96,0.2)'   },
-  dinner:    { bg: '#22213A', titleColor: '#D8DAF0', subColor: '#8A8DB0', tabActiveBg: '#5C5FA8', tabActiveText: '#FFF', tabInactiveBg: 'rgba(200,205,240,0.1)', tabInactiveText: '#A8AACC', icon: '🌙', buttonBg: '#2E2C4A', buttonBorder: 'rgba(200,205,240,0.18)' },
+  dinner:    { bg: '#22213A', titleColor: '#E8EAFF', subColor: '#8A8DB0', tabActiveBg: '#7A7DC8', tabActiveText: '#FFF', tabInactiveBg: 'rgba(200,205,240,0.1)', tabInactiveText: '#A8AACC', icon: '🌙', buttonBg: '#3A385A', buttonBorder: 'rgba(232,234,255,0.45)' },
   beverages: { bg: '#F5F9FC', titleColor: '#1A3040', subColor: '#4A6A80', tabActiveBg: '#4A7A9A', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,122,154,0.07)', tabInactiveText: '#3A607A', icon: '🥤', buttonBg: '#F2F7FA', buttonBorder: 'rgba(74,122,154,0.2)'  },
   desserts:  { bg: '#FCF7FA', titleColor: '#32142A', subColor: '#7A4A68', tabActiveBg: '#8A4A72', tabActiveText: '#FFF', tabInactiveBg: 'rgba(138,74,114,0.07)', tabInactiveText: '#6A3A58', icon: '🍰', buttonBg: '#FAF4F8', buttonBorder: 'rgba(138,74,114,0.2)'  },
   seasonal:  { bg: '#F6FAF6', titleColor: '#1A3020', subColor: '#4A6848', tabActiveBg: '#4A7850', tabActiveText: '#FFF', tabInactiveBg: 'rgba(74,120,80,0.07)',  tabInactiveText: '#3A5840', icon: '🌸', buttonBg: '#F4F9F4', buttonBorder: 'rgba(74,120,80,0.2)'   },
@@ -2500,7 +2500,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions: route?.params?.dietaryRestrictions ?? [] })}
             activeOpacity={0.85}
           >
-            <Feather name="calendar" size={26} color={pt.tabActiveBg} />
+            <Feather name="calendar" size={26} color={pt.titleColor} />
           </TouchableOpacity>
           {/* Pending auto-order bell. Only renders while there's a resident
               suggestion waiting for confirm/deny. */}
@@ -2522,14 +2522,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             onPress={() => setShowBrowseSupport(true)}
             activeOpacity={0.85}
           >
-            <Feather name="help-circle" size={26} color={pt.tabActiveBg} />
+            <Feather name="help-circle" size={26} color={pt.titleColor} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={goToSettings}
             activeOpacity={0.85}
           >
-            <Feather name="settings" size={26} color={pt.tabActiveBg} />
+            <Feather name="settings" size={26} color={pt.titleColor} />
           </TouchableOpacity>
         </View>
       </View>
