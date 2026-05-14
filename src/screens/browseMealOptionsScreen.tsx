@@ -1268,6 +1268,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Pending auto-order surfaced as a notification bell (top-right of header)
   // for the resident to approve or deny directly.
   const [pendingAutoOrder, setPendingAutoOrder] = useState<PendingAuto | null>(null);
+  // Same shape, but one entry per non-ordered meal period (B / L / D).
+  // Powers the horizontal swipe in the big auto-order modal so a
+  // caregiver/resident can flip between today's remaining suggestions
+  // without closing and reopening the bell.
+  const [allPendingAutoOrders, setAllPendingAutoOrders] = useState<PendingAuto[]>([]);
+  const [autoOrderSlideIdx, setAutoOrderSlideIdx] = useState(0);
+  // Default to an approximate width so the very first paint of the
+  // FlatList has non-zero slide width; onLayout corrects it within a
+  // frame to match the actual modal inner width.
+  const [autoOrderSlideWidth, setAutoOrderSlideWidth] = useState(
+    Math.min(Dimensions.get('window').width - 48, 672),
+  );
+  const autoOrderListRef = useRef<FlatList<any>>(null);
   const [showAutoOrderPanel, setShowAutoOrderPanel] = useState(false);
 
   // ── Hardware back button → always log out ────────────────────────────
@@ -1856,29 +1869,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return 0;
     })();
 
-    let suggestionSlot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean } | null = null;
-    for (let offset = 0; offset < MEAL_SCHEDULE.length; offset++) {
-      const idx = (startIdx + offset) % MEAL_SCHEDULE.length;
-      const period = MEAL_SCHEDULE[idx];
-      if (hasOrderForPeriodOnDate(resOrders, period.label, today)) continue;
-      const isNow = nowMins >= period.start && nowMins < period.end;
-      const minsUntil = isNow
-        ? period.end - nowMins
-        : (period.start > nowMins
-            ? period.start - nowMins
-            : 24 * 60 - nowMins + period.start);
-      suggestionSlot = { period, minsUntil, isNow };
-      break;
-    }
-    if (!suggestionSlot) {
-      // All three periods are already ordered for today.
-      setAutoSuggest(null);
-      setPendingAutoOrder(null);
-      setShowAutoOrderPanel(false);
-      return;
-    }
-    const upcoming = suggestionSlot.period;
-
     const allPastItems = resOrders.flatMap((o) => o.items);
 
     // Use the centralised safety service so the auto-suggest filter
@@ -1900,48 +1890,69 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return freq;
     };
 
-    // Pick main meal from safe candidates only. History wins first, then
-    // a small medical-fit score breaks ties for residents with conditions.
-    const mealFreq = getFrequencyRanked(upcoming.label);
-    let mainMeal: Meal | null = pickAutoOrderMeal(
-      candidateMeals.filter((m) => m.meal_period === upcoming.label),
-      mealFreq,
-      residentSafetyProfile,
-    );
-    if (!mainMeal) {
+    // Build a suggestion for any given meal period. Returns null when
+    // there isn't a safe main dish for that period.
+    const buildSuggestionFor = (slot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean }) => {
+      const periodLabel = slot.period.label;
+      const mealFreq = getFrequencyRanked(periodLabel);
+      const mainMeal = pickAutoOrderMeal(
+        candidateMeals.filter((m) => m.meal_period === periodLabel),
+        mealFreq,
+        residentSafetyProfile,
+      );
+      if (!mainMeal) return null;
+      const suggestDrink = pickAutoOrderMeal(
+        availableDrinks.filter(isSafeForResident),
+        getFrequencyRanked('Drinks'),
+        residentSafetyProfile,
+      ) ?? undefined;
+      const suggestDessert = pickAutoOrderMeal(
+        availableSides.filter(isSafeForResident),
+        getFrequencyRanked('Sides'),
+        residentSafetyProfile,
+      ) ?? undefined;
+      return {
+        period: periodLabel,
+        minsUntil: slot.minsUntil,
+        isNow: slot.isNow,
+        meal: mainMeal,
+        drink: suggestDrink,
+        dessert: suggestDessert,
+      };
+    };
+
+    // Walk Breakfast → Lunch → Dinner starting from the current/next
+    // period. Skip any with an existing order. Build a suggestion for
+    // every remaining period — the modal shows them all as swipeable
+    // slides, while the bottom auto-suggest panel keeps using the
+    // closest-in-time one.
+    const allSuggestions: typeof autoSuggest[] = [] as any;
+    for (let offset = 0; offset < MEAL_SCHEDULE.length; offset++) {
+      const idx = (startIdx + offset) % MEAL_SCHEDULE.length;
+      const period = MEAL_SCHEDULE[idx];
+      if (hasOrderForPeriodOnDate(resOrders, period.label, today)) continue;
+      const isNow = nowMins >= period.start && nowMins < period.end;
+      const minsUntil = isNow
+        ? period.end - nowMins
+        : (period.start > nowMins
+            ? period.start - nowMins
+            : 24 * 60 - nowMins + period.start);
+      const s = buildSuggestionFor({ period, minsUntil, isNow });
+      if (s) allSuggestions.push(s as any);
+    }
+
+    if (allSuggestions.length === 0) {
       setAutoSuggest(null);
       setPendingAutoOrder(null);
+      setAllPendingAutoOrders([]);
       setShowAutoOrderPanel(false);
       return;
     }
-
-    // Pick drink — most frequently ordered, then fallback
-    const drinkFreq = getFrequencyRanked('Drinks');
-    const suggestDrink = pickAutoOrderMeal(
-      availableDrinks.filter(isSafeForResident),
-      drinkFreq,
-      residentSafetyProfile,
-    ) ?? undefined;
-
-    // Pick side — most frequently ordered, then fallback
-    const sideFreq = getFrequencyRanked('Sides');
-    const suggestDessert = pickAutoOrderMeal(
-      availableSides.filter(isSafeForResident),
-      sideFreq,
-      residentSafetyProfile,
-    ) ?? undefined;
-
-    const suggestion = {
-      period: upcoming.label,
-      minsUntil: suggestionSlot.minsUntil,
-      isNow: suggestionSlot.isNow,
-      meal: mainMeal,
-      drink: suggestDrink,
-      dessert: suggestDessert,
-    };
-    setAutoSuggest(suggestion);
+    const closest = allSuggestions[0]!;
+    setAutoSuggest(closest);
     if (residentId) {
-      setPendingAutoOrder(buildPendingAutoOrder(suggestion));
+      setPendingAutoOrder(buildPendingAutoOrder(closest as any));
+      setAllPendingAutoOrders(allSuggestions.map((s) => buildPendingAutoOrder(s as any)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meals, autoOrderMeals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
@@ -3098,82 +3109,152 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       >
         <View style={styles.autoOrderBackdrop}>
           <View style={styles.autoOrderCard}>
-            <View style={styles.autoOrderHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.autoOrderTitle, { fontSize: scaled(20) }]}>
-                  {t.suggestedAutoOrder}
-                </Text>
-                <Text style={[styles.autoOrderSub, { fontSize: scaled(14) }]}>
-                  {t.autoOrderConfirmSub.replace(
-                    '{period}',
-                    pendingAutoOrder?.period
-                      ? translateMealPeriod(pendingAutoOrder.period, language).toLowerCase()
-                      : '',
-                  )}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowAutoOrderPanel(false)} hitSlop={10}>
-                <Feather name="x" size={22} color="#1A1A1A" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ paddingBottom: 8 }}>
-              {pendingAutoOrder?.items.map((item) => {
-                const remoteUri = item.imageUrl && item.imageUrl.trim().length > 0 ? item.imageUrl.trim() : null;
-                const localImg = remoteUri ? null : getMealImage(item.name);
-                return (
-                  <View key={String(item.id)} style={styles.autoOrderItem}>
-                    <View style={styles.autoOrderItemImg}>
-                      <MealCardImage
-                        remoteUri={remoteUri}
-                        localImg={localImg}
-                        imgStyle={{ width: '100%', height: '100%' }}
-                        finalFallback={
-                          <Image
-                            source={require('../styles/pictures/grandma.png')}
-                            style={{ width: 40, height: 40, opacity: 0.3 }}
-                            resizeMode="contain"
-                          />
-                        }
-                      />
-                    </View>
+            {(() => {
+              // Slides drive everything: title, items, place-order target.
+              const slides = allPendingAutoOrders.length > 0
+                ? allPendingAutoOrders
+                : (pendingAutoOrder ? [pendingAutoOrder] : []);
+              const activeIdx = Math.min(autoOrderSlideIdx, Math.max(0, slides.length - 1));
+              const activeSlide = slides[activeIdx];
+              return (
+                <>
+                  <View style={styles.autoOrderHeader}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.autoOrderItemName, { fontSize: scaled(15) }]} numberOfLines={1}>
-                        {translateMealName(item.name, language)}
+                      <Text style={[styles.autoOrderTitle, { fontSize: scaled(22) }]}>
+                        {t.suggestedAutoOrder}
                       </Text>
-                      {item.description ? (
-                        <Text style={[styles.autoOrderItemDesc, { fontSize: scaled(12) }]} numberOfLines={2}>
-                          {translateMealDescription(item.description, language)}
-                        </Text>
-                      ) : null}
+                      <Text style={[styles.autoOrderSub, { fontSize: scaled(14) }]}>
+                        {t.autoOrderConfirmSub.replace(
+                          '{period}',
+                          activeSlide?.period
+                            ? translateMealPeriod(activeSlide.period, language).toLowerCase()
+                            : '',
+                        )}
+                      </Text>
                     </View>
+                    <TouchableOpacity onPress={() => setShowAutoOrderPanel(false)} hitSlop={10}>
+                      <Feather name="x" size={24} color="#1A1A1A" />
+                    </TouchableOpacity>
                   </View>
-                );
-              })}
-            </ScrollView>
 
-            <Text style={[styles.autoOrderApprovalNote, { fontSize: scaled(12) }]}>
-              {t.autoOrderApprovalNote}
-            </Text>
+                  {/* Period tabs — also serve as swipe indicators. Tap
+                      jumps the FlatList to that slide. */}
+                  {slides.length > 1 && (
+                    <View style={styles.autoOrderTabRow}>
+                      {slides.map((s, i) => {
+                        const active = i === activeIdx;
+                        return (
+                          <TouchableOpacity
+                            key={`${s.period}-${i}`}
+                            style={[styles.autoOrderTab, active && styles.autoOrderTabActive]}
+                            onPress={() => {
+                              setAutoOrderSlideIdx(i);
+                              autoOrderListRef.current?.scrollToIndex({ index: i, animated: true });
+                            }}
+                          >
+                            <Text style={[
+                              styles.autoOrderTabText,
+                              { fontSize: scaled(13) },
+                              active && styles.autoOrderTabTextActive,
+                            ]}>
+                              {translateMealPeriod(s.period, language)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
 
-            <View style={styles.autoOrderActions}>
-              <TouchableOpacity
-                style={[styles.autoOrderBtn, styles.autoOrderBtnDeny]}
-                onPress={handleDenyPendingAuto}
-                activeOpacity={0.85}
-              >
-                <Feather name="x-circle" size={16} color="#DC2626" />
-                <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(14) }]}>{t.dismiss}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.autoOrderBtn, styles.autoOrderBtnApprove]}
-                onPress={handleApprovePendingAuto}
-                activeOpacity={0.85}
-              >
-                <Feather name="check-circle" size={16} color="#FFFFFF" />
-                <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(14) }]}>{t.placeOrder}</Text>
-              </TouchableOpacity>
-            </View>
+                  {/* Horizontal swipeable slides — one per remaining period. */}
+                  <View
+                    onLayout={(e) => setAutoOrderSlideWidth(e.nativeEvent.layout.width)}
+                    style={{ marginBottom: 8 }}
+                  >
+                  <FlatList
+                    ref={autoOrderListRef}
+                    data={slides}
+                    keyExtractor={(s, i) => `${s.period}-${i}`}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={(e) => {
+                      const w = e.nativeEvent.layoutMeasurement.width;
+                      if (w > 0) {
+                        const idx = Math.round(e.nativeEvent.contentOffset.x / w);
+                        setAutoOrderSlideIdx(idx);
+                      }
+                    }}
+                    renderItem={({ item: slide }) => (
+                      <View style={[styles.autoOrderSlide, { width: autoOrderSlideWidth || undefined }]}>
+                        <ScrollView contentContainerStyle={{ paddingBottom: 4 }}>
+                          {slide.items.map((item) => {
+                            const remoteUri = item.imageUrl && item.imageUrl.trim().length > 0 ? item.imageUrl.trim() : null;
+                            const localImg = remoteUri ? null : getMealImage(item.name);
+                            return (
+                              <View key={String(item.id)} style={styles.autoOrderItem}>
+                                <View style={styles.autoOrderItemImg}>
+                                  <MealCardImage
+                                    remoteUri={remoteUri}
+                                    localImg={localImg}
+                                    imgStyle={{ width: '100%', height: '100%' }}
+                                    finalFallback={
+                                      <Image
+                                        source={require('../styles/pictures/grandma.png')}
+                                        style={{ width: 40, height: 40, opacity: 0.3 }}
+                                        resizeMode="contain"
+                                      />
+                                    }
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[styles.autoOrderItemName, { fontSize: scaled(16) }]} numberOfLines={1}>
+                                    {translateMealName(item.name, language)}
+                                  </Text>
+                                  {item.description ? (
+                                    <Text style={[styles.autoOrderItemDesc, { fontSize: scaled(13) }]} numberOfLines={2}>
+                                      {translateMealDescription(item.description, language)}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+                  />
+                  </View>
+
+                  <Text style={[styles.autoOrderApprovalNote, { fontSize: scaled(12) }]}>
+                    {t.autoOrderApprovalNote}
+                  </Text>
+
+                  <View style={styles.autoOrderActions}>
+                    <TouchableOpacity
+                      style={[styles.autoOrderBtn, styles.autoOrderBtnDeny]}
+                      onPress={handleDenyPendingAuto}
+                      activeOpacity={0.85}
+                    >
+                      <Feather name="x-circle" size={18} color="#DC2626" />
+                      <Text style={[styles.autoOrderBtnDenyText, { fontSize: scaled(15) }]}>{t.dismiss}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.autoOrderBtn, styles.autoOrderBtnApprove]}
+                      onPress={() => {
+                        // Place the slide the user is currently looking at,
+                        // not whatever was first in the list.
+                        if (activeSlide) setPendingAutoOrder(activeSlide);
+                        handleApprovePendingAuto();
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Feather name="check-circle" size={18} color="#FFFFFF" />
+                      <Text style={[styles.autoOrderBtnApproveText, { fontSize: scaled(15) }]}>{t.placeOrder}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -3345,15 +3426,47 @@ const styles = StyleSheet.create({
   },
   autoOrderCard: {
     width: '100%',
-    maxWidth: 520,
+    maxWidth: 720,
+    maxHeight: '90%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 22,
+    padding: 24,
     shadowColor: '#000',
     shadowOpacity: 0.18,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
+  },
+  autoOrderTabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  autoOrderTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#E2DFD8',
+    backgroundColor: '#F5F3EE',
+    alignItems: 'center',
+  },
+  autoOrderTabActive: {
+    backgroundColor: '#717644',
+    borderColor: '#717644',
+  },
+  autoOrderTabText: {
+    fontWeight: '700',
+    color: '#6D6B3B',
+  },
+  autoOrderTabTextActive: {
+    color: '#FFFFFF',
+  },
+  autoOrderSlide: {
+    width: 672, // matches autoOrderCard inner width at maxWidth (720 - 48 padding)
+    maxWidth: '100%',
+    paddingHorizontal: 0,
   },
   autoOrderHeader: {
     flexDirection: 'row',
