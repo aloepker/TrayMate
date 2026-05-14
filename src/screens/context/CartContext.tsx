@@ -9,6 +9,7 @@ import {
   type ComplianceResult,
 } from '../../services/api';
 import { cachePersistedMealTranslations } from '../../services/mealLocalization';
+import { getOrderPlacedAt, setOrderPlacedAt } from '../../services/storage';
 
 // Meal type definition
 type Meal = {
@@ -219,8 +220,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         specialInstructions: orderNote,
       });
 
-      // Success — backend returned 201
+      // Success — backend returned 201. Snapshot the device clock as
+      // the canonical placedAt for this order so every future
+      // re-fetch (which loses the time when reading back a LocalDate)
+      // can recover the original moment instead of falling back to
+      // noon-of-the-day. Fire-and-forget; if storage fails we still
+      // keep the in-memory value.
       const newOrder = buildLocalOrder(rid, response.id, meal, today, itemsToUse);
+      if (response.id != null) {
+        setOrderPlacedAt(response.id, newOrder.placedAt).catch(() => {});
+      }
       setOrders((prev) => [newOrder, ...prev]);
       setCart([]);
       return { order: newOrder };
@@ -307,6 +316,21 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       const history = await getOrderHistoryApi(userId);
       if (!history || history.length === 0) return;
 
+      // Pre-load device-clock placedAt snapshots for every order in
+      // the response. This is the per-tablet record of when an order
+      // was actually placed — used to override the backend's bare
+      // LocalDate (which has no time component) and survives app
+      // restarts.
+      const cachedPlacedAt = new Map<string, Date>();
+      await Promise.all(
+        history.map(async (entry) => {
+          const id = entry?.order?.id;
+          if (id == null) return;
+          const cached = await getOrderPlacedAt(id);
+          if (cached) cachedPlacedAt.set(String(id), cached);
+        }),
+      );
+
       const backendOrders: Order[] = history
       .filter((entry) => !deletedBackendIds.has(entry.order.id))
       .map((entry) => ({
@@ -371,19 +395,17 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           if (o.backendId != null) prevByBackendId.set(String(o.backendId), o);
         }
         const resolvePlacedAt = (entry: any, fallbackOrder: Order): Date => {
+          // Priority order, most authoritative first:
+          //   1. Backend createdAt (real DATETIME, once deployed)
+          //   2. EncryptedStorage cache (device clock at place time)
+          //   3. Already-in-memory placedAt (don't drift across renders)
+          //   4. Parse the bare LocalDate at noon local (stable, no TZ shift)
           const raw = entry?.createdAt;
           if (raw) return new Date(raw);
-          // Backend hasn't deployed createdAt yet. Use the placedAt
-          // we already stored — usually the original local timestamp
-          // from when the order was placed. Only manufacture a new
-          // one if this is the first time we're seeing the order.
+          const cached = cachedPlacedAt.get(String(fallbackOrder.backendId));
+          if (cached) return cached;
           const existing = prevByBackendId.get(String(fallbackOrder.backendId));
           if (existing) return existing.placedAt;
-          // First sight of this order. Best-effort: if the backend
-          // date is today, use noon local (stable, won't drift); for
-          // older orders, parse the date with a noon offset so the
-          // calendar day doesn't slip into the previous day in TZs
-          // west of UTC.
           const rawDate = entry?.date;
           if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
             return new Date(`${rawDate}T12:00:00`);

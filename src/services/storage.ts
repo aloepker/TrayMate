@@ -181,6 +181,36 @@ export async function setTabletMode(residentId: string | number, on: boolean): P
   await EncryptedStorage.setItem(TABLET_MODE_PREFIX + String(residentId), on ? "1" : "0");
 }
 
+// ============== ORDER PLACED-AT CACHE ==============
+//
+// The backend stores meal_orders.date as a LocalDate (no time). Until
+// the new created_at column is rolled out (and even after, as a safety
+// net), we snapshot the device's clock the FIRST time the frontend
+// places an order and persist that timestamp by orderId. Subsequent
+// refreshes read this snapshot instead of recomputing from the bare
+// date — which is how every order ended up displaying 12:00 PM.
+
+const ORDER_PLACED_AT_PREFIX = "order_placed_at_";
+
+export async function getOrderPlacedAt(orderId: string | number): Promise<Date | null> {
+  try {
+    const v = await EncryptedStorage.getItem(ORDER_PLACED_AT_PREFIX + String(orderId));
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+
+export async function setOrderPlacedAt(orderId: string | number, when: Date): Promise<void> {
+  try {
+    await EncryptedStorage.setItem(ORDER_PLACED_AT_PREFIX + String(orderId), when.toISOString());
+  } catch {
+    /* storage failure isn't fatal — caller still has the in-memory time */
+  }
+}
+
 /*import { Platform } from "react-native";
 import EncryptedStorage from "react-native-encrypted-storage";
 

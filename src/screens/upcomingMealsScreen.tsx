@@ -174,10 +174,30 @@ function UpcomingMealsScreen({ navigation, route }: any) {
         || (period === 'Lunch'     && mod === 'l')
         || (period === 'Dinner'    && mod === 'd');
   };
-  const bucketedActiveOrders = MEAL_BUCKETS.map((b) => ({
-    ...b,
-    order: activeOrders.find((o) => matchesPeriod(o, b.key)) ?? null,
-  }));
+  // An order only belongs in a B/L/D bucket if it actually contains a
+  // main meal for that period. A standalone drink or side order would
+  // otherwise occupy the breakfast slot and visually hide that the
+  // resident still hasn't picked a real meal.
+  const hasMainMealFor = (order: Order, period: string): boolean => {
+    if (!order.items || order.items.length === 0) return false;
+    return order.items.some((it) => {
+      const p = String((it as any).meal_period ?? '').toLowerCase();
+      return p === period.toLowerCase() || p === 'all day';
+    });
+  };
+  const bucketedActiveOrders = MEAL_BUCKETS.map((b) => {
+    // Prefer an order that has a main item for this period. Fall back
+    // to a period-matching order even if it's only drinks/sides — so
+    // that an old drink-only order still shows somewhere instead of
+    // disappearing entirely.
+    const withMain = activeOrders.find(
+      (o) => matchesPeriod(o, b.key) && hasMainMealFor(o, b.key),
+    );
+    const anyMatch = withMain
+      ?? activeOrders.find((o) => matchesPeriod(o, b.key))
+      ?? null;
+    return { ...b, order: anyMatch };
+  });
 
   // ── Status config ─────────────────────────────────────────────────────────
   const statusConfig: Record<
