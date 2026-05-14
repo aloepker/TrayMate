@@ -322,27 +322,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           if (['confirmed','preparing','ready','completed'].includes(s)) return s as Order['status'];
           return 'confirmed';
         })(),
-        // Prefer the real `createdAt` timestamp (DATETIME on the
-        // backend). If the backend is still on the old schema and only
-        // sends a YYYY-MM-DD `date` string, do NOT parse it directly —
-        // `new Date("2026-05-13")` resolves to UTC midnight and lands
-        // hours earlier in the device's timezone, which is the source
-        // of the "every order shows 5pm" bug. Workaround: if the date
-        // is today, use the device's clock as a best-effort timestamp;
-        // for older dates, use local noon so the date displays correctly
-        // and doesn't shift back into the previous day.
-        placedAt: (() => {
-          const order = entry.order as any;
-          if (order?.createdAt) return new Date(order.createdAt);
-          const rawDate = order?.date;
-          if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-            const todayStr = new Date().toISOString().slice(0, 10);
-            return rawDate === todayStr
-              ? new Date()
-              : new Date(`${rawDate}T12:00:00`);
-          }
-          return new Date(rawDate ?? Date.now());
-        })(),
+        // Placeholder — replaced below inside setOrders so we can
+        // preserve the original placedAt from prior state and avoid
+        // the "time keeps moving" bug when the backend hasn't shipped
+        // the createdAt column yet.
+        placedAt: new Date(0),
         totalNutrition: {
           calories: entry.meals.reduce((sum, m) => sum + m.calories, 0),
           sodium: entry.meals.reduce((sum, m) => sum + m.sodium, 0),
@@ -362,10 +346,45 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         const localOnlyForThisResident = prev.filter(
           (o) => String(o.residentId) === String(userId) && !o.backendId,
         );
+        // Build a lookup so we can carry forward each order's existing
+        // placedAt — that timestamp is set ONCE (either by the backend
+        // createdAt or by the local Date.now() at place time) and must
+        // not drift on subsequent refreshes.
+        const prevByBackendId = new Map<string, Order>();
+        for (const o of prev) {
+          if (o.backendId != null) prevByBackendId.set(String(o.backendId), o);
+        }
+        const resolvePlacedAt = (entry: any, fallbackOrder: Order): Date => {
+          const raw = entry?.createdAt;
+          if (raw) return new Date(raw);
+          // Backend hasn't deployed createdAt yet. Use the placedAt
+          // we already stored — usually the original local timestamp
+          // from when the order was placed. Only manufacture a new
+          // one if this is the first time we're seeing the order.
+          const existing = prevByBackendId.get(String(fallbackOrder.backendId));
+          if (existing) return existing.placedAt;
+          // First sight of this order. Best-effort: if the backend
+          // date is today, use noon local (stable, won't drift); for
+          // older orders, parse the date with a noon offset so the
+          // calendar day doesn't slip into the previous day in TZs
+          // west of UTC.
+          const rawDate = entry?.date;
+          if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+            return new Date(`${rawDate}T12:00:00`);
+          }
+          return new Date(rawDate ?? Date.now());
+        };
+        const resolved = backendOrders.map((o) => ({
+          ...o,
+          placedAt: resolvePlacedAt(
+            history.find((h) => h.order.id === o.backendId)?.order,
+            o,
+          ),
+        }));
         // Map keyed by backendId so duplicates collapse — last write wins
         // (which is fine; the backend payload is the source of truth).
-        const seen = new Map<string, typeof backendOrders[number]>();
-        for (const o of backendOrders) {
+        const seen = new Map<string, typeof resolved[number]>();
+        for (const o of resolved) {
           if (o.backendId != null) seen.set(String(o.backendId), o);
         }
         return [
