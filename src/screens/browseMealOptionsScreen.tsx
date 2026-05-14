@@ -2915,13 +2915,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   <Picker.Item label="— No drink —" value="__none__" />
                                   {availableDrinks.map(drink => {
                                     const reason = getMealUnsafeReason(drink);
-                                    const prefix = reason ? '⚠ ' : '';
-                                    const suffix = reason ? '  ·  Restricted' : `  ·  ${drink.kcal} kcal`;
+                                    const prefix = reason ? '🚫  ' : '';
+                                    const suffix = reason ? '  ·  RESTRICTED' : `  ·  ${drink.kcal} kcal`;
                                     return (
                                       <Picker.Item
                                         key={drink.id}
                                         label={`${prefix}${translateMealName(drink.name, language)}${suffix}`}
                                         value={drink.id}
+                                        // Red label for restricted items. On Android
+                                        // the stock picker honors this for both the
+                                        // dropdown list and the collapsed selected
+                                        // row, so the danger reads at a glance.
+                                        color={reason ? '#C53030' : undefined}
                                       />
                                     );
                                   })}
@@ -2975,13 +2980,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   <Picker.Item label="— No side —" value="__none__" />
                                   {availableSides.map(side => {
                                     const reason = getMealUnsafeReason(side);
-                                    const prefix = reason ? '⚠ ' : '';
-                                    const suffix = reason ? '  ·  Restricted' : `  ·  ${side.kcal} kcal`;
+                                    const prefix = reason ? '🚫  ' : '';
+                                    const suffix = reason ? '  ·  RESTRICTED' : `  ·  ${side.kcal} kcal`;
                                     return (
                                       <Picker.Item
                                         key={side.id}
                                         label={`${prefix}${translateMealName(side.name, language)}${suffix}`}
                                         value={side.id}
+                                        color={reason ? '#C53030' : undefined}
                                       />
                                     );
                                   })}
