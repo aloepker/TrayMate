@@ -2177,12 +2177,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // shipped a URL — covers the offline / fallback-data path where every
     // meal has imageUrl="".
     const localImg = remoteUri ? null : getMealImage(item.name);
-    // A meal is orderable if the kitchen hasn't disabled it AND we're either
-    // within the time window OR within a breakfast pre-order window.
+    // Time windows are informational only — residents can order any
+    // meal at any time. The time pill still shows below the title so
+    // they know when it will be served, but it no longer blocks
+    // ordering. The only hard gate left is the kitchen-disable toggle.
     const kitchenEnabled = item.isAvailable !== false;
     const status = getAvailabilityStatus(item.time_range, item.meal_period, currentTime);
     const isPreorder = status === 'preorder_tomorrow';
-    const available = kitchenEnabled && (status === 'available' || isPreorder);
+    const available = kitchenEnabled;
     const accent = PERIOD_ACCENT[item.meal_period] ?? PERIOD_ACCENT['All Day'];
     // Centralised safety gate — card is disabled & marked when the resident's
     // profile bans this meal (allergies / dietary / medical rules).
@@ -2196,8 +2198,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const parts: string[] = [item.name];
       if (isUnsafe) parts.push(`unsafe: ${unsafeReason}`);
       else if (!kitchenEnabled) parts.push("not available today");
-      else if (!available) parts.push(`available ${translateMealTimeRange(item.time_range, language)}`);
-      if (isPreorder) parts.push("preorder for tomorrow");
+      // Time windows no longer gate ordering, so we don't announce a
+      // serving window in the label — anything kitchen-enabled is
+      // orderable right now.
       return parts.join(", ");
     })();
     const a11yHint = isUnsafe
@@ -2250,21 +2253,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             </Text>
           </View>
         )}
-        {/*
-          Compact pre-order chip for breakfast after 7 PM. Mirrors the
-          "Not available" pill style (top-left, pill-shaped) but in amber
-          so it reads as "different category, not disabled". Clear but
-          not overwhelming — the serving window stays on the green time
-          pill below the title, no need to repeat it in the chip.
-        */}
-        {isPreorder && available && (
-          <View style={styles.preorderOverlay}>
-            <Feather name="sunrise" size={15} color="#FFFFFF" />
-            <Text style={[styles.preorderOverlayText, { fontSize: scaled(13) }]} numberOfLines={1}>
-              {t.tomorrowsBreakfast}
-            </Text>
-          </View>
-        )}
+        {/* Pre-order chip removed — residents now order any meal at
+            any time, so the late-evening "Tomorrow's Breakfast" badge
+            no longer reflects a real distinction. */}
         {isUnsafe && available && (
           <View style={styles.unsafeChip}>
             <Feather name="alert-triangle" size={11} color="#FFFFFF" />
