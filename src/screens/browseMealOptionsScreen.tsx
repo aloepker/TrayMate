@@ -2915,8 +2915,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   <Picker.Item label="— No drink —" value="__none__" />
                                   {availableDrinks.map(drink => {
                                     const reason = getMealUnsafeReason(drink);
-                                    const prefix = reason ? '🚫  ' : '';
-                                    const suffix = reason ? '  ·  RESTRICTED' : `  ·  ${drink.kcal} kcal`;
+                                    const prefix = reason ? '🚫 ' : '';
+                                    const suffix = reason ? '' : `  ·  ${drink.kcal} kcal`;
                                     return (
                                       <Picker.Item
                                         key={drink.id}
@@ -2980,8 +2980,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   <Picker.Item label="— No side —" value="__none__" />
                                   {availableSides.map(side => {
                                     const reason = getMealUnsafeReason(side);
-                                    const prefix = reason ? '🚫  ' : '';
-                                    const suffix = reason ? '  ·  RESTRICTED' : `  ·  ${side.kcal} kcal`;
+                                    const prefix = reason ? '🚫 ' : '';
+                                    const suffix = reason ? '' : `  ·  ${side.kcal} kcal`;
                                     return (
                                       <Picker.Item
                                         key={side.id}
