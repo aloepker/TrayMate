@@ -258,7 +258,7 @@ function SettingsScreen({ navigation, route }: any) {
               descFontSize={scaled(13)}
               minHeight={touchTarget}
             />
-            <View style={styles.divider} />
+{/*            <View style={styles.divider} />
             <SettingSwitch
               label={t.screenReader}
               description={t.screenReaderDesc}
@@ -268,7 +268,7 @@ function SettingsScreen({ navigation, route }: any) {
               descFontSize={scaled(13)}
               minHeight={touchTarget}
             />
-          </View>
+*/}          </View>
         </View>
 
         {/* ==================== DIETARY (Read-Only) ==================== */}
