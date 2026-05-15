@@ -1189,8 +1189,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   );
 
   // ── fetch ALL orders for today (every meal period) ──
-  const fetchAllOrders = async () => {
-    setLoading(true);
+  // `silent=true` skips the loading spinner so the 45-second auto-refresh
+  // doesn't flash the screen while kitchen staff are reading a card.
+  const fetchAllOrders = async (silent = false) => {
+    if (!silent) setLoading(true);
     const today = formatLocalDate();
     try {
       const tok = token || await getAuthToken();
@@ -1212,14 +1214,19 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           .filter((item) => String(item?.order?.status ?? '').toLowerCase() !== 'cancelled')
       );
     } catch {
-      setOrders([]);
+      if (!silent) setOrders([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchAllOrders();
+    // Auto-refresh every 45s so new resident orders surface without staff
+    // having to tap the Refresh button. Silent mode keeps the loading
+    // spinner from flashing — only manual refresh shows the spinner.
+    const iv = setInterval(() => fetchAllOrders(true), 45000);
+    return () => clearInterval(iv);
   }, []);
 
   // ── apply a status change to a single order ──
@@ -1762,35 +1769,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         <View style={s.sectionTitleRow}>
           <Feather name="clipboard" size={14} color={C.primary} />
           <Text style={s.sectionTitle}>Today's Orders</Text>
-          {!loading && orders.length > 0 && (
-            <TouchableOpacity onPress={fetchAllOrders} style={{ marginLeft: "auto" }}>
-              <Feather name="refresh-cw" size={16} color={C.primary} />
-            </TouchableOpacity>
-          )}
+          <Text style={{ marginLeft: "auto", fontSize: 11, color: C.textMuted, fontStyle: "italic" }}>
+            Auto-refreshes every 45s
+          </Text>
         </View>
-
-        {/* ── Bulk Actions ── */}
-        {orders.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {(["pending", "preparing", "ready", "served"] as Status[]).map((status) => {
-                const st = statusStyle(status);
-                return (
-                  <TouchableOpacity
-                    key={status}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: st.bg, borderWidth: 1, borderColor: st.bg }}
-                    onPress={() => handleBulkStatus(status)}
-                  >
-                    <Feather name={st.icon} size={13} color={st.text} />
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: st.text }}>
-                      All → {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </ScrollView>
-        )}
 
         {/* Period filter tabs — uses the same in-memory orders list
             populated from /mealOrders/search per period. Client-side
@@ -2061,13 +2043,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         </View>
                       )}
                       <View style={{ flex: 1, gap: 3 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <Text style={s.mealName}>{meal.name}</Text>
-                          <View style={[s.periodPill, { backgroundColor: pa.light, borderColor: pa.color }]}>
-                            <Feather name={pa.icon as any} size={9} color={pa.color} />
-                            <Text style={[s.periodPillText, { color: pa.color }]}>{orderPeriod}</Text>
-                          </View>
-                        </View>
+                        <Text style={s.mealName}>{meal.name}</Text>
                         {meal.description ? (
                           <Text style={s.mealDesc} numberOfLines={2}>{meal.description}</Text>
                         ) : null}

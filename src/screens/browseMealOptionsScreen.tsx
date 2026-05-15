@@ -1595,7 +1595,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     icon: 'shopping-cart',
     title: 'How to Place an Order',
     description: 'Tap a meal, review the details, add any drink or side, then place your order.',
-    video: require('../styles/videos/beta-test.mp4'),
+    video: null,
   },
   {
     id: 'upcomingMeals',
