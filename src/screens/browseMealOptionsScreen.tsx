@@ -23,6 +23,7 @@ import { StatusBar } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
 import { useCart } from "./context/CartContext";
 import { useSettings } from './context/SettingsContext';
+import Video from 'react-native-video';
 
 // Display-layer constants (images, colours, mappers) — extracted for clarity
 import {
@@ -1594,24 +1595,28 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     icon: 'shopping-cart',
     title: 'How to Place an Order',
     description: 'Tap a meal, review the details, add any drink or side, then place your order.',
+    video: require('../styles/videos/beta-test.mp4'),
   },
   {
     id: 'upcomingMeals',
     icon: 'calendar',
     title: 'How to Check Upcoming Meals',
     description: 'Use the meal tabs to view breakfast, lunch, dinner, beverages, desserts, and seasonal options.',
+    video:null,
   },
   {
     id: 'cancelMeal',
     icon: 'x-circle',
     title: 'How to Cancel a Meal',
     description: 'Open your upcoming orders, choose the meal you no longer want, and confirm the cancellation.',
+    video:null,
   },
   {
     id: 'grannyBT',
     icon: 'message-circle',
     title: 'How to Use Granny BT',
     description: 'Ask Granny BT for meal recommendations, dietary help, or what is available today.',
+    video:null,
   },
 ];
 
@@ -3432,6 +3437,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             {section.description}
           </Text>
+          {section.video && (
+            <Video
+              source={section.video}
+              style={styles.helpVideo}
+              resizeMode="cover"
+              paused={false}
+              repeat={true}
+              controls={true}
+              muted={true}
+              onLoad={() => console.log('Video loaded')}
+              onError={(error) => console.log('Video error:', error)}
+            />
+          )}
         </View>
       )}
 
@@ -3463,6 +3481,13 @@ export default BrowseMealOptionsScreen;
 
 // ---------- Styles ----------
 const styles = StyleSheet.create({
+  helpVideo: {
+  width: '100%',
+  height: 420,
+  borderRadius: 14,
+  backgroundColor: '#111827',
+  marginTop: 14,
+},
   helpTopicsTitle: {
   fontWeight: '800',
   color: '#1F2937',
