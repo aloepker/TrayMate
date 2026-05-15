@@ -1,3 +1,4 @@
+//src/screens/kitchen/KitchenDashboard.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
@@ -21,7 +22,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Feather from "react-native-vector-icons/Feather";
-import { launchImageLibrary } from "react-native-image-picker";
+import { launchImageLibrary } from "react-native-image-picker"; 
 import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
 import {
@@ -55,22 +56,33 @@ import {
 
 // ─── Palette (matches app-wide theme) ─────────────────────────────────────────
 const C = {
-  primary:      "#717644",
-  primaryLight: "#F0EFE6",
-  background:   "#F5F3EE",   // warm parchment — page bg
-  surface:      "#FDFCF9",   // slightly off-white — cards & sheets
-  inputBg:      "#EFEDE7",   // deeper warm — input fields & dropdowns
-  border:       "#E2DFD8",
-  warmBorder:   "#DDD0B8",
-  text:         "#1A1A1A",
-  textMuted:    "#5C5C5C",
-  accent:       "#f6a72d",
-  danger:       "#C53030",
-  dangerBg:     "#FFF5F5",
-  success:      "#2D6A4F",
-  successBg:    "#DCFCE7",
-  warning:      "#b45309",
-  warningBg:    "#fef3c7",
+  primary: "#6D6B3B",
+  primaryDark: "#3A3820",
+  primaryLight: "#F0EEE4",
+
+  background: "#DCD3B8",
+  surface: "#FFFFFF",
+  cardSoft: "#F8F8F8",
+  inputBg: "#F3F3F3",
+
+  border: "#E7E2D6",
+  warmBorder: "#D8D5C0",
+
+  text: "#1A1A1A",
+  textMuted: "#5A5A5A",
+
+  accent: "#E8A020",
+  danger: "#B91C1C",
+  dangerBg: "#FEE2E2",
+
+  success: "#0A8F3E",
+  successBg: "#E8F5E9",
+
+  warning: "#9A6700",
+  warningBg: "#FBF4E4",
+
+  blue: "#6D6B3B",
+  blueBg: "#F0EEE4",
 };
 
 type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
@@ -140,11 +152,11 @@ interface ApiOrder {
 
 // ─── Period accent colours (pill badge per meal row) ──────────────────────────
 const PERIOD_ACCENT: Record<string, { color: string; light: string; icon: string }> = {
-  Breakfast: { color: "#b45309", light: "#FEF3C7", icon: "sun"     },
-  Lunch:     { color: "#1d4ed8", light: "#DBEAFE", icon: "coffee"  },
-  Dinner:    { color: "#7c3aed", light: "#EDE9FE", icon: "moon"    },
-  Sides:     { color: "#15803d", light: "#DCFCE7", icon: "layers"  },
-  Drinks:    { color: "#0e7490", light: "#CFFAFE", icon: "droplet" },
+  Breakfast: { color: "#9A6700", light: "#FBF4E4", icon: "sun" },
+  Lunch: { color: "#6D6B3B", light: "#F0EEE4", icon: "coffee" },
+  Dinner: { color: "#3A3820", light: "#F0EEE4", icon: "moon" },
+  Sides: { color: "#0A8F3E", light: "#E8F5E9", icon: "layers" },
+  Drinks: { color: "#6D6B3B", light: "#F0EEE4", icon: "droplet" },
 };
 
 // ─── Period option config ──────────────────────────────────────────────────────
@@ -154,11 +166,11 @@ const PERIOD_OPTIONS: {
   icon: "sun" | "coffee" | "moon" | "layers" | "droplet";
   color: string;
 }[] = [
-  { value: "Breakfast", label: "Breakfast", icon: "sun",      color: "#b45309" },
-  { value: "Lunch",     label: "Lunch",     icon: "coffee",   color: "#1d4ed8" },
-  { value: "Dinner",    label: "Dinner",    icon: "moon",     color: "#7c3aed" },
-  { value: "Sides",     label: "Side Dish", icon: "layers",   color: "#15803d" },
-  { value: "Drinks",    label: "Drink",     icon: "droplet",  color: "#0e7490" },
+{ value: "Breakfast", label: "Breakfast", icon: "sun", color: "#9A6700" },
+{ value: "Lunch", label: "Lunch", icon: "coffee", color: "#6D6B3B" },
+{ value: "Dinner", label: "Dinner", icon: "moon", color: "#3A3820" },
+{ value: "Sides", label: "Side Dish", icon: "layers", color: "#0A8F3E" },
+{ value: "Drinks", label: "Drink", icon: "droplet", color: "#6D6B3B" },
 ];
 
 const COVERAGE_ALERT_PERIODS = ["Breakfast", "Lunch", "Dinner"] as const;
@@ -166,8 +178,12 @@ const COVERAGE_ALERT_PERIODS = ["Breakfast", "Lunch", "Dinner"] as const;
 function getPeriodColor(period: string): string {
   const norm = normalizePeriod(period);
   const map: Record<string, string> = {
-    Breakfast: "#b45309", Lunch: "#1d4ed8", Dinner: "#7c3aed",
-    Sides: "#15803d", Drinks: "#0e7490", "All Day": "#6D6B3B",
+    Breakfast: "#9A6700",
+    Lunch: "#6D6B3B",
+    Dinner: "#3A3820",
+    Sides: "#0A8F3E",
+    Drinks: "#6D6B3B",
+    "All Day": "#6D6B3B",
   };
   return map[norm] || C.textMuted;
 }
@@ -764,7 +780,7 @@ const TUTORIAL_STEPS = [
   {
     id: "orders",
     icon: "clipboard",
-    color: "#6B8E23",
+    color: C.primary,
     title: "Orders & Status",
     bullets: [
       "Summary cards at top show today's totals. Tap **Preparing**, **Ready**, or **Delivered** on each order to update it.",
@@ -773,7 +789,7 @@ const TUTORIAL_STEPS = [
   {
     id: "menu",
     icon: "edit-3",
-    color: "#2E86AB",
+    color: C.primary,
     title: "Add & Edit Meals",
     bullets: [
       "**Add Meal** creates a new item. **Manage Menu** lets you edit or delete existing ones. Toggle **Seasonal** for limited-time items.",
@@ -782,7 +798,7 @@ const TUTORIAL_STEPS = [
   {
     id: "messages",
     icon: "message-circle",
-    color: "#7B68EE",
+    color: C.primary,
     title: "Messages",
     bullets: [
       "**Messages** opens resident conversations. A **red dot** means unread. You can also reply directly from any order card.",
@@ -870,14 +886,19 @@ const SupportModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ vis
 };
 
 const support = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  overlay: {
+  flex: 1,
+  backgroundColor: "rgba(60, 52, 30, 0.35)",
+},
   sheet: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-    minHeight: 360,
+  backgroundColor: "#F7F3E8",
+  borderTopLeftRadius: 24,
+  borderTopRightRadius: 24,
+  padding: 24,
+  paddingBottom: 40,
+  minHeight: 360,
+  borderWidth: 1,
+  borderColor: "#D8C9A7",
   },
   header: {
     flexDirection: "row",
@@ -888,23 +909,31 @@ const support = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "800", color: C.text },
   subtitle: { fontSize: 16, color: C.textMuted, marginBottom: 16 },
   closeBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.inputBg, alignItems: "center", justifyContent: "center",
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  backgroundColor: "#E9E2CF",
+  alignItems: "center",
+  justifyContent: "center",
   },
   templateCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: C.inputBg,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: C.border,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 14,
+  backgroundColor: "#FFFDF8",
+  borderRadius: 14,
+  padding: 14,
+  marginBottom: 10,
+  borderWidth: 1,
+  borderColor: "#D8C9A7",
   },
   templateIcon: {
-    width: 42, height: 42, borderRadius: 12,
-    backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center",
+  width: 42,
+  height: 42,
+  borderRadius: 12,
+  backgroundColor: C.primaryLight,
+  alignItems: "center",
+  justifyContent: "center",
   },
   templateTitle: { fontSize: 18, fontWeight: "700", color: C.text, marginBottom: 2 },
   templateDesc: { fontSize: 14, color: C.textMuted, lineHeight: 19 },
@@ -1559,35 +1588,42 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </Text>
         </View>
         <View style={s.headerRight}>
-          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E8F5E9", borderColor: "#81C784" }]} onPress={() => setShowSeasonalModal(true)}>
-            <Feather name="plus-circle" size={18} color="#2E7D32" />
-            <Text style={[s.headerLabelBtnText, { color: "#2E7D32" }]}>Add Meal</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSeasonalModal(true)}>
+    <Feather name="plus-circle" size={18} color={C.primary} />
+    <Text style={s.headerLabelBtnText}>Add Meal</Text>
+  </TouchableOpacity>
 
-          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: C.primaryLight, borderColor: "#B5AE8C" }]} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
-            <Feather name="book-open" size={18} color={C.primary} />
-            <Text style={s.headerLabelBtnText}>Menu</Text>
-          </TouchableOpacity>
+  <TouchableOpacity style={s.headerLabelBtn} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
+    <Feather name="book-open" size={18} color={C.primary} />
+    <Text style={s.headerLabelBtnText}>Menu</Text>
+  </TouchableOpacity>
 
-          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E3F2FD", borderColor: "#90CAF9" }]} onPress={() => setShowMessagesModal(true)}>
-            <Feather name="message-square" size={18} color="#1565C0" />
-            <Text style={[s.headerLabelBtnText, { color: "#1565C0" }]}>Messages</Text>
-            {msgUnread > 0 && (
-              <View style={s.bellBadge}>
-                <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+  <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowMessagesModal(true)}>
+    <Feather name="message-square" size={18} color={C.primary} />
+    <Text style={s.headerLabelBtnText}>Messages</Text>
+    {msgUnread > 0 && (
+      <View style={s.bellBadge}>
+        <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
+      </View>
+    )}
+  </TouchableOpacity>
 
-          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#FFF3E0", borderColor: "#FFB74D" }]} onPress={() => setShowSupport(true)}>
-            <Feather name="book-open" size={18} color="#E65100" />
-            <Text style={[s.headerLabelBtnText, { color: "#E65100" }]}>Guide</Text>
-          </TouchableOpacity>
+  <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSupport(true)}>
+    <Feather name="book-open" size={18} color={C.primary} />
+    <Text style={s.headerLabelBtnText}>Guide</Text>
+  </TouchableOpacity>
 
-          <TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
-            <Feather name="log-out" size={18} color={C.danger} />
-            <Text style={[s.headerLabelBtnText, { color: C.danger }]}>Logout</Text>
-          </TouchableOpacity>
+<TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
+  <Text
+    style={{
+      fontSize: 15,
+      fontWeight: "700",
+      color: "#3A3A3A",
+    }}
+  >
+    Logout
+  </Text>
+</TouchableOpacity>
         </View>
       </View>
 
@@ -2489,31 +2525,36 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 // ─── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: C.background },
-  scroll: { paddingHorizontal: 16, paddingBottom: 36, paddingTop: 8 },
+
+  scroll: {
+  paddingHorizontal: 24,
+  paddingBottom: 40,
+  paddingTop: 20,
+  width: "100%",
+  maxWidth: 1400,
+  alignSelf: "center",
+},
 
   // Header
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: C.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
+  height: 74,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  paddingHorizontal: 18,
+  backgroundColor: C.surface,
+  borderBottomWidth: 1,
+  borderBottomColor: C.border,
   },
   headerTitle: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: C.text,
-    letterSpacing: -0.5,
+  fontSize: 18,
+  fontWeight: "900",
+  color: C.text,
   },
   headerSub: {
-    fontSize: 15,
-    color: C.textMuted,
-    marginTop: 3,
-    fontWeight: "500",
+  fontSize: 12,
+  color: "#6F6F6F",
+  marginTop: 1,
   },
   headerRight: {
     flexDirection: "row",
@@ -2521,26 +2562,21 @@ const s = StyleSheet.create({
     gap: 12,
   },
   headerLabelBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    height: 46,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1.5,
-    borderColor: "rgba(113,118,68,0.22)",
-    shadowColor: "#717644",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-    position: "relative" as const,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+  paddingHorizontal: 14,
+  paddingVertical: 9,
+  borderRadius: 20,
+  backgroundColor: C.primaryLight,
+  borderWidth: 1.5,
+  borderColor: "#6D6B3B30",
+  position: "relative",
   },
   headerLabelBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: C.primary,
+  fontSize: 13,
+  fontWeight: "700",
+  color: C.primary,
   },
   headerIconBtn: {
     width: 48,
@@ -2577,8 +2613,14 @@ const s = StyleSheet.create({
     color: "#FFF",
   },
   logoutBtn: {
-    borderColor: "rgba(197,48,48,0.25)",
-    backgroundColor: C.dangerBg,
+  height: 44,
+  minWidth: 110,
+  borderWidth: 1.5,
+  borderColor: "#B8AF84",
+  backgroundColor: "#FFFFFF",
+  borderRadius: 16,
+  alignItems: "center",
+  justifyContent: "center",
   },
 
   // Tabs
@@ -2620,14 +2662,15 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
   summaryCard: {
-    flex: 1,
-    backgroundColor: C.surface,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderColor: C.border,
+  flex: 1,
+  backgroundColor: C.surface,
+  borderRadius: 16,
+  paddingVertical: 18,
+  alignItems: "center",
+  gap: 5,
+  borderWidth: 2,
+  borderColor: "#D7D0A8",
+  elevation: 3,
   },
   summaryValue: {
     fontSize: 24,
@@ -2826,28 +2869,29 @@ const s = StyleSheet.create({
 
   // Order cards
   card: {
-    backgroundColor: C.surface,
-    borderRadius: 18,
-    padding: 16,
-    paddingLeft: 22,   // extra left padding for the accent strip
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-    overflow: "hidden",
-    position: "relative",
+  backgroundColor: C.surface,
+  borderRadius: 18,
+  padding: 20,
+  paddingLeft: 24,
+  marginBottom: 16,
+  borderWidth: 1,
+  borderColor: "#E8E6DC",
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.06,
+  shadowRadius: 6,
+  elevation: 2,
+  overflow: "hidden",
+  position: "relative",
   },
   cardPeriodStrip: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 5,
-    zIndex: 2,
+  position: "absolute",
+  left: 0,
+  top: 0,
+  bottom: 0,
+  width: 4,
+  backgroundColor: C.accent,
+  zIndex: 2,
   },
 
   // Card top row
@@ -3322,17 +3366,19 @@ const s = StyleSheet.create({
 
 // ─── Modal Styles ──────────────────────────────────────────────────────────────
 const modal = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
+overlay: {
+  flex: 1,
+  backgroundColor: "rgba(60, 52, 30, 0.35)",
+  justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
+  backgroundColor: "#F7F3E8",
+  borderTopLeftRadius: 24,
+  borderTopRightRadius: 24,
+  padding: 24,
+  paddingBottom: 36,
+  borderWidth: 1,
+  borderColor: "#D8C9A7",
   },
   header: {
     flexDirection: "row",
@@ -3346,12 +3392,12 @@ const modal = StyleSheet.create({
     color: C.text,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.inputBg,
-    alignItems: "center",
-    justifyContent: "center",
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  backgroundColor: "#E9E2CF",
+  alignItems: "center",
+  justifyContent: "center",
   },
   label: {
     fontSize: 15,
@@ -3361,25 +3407,25 @@ const modal = StyleSheet.create({
     marginTop: 16,
   },
   input: {
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: C.text,
+  backgroundColor: "#FFFDF8",
+  borderWidth: 1,
+  borderColor: "#D8C9A7",
+  borderRadius: 14,
+  paddingHorizontal: 16,
+  paddingVertical: 14,
+  fontSize: 16,
+  color: C.text,
   },
   dropdown: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  backgroundColor: "#FFFDF8",
+  borderWidth: 1,
+  borderColor: "#D8C9A7",
+  borderRadius: 12,
+  paddingHorizontal: 14,
+  paddingVertical: 13,
   },
   dropdownValue: {
     fontSize: 16,
@@ -3485,16 +3531,16 @@ const modal = StyleSheet.create({
     fontWeight: "700",
   },
   seasonalToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 16,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  backgroundColor: "#FFFDF8",
+  borderWidth: 1,
+  borderColor: "#D8C9A7",
+  borderRadius: 14,
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  marginTop: 16,
   },
   seasonalToggleLabel: {
     fontSize: 15,
@@ -3513,14 +3559,14 @@ const modal = StyleSheet.create({
     backgroundColor: C.inputBg,
   },
   photoPickerBtn: {
-    borderWidth: 2,
-    borderColor: C.border,
-    borderStyle: "dashed",
-    borderRadius: 14,
-    paddingVertical: 28,
-    alignItems: "center",
-    marginBottom: 14,
-    backgroundColor: C.inputBg,
+  borderWidth: 2,
+  borderColor: "#D8C9A7",
+  borderStyle: "dashed",
+  borderRadius: 14,
+  paddingVertical: 28,
+  alignItems: "center",
+  marginBottom: 14,
+  backgroundColor: "#FFFDF8",
   },
   photoPickerIcon: {
     width: 56,
