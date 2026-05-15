@@ -314,11 +314,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {residentOrders.length > 0 && (
+  {/*        {residentOrders.length > 0 && (
             <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
               <Feather name="trash-2" size={17} color={COLORS.danger} />
             </TouchableOpacity>
-          )}
+          )} */}
           <TouchableOpacity
             style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
             onPress={() => navigation.navigate('Settings')}
