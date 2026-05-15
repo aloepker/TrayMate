@@ -956,6 +956,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const { messages, unreadCount, markRead, markAllRead, sendMessage } = useKitchenMessages();
 
   const [orders, setOrders] = useState<ApiOrder[]>([]);
+  // Period filter for Today's Orders. Pairs with the backend endpoint
+  // GET /mealOrders/search?mealOfDay=<period>&date=<today> that Adam
+  // shipped — even though we already fetch all five periods up front
+  // and merge, exposing a per-period view lets the kitchen focus on
+  // one tray at a time during a service.
+  const [orderPeriodFilter, setOrderPeriodFilter] = useState<string>("All");
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [loggedInEmail, setLoggedInEmail] = useState<string | null>(null);
@@ -1750,18 +1756,75 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </ScrollView>
         )}
 
-        {loading ? (
-          <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} />
-        ) : orders.length === 0 ? (
-          <View style={s.emptyState}>
-            <View style={s.emptyIconWrap}>
-              <Feather name="clipboard" size={36} color={C.primary} />
+        {/* Period filter tabs — uses the same in-memory orders list
+            populated from /mealOrders/search per period. Client-side
+            filter means no extra network on tab switch. */}
+        {orders.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {["All", "Breakfast", "Lunch", "Dinner", "Sides", "Drinks"].map((p) => {
+                const active = orderPeriodFilter === p;
+                const count = p === "All"
+                  ? orders.length
+                  : orders.filter((o) => String(o.order.mealOfDay ?? "").toLowerCase() === p.toLowerCase()).length;
+                const color = getPeriodColor(p === "All" ? "All Day" : p);
+                return (
+                  <TouchableOpacity
+                    key={p}
+                    onPress={() => setOrderPeriodFilter(p)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      backgroundColor: active ? color + "20" : color + "08",
+                      borderWidth: active ? 2 : 1,
+                      borderColor: active ? color : color + "40",
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: active ? "800" : "600", color }}>
+                      {p}
+                    </Text>
+                    <View style={{
+                      paddingHorizontal: 7,
+                      paddingVertical: 1,
+                      borderRadius: 999,
+                      backgroundColor: color + "20",
+                    }}>
+                      <Text style={{ fontSize: 11, fontWeight: "700", color }}>{count}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <Text style={s.emptyTitle}>No orders yet</Text>
-            <Text style={s.emptyDesc}>No orders for today.</Text>
-          </View>
-        ) : (
-          orders.map((item) => {
+          </ScrollView>
+        )}
+
+        {(() => {
+          const filteredOrders = orderPeriodFilter === "All"
+            ? orders
+            : orders.filter((o) => String(o.order.mealOfDay ?? "").toLowerCase() === orderPeriodFilter.toLowerCase());
+          if (loading) {
+            return <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} />;
+          }
+          if (filteredOrders.length === 0) {
+            return (
+              <View style={s.emptyState}>
+                <View style={s.emptyIconWrap}>
+                  <Feather name="clipboard" size={36} color={C.primary} />
+                </View>
+                <Text style={s.emptyTitle}>No orders yet</Text>
+                <Text style={s.emptyDesc}>
+                  {orderPeriodFilter === "All"
+                    ? "No orders for today."
+                    : `No ${orderPeriodFilter} orders for today.`}
+                </Text>
+              </View>
+            );
+          }
+          return filteredOrders.map((item) => {
             const st = statusStyle(item.order.status);
             const resident = findResident(item.order.userId);
             const allergies = resident?.foodAllergies ?? [];
@@ -2175,8 +2238,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                 </View>
               </View>
             );
-          })
-        )}
+          });
+        })()}
       </ScrollView>
 
       {/* ── Seasonal Meal Modal ── */}
