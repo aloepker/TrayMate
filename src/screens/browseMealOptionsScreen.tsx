@@ -1291,6 +1291,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showBrowseSupport, setShowBrowseSupport] = useState(false);
+  const [openHelpSection, setOpenHelpSection] = useState<string | null>(null);
   const [autoSuggest, setAutoSuggest] = useState<{ period: string; minsUntil: number; isNow: boolean; meal: Meal; drink?: Meal; dessert?: Meal } | null>(null);
   const [autoOrderMeals, setAutoOrderMeals] = useState<Meal[]>([]);
   const [autoSuggestDismissed, setAutoSuggestDismissed] = useState(false);
@@ -1586,6 +1587,33 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       assignedCaregivers: assignedCaregivers.length > 0 ? assignedCaregivers : undefined,
     });
   };
+
+  const HELP_SECTIONS = [
+  {
+    id: 'placeOrder',
+    icon: 'shopping-cart',
+    title: 'How to Place an Order',
+    description: 'Tap a meal, review the details, add any drink or side, then place your order.',
+  },
+  {
+    id: 'upcomingMeals',
+    icon: 'calendar',
+    title: 'How to Check Upcoming Meals',
+    description: 'Use the meal tabs to view breakfast, lunch, dinner, beverages, desserts, and seasonal options.',
+  },
+  {
+    id: 'cancelMeal',
+    icon: 'x-circle',
+    title: 'How to Cancel a Meal',
+    description: 'Open your upcoming orders, choose the meal you no longer want, and confirm the cancellation.',
+  },
+  {
+    id: 'grannyBT',
+    icon: 'message-circle',
+    title: 'How to Use Granny BT',
+    description: 'Ask Granny BT for meal recommendations, dietary help, or what is available today.',
+  },
+];
 
   const loadAutoOrderCandidates = useCallback(async () => {
     try {
@@ -3310,6 +3338,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       <Modal visible={showBrowseSupport} transparent animationType="fade" onRequestClose={() => setShowBrowseSupport(false)}>
         <View style={styles.supportBackdrop}>
           <View style={styles.supportCard}>
+            <ScrollView
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={{ paddingBottom: 24 }}>
             <View style={styles.supportCardHeader}>
               <Text style={[styles.supportCardTitle, { fontSize: scaled(20) }]}>Need Help?</Text>
               <TouchableOpacity onPress={() => setShowBrowseSupport(false)} hitSlop={10}>
@@ -3338,10 +3369,82 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               })}
               {/* <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>Kitchen open 7 am – 7 pm daily</Text> */}
             </View>
+            <ScrollView>
+
+  <Text style={[styles.helpTopicsTitle, { fontSize: scaled(16) }]}>
+    What would you like help with?
+  </Text>
+
+  {HELP_SECTIONS.map((section) => {
+  const isOpen = openHelpSection === section.id;
+
+  return (
+    <View key={section.id} style={styles.helpAccordionCard}>
+
+      <TouchableOpacity
+        style={styles.helpAccordionHeader}
+        activeOpacity={0.85}
+        onPress={() =>
+          setOpenHelpSection((prev) =>
+            prev === section.id ? null : section.id
+          )
+        }
+      >
+
+        {/* LEFT SIDE */}
+        <View style={styles.helpAccordionLeft}>
+
+          <View style={styles.helpIconCircle}>
+            <Feather
+              name={section.icon as any}
+              size={20}
+              color="#4A7A60"
+            />
+          </View>
+
+          <Text
+            style={[
+              styles.helpAccordionTitle,
+              { fontSize: scaled(15) },
+            ]}
+          >
+            {section.title}
+          </Text>
+
+        </View>
+
+        {/* RIGHT SIDE */}
+        <Feather
+          name={isOpen ? 'chevron-up' : 'chevron-down'}
+          size={22}
+          color="#6B7280"
+        />
+
+      </TouchableOpacity>
+
+      {isOpen && (
+        <View style={styles.helpAccordionBody}>
+          <Text
+            style={[
+              styles.helpAccordionDescription,
+              { fontSize: scaled(14) },
+            ]}
+          >
+            {section.description}
+          </Text>
+        </View>
+      )}
+
+    </View>
+  );
+})}
+
+</ScrollView>
 
             <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
               <Text style={[styles.supportCloseBtnText, { fontSize: scaled(15) }]}>Close</Text>
             </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -3360,6 +3463,68 @@ export default BrowseMealOptionsScreen;
 
 // ---------- Styles ----------
 const styles = StyleSheet.create({
+  helpTopicsTitle: {
+  fontWeight: '800',
+  color: '#1F2937',
+  marginTop: 16,
+  marginBottom: 8,
+  textAlign: 'center',
+},
+
+helpAccordionCard: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+  overflow: 'hidden',
+  marginBottom: 12,
+},
+
+helpAccordionHeader: {
+  minHeight: 64,
+  paddingHorizontal: 16,
+  paddingVertical: 14,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+},
+
+helpAccordionTitleRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+  gap: 12,
+},
+
+helpIconCircle: {
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+  backgroundColor: '#EEF7F1',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+helpAccordionTitle: {
+  flex: 1,
+  fontWeight: '800',
+  color: '#1F2937',
+},
+
+helpAccordionBody: {
+  paddingHorizontal: 16,
+  paddingBottom: 16,
+},
+
+helpAccordionDescription: {
+  color: '#6B7280',
+  lineHeight: 21,
+},
+helpAccordionLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+},
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.neutral,
