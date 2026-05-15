@@ -702,6 +702,41 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           </View>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          {/* Cancelled orders get a "Reorder" shortcut
+                              so the resident can jump straight to the
+                              menu pre-filtered to this meal's period
+                              without typing the order again. */}
+                          {order.status === 'cancelled' && (
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation?.();
+                                navigation.navigate('BrowseMealOptions', {
+                                  residentId,
+                                  residentName,
+                                  dietaryRestrictions,
+                                  foodAllergies,
+                                  initialPeriod: bucket.key,
+                                });
+                              }}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 5,
+                                paddingVertical: 7,
+                                paddingHorizontal: 12,
+                                borderRadius: 999,
+                                backgroundColor: COLORS.primary,
+                              }}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Reorder from ${bucket.label} menu`}
+                            >
+                              <Feather name="refresh-cw" size={13} color="#FFF" />
+                              <Text style={{ fontSize: scaled(12), fontWeight: '800', color: '#FFF' }}>
+                                Reorder
+                              </Text>
+                            </TouchableOpacity>
+                          )}
                           <TouchableOpacity
                             style={styles.removeOrderBtn}
                             onPress={(e) => { e.stopPropagation?.(); handleRemoveOrder(order.id); }}
