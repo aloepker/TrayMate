@@ -17,6 +17,9 @@ import { useSettings } from './context/SettingsContext';
 import { useKitchenMessages } from './context/KitchenMessageContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
+import { MealService } from '../services/localDataService';
+import { isMealSafe } from '../services/mealSafetyService';
+import { sendMessage as sendApiMessage } from '../services/api';
 
 // ── Warm olive palette ────────────────────────────────────────────────────────
 const COLORS = {
@@ -71,7 +74,7 @@ function minutesUntilReady(placedAt: Date): number {
 }
 
 function UpcomingMealsScreen({ navigation, route }: any) {
-  const { orders, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder } = useCart();
+  const { orders, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder, replaceOrder } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
   const { messages: kitchenMessages, markRead: markKitchenMsgRead, sendMessage: sendKitchenMessage } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
@@ -185,6 +188,91 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       return p === period.toLowerCase() || p === 'all day';
     });
   };
+  // Cache of safe alternative meals per period, refreshed when the
+  // resident's safety profile changes. Used by the substitution-swap
+  // dropdown so we can offer 3-5 alternatives that are guaranteed
+  // safe for this resident.
+  const [periodAlternatives, setPeriodAlternatives] = useState<Record<string, any[]>>({});
+  const safetyProfileRef = {
+    foodAllergies: foodAllergies ?? [],
+    dietaryRestrictions: dietaryRestrictions ?? [],
+    medicalConditions: (route?.params?.medicalConditions ?? []) as string[],
+  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, any[]> = {};
+      for (const period of ['Breakfast', 'Lunch', 'Dinner'] as const) {
+        try {
+          const all = await MealService.getMealsByPeriod(period);
+          next[period] = all
+            .filter((m) => !(m as any)._local) // backend-known only
+            .filter((m) => isMealSafe(m as any, safetyProfileRef))
+            .slice(0, 6);
+        } catch {
+          next[period] = [];
+        }
+      }
+      if (!cancelled) setPeriodAlternatives(next);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [residentId, foodAllergies?.join('|'), dietaryRestrictions?.join('|')]);
+
+  // Notify the resident's caregivers (and admin) that a substitution
+  // was actioned. Best-effort: failures are logged, never block the UI.
+  const notifyCaregiversOfSwap = async (oldName: string, newName: string, period: string) => {
+    const assignedCaregivers = (route?.params?.assignedCaregivers ?? []) as Array<{ caregiverId: string; caregiverName: string }>;
+    const room = (route?.params as any)?.roomNumber || '';
+    const body = `${residentName}${room ? ` (Room ${room})` : ''} swapped ${oldName} → ${newName} for ${period} after a kitchen substitution.`;
+    for (const cg of assignedCaregivers) {
+      try { await sendApiMessage(cg.caregiverId, body); } catch (e) { console.warn('[Swap] notify caregiver failed', e); }
+    }
+  };
+
+  // Send a kitchen message so the kitchen sees the swap immediately
+  // on their dashboard (the existing message channel — same path the
+  // resident already uses for "message kitchen").
+  const handleAcceptSubstitution = async (order: Order, replacement: any) => {
+    if (!order.backendId) {
+      Alert.alert('Cannot swap', 'This order is local-only and cannot be replaced yet.');
+      return;
+    }
+    const period = order.mealOfDay || 'Lunch';
+    const oldName = order.items?.[0]?.name ?? 'previous meal';
+    const cartItem = {
+      id: Number(replacement.id),
+      name: replacement.name,
+      meal_period: replacement.mealPeriod as any,
+      description: replacement.description,
+      kcal: replacement.nutrition?.calories ?? 0,
+      sodium_mg: parseInt(String(replacement.nutrition?.sodium ?? '0'), 10),
+      protein_g: parseInt(String(replacement.nutrition?.protein ?? '0'), 10),
+      tags: replacement.tags ?? [],
+      imageUrl: replacement.imageUrl,
+    };
+    const result = await replaceOrder(order.backendId, residentId!, period, [cartItem as any]);
+    if (!result) {
+      Alert.alert('Swap failed', 'Could not replace the order. Please try again or contact the kitchen.');
+      return;
+    }
+    try {
+      const room = (route?.params as any)?.roomNumber || '';
+      sendKitchenMessage({
+        residentId: String(residentId ?? ''),
+        orderId: order.backendId,
+        residentName: String(residentName ?? ''),
+        residentRoom: String(room),
+        fromRole: 'resident',
+        fromName: String(residentName ?? 'Resident'),
+        text: `Swapped ${oldName} → ${replacement.name} after kitchen substitution.`,
+        channel: 'order',
+      });
+    } catch (e) { console.warn('[Swap] kitchen message failed', e); }
+    notifyCaregiversOfSwap(oldName, replacement.name, period);
+    Alert.alert('Swap accepted', `Switched to ${replacement.name} for ${period}.`);
+  };
+
   const bucketedActiveOrders = MEAL_BUCKETS.map((b) => {
     // Prefer an order that has a main item for this period. Fall back
     // to a period-matching order even if it's only drinks/sides — so
@@ -430,11 +518,77 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                 );
               }
               const order = bucket.order;
+              const needsAttention = order.status === 'cancelled' || order.status === 'substitution_requested';
               return (
                 <View key={`bucket-${bucket.key}`}>
-                  <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>
-                    {bucket.label}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[styles.sectionHeader, { fontSize: scaled(13), marginBottom: 0 }]}>
+                      {bucket.label}
+                    </Text>
+                    {needsAttention && (
+                      <View style={{
+                        width: 10, height: 10, borderRadius: 5,
+                        backgroundColor: order.status === 'cancelled' ? '#DC2626' : '#C2410C',
+                      }} />
+                    )}
+                  </View>
+                  {/* Substitution banner — only shown when the kitchen
+                      flagged this order. Lets the resident pick a
+                      different safe meal in one tap instead of having
+                      to navigate back to the menu, rebuild the cart,
+                      and re-place from scratch. */}
+                  {order.status === 'substitution_requested' && (
+                    <View style={{
+                      backgroundColor: '#FEF3C7',
+                      borderColor: '#C2410C',
+                      borderWidth: 1,
+                      borderRadius: 12,
+                      padding: 12,
+                      marginBottom: 10,
+                    }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <Feather name="refresh-cw" size={16} color="#C2410C" />
+                        <Text style={{ fontSize: scaled(14), fontWeight: '800', color: '#7C2D12' }}>
+                          Kitchen suggested a swap
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: scaled(12), color: '#7C2D12', marginBottom: 10 }}>
+                        Pick a replacement (all safe for you):
+                      </Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {(periodAlternatives[bucket.key] ?? []).map((alt: any) => (
+                          <TouchableOpacity
+                            key={String(alt.id)}
+                            onPress={() => handleAcceptSubstitution(order, alt)}
+                            style={{
+                              backgroundColor: '#FFFFFF',
+                              borderColor: '#C2410C',
+                              borderWidth: 1,
+                              borderRadius: 14,
+                              paddingVertical: 8,
+                              paddingHorizontal: 12,
+                              marginRight: 8,
+                              maxWidth: 220,
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Replace with ${alt.name}`}
+                          >
+                            <Text style={{ fontSize: scaled(13), fontWeight: '700', color: '#7C2D12' }} numberOfLines={1}>
+                              {alt.name}
+                            </Text>
+                            <Text style={{ fontSize: scaled(11), color: '#9C4221' }} numberOfLines={1}>
+                              {alt.nutrition?.calories ?? '?'} kcal
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                        {(periodAlternatives[bucket.key] ?? []).length === 0 && (
+                          <Text style={{ fontSize: scaled(12), color: '#9C4221', fontStyle: 'italic' }}>
+                            Loading safe options…
+                          </Text>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
                   {(() => {
                   const expanded   = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];

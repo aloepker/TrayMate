@@ -49,7 +49,7 @@ type CartContextType = {
   // Orders
   orders: Order[];
   placeOrder: (residentId?: string, mealOfDay?: string, itemsOverride?: Meal[]) => Promise<{ order: Order | null; conflict?: MealOrderResponse; complianceBlock?: ComplianceResult }>;
-  replaceOrder: (backendOrderId: number, residentId: string, mealOfDay?: string) => Promise<Order | null>;
+  replaceOrder: (backendOrderId: number, residentId: string, mealOfDay?: string, itemsOverride?: Meal[]) => Promise<Order | null>;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   getOrdersForResident: (residentId: string) => Order[];
   fetchOrderHistory: (userId: string) => Promise<void>;
@@ -274,14 +274,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const replaceOrder = async (
     backendOrderId: number,
     residentId: string,
-    mealOfDay?: string
+    mealOfDay?: string,
+    itemsOverride?: Meal[],
   ): Promise<Order | null> => {
-    if (cart.length === 0) return null;
+    const itemsToUse = itemsOverride && itemsOverride.length > 0 ? itemsOverride : cart;
+    if (itemsToUse.length === 0) return null;
 
     const rid = residentId || 'unknown';
     const meal = mealOfDay || deriveMealOfDay();
     const today = new Date().toISOString().slice(0, 10);
-    const itemIds = cart.map((m) => String(m.id)).join(', ');
+    const itemIds = itemsToUse.map((m) => String(m.id)).join(', ');
     const orderNote = buildOrderNote();
 
     try {
@@ -294,14 +296,17 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         specialInstructions: orderNote,
       });
 
-      const newOrder = buildLocalOrder(rid, response.id, meal, today);
+      const newOrder = buildLocalOrder(rid, response.id, meal, today, itemsToUse);
+      if (response.id != null) {
+        setOrderPlacedAt(response.id, newOrder.placedAt).catch(() => {});
+      }
       // Remove old order with same backend ID if present
       setOrders((prev) => [newOrder, ...prev.filter((o) => o.backendId !== backendOrderId)]);
       setCart([]);
       return newOrder;
     } catch (err: any) {
       console.warn('Backend replace failed, saving locally:', err?.message);
-      const localOrder = buildLocalOrder(rid, undefined, meal, today);
+      const localOrder = buildLocalOrder(rid, undefined, meal, today, itemsToUse);
       setOrders((prev) => [localOrder, ...prev]);
       setCart([]);
       return localOrder;
