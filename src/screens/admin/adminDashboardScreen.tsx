@@ -922,7 +922,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
                       // Also persist to storage for future navigations
                       setResidentCaregivers(String(r.id), caregiversArray);
-                      navigation.navigate("BrowseMealOptions", {
+// switched the residents home screen from "BrowseMealOptions" to "UpcomingMeals"                      
+                      navigation.navigate("UpcomingMeals", {
                         residentId: r.id,
                         residentName: r.name,
                         dietaryRestrictions: r.dietaryRestrictions ?? [],
