@@ -449,8 +449,8 @@ export default function CaregiverDashboardScreen({
   // -----------------------------
   const handleBrowseMeals = (resident: Resident) => {
     closeResidentModal();
-
-    navigation.navigate("BrowseMealOptions", {
+//updating resident's home screen from "BrowseMealOptions" to "UpcomingMeals":
+    navigation.navigate("UpcomingMeals", {
       residentId: resident.id,
       residentName: resident.name,
       dietaryRestrictions: resident.dietaryRestrictions ?? [],

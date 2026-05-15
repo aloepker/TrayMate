@@ -96,7 +96,9 @@ const CartScreen = ({ navigation, route }: any) => {
   const requestOverride = async (violationLines: string) => {
     try {
       const mealIds = cartItems.map((m) => Number(m.id)).filter((n) => !isNaN(n));
+//error for time order is placed is likely the line bellow:  
       const today = new Date().toISOString().slice(0, 10);
+      //const today = new Date().toISOString();  // didnt fix the time issue.. :(
       const ridNum = Number(residentId);
       if (!mealIds.length || isNaN(ridNum)) {
         Alert.alert('Unable to request override', 'Cart or resident is invalid.');
