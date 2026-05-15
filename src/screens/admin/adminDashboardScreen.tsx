@@ -46,6 +46,7 @@ import {
   sendMessage,
   getMe,
   listCoverageAlertsApi,
+  listPendingOverridesApi,
 } from "../../services/api";
 import { decodePendingAutoOrder, confirmPendingAutoOrder } from "../../services/autoOrderRequest";
 
@@ -65,8 +66,31 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
   const [alertActiveCount, setAlertActiveCount] = useState(0);
+  // Count of override requests waiting for admin review. Shown as a
+  // red badge on the Overrides header button so the admin can see at
+  // a glance that something needs them, without having to open the
+  // dedicated screen first.
+  const [pendingOverrideCount, setPendingOverrideCount] = useState(0);
   // Hidden diagnostics panel — opens when admin taps the granny logo.
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+
+  // Poll the pending-overrides count every 30s + on screen focus. The
+  // backend endpoint /overrides/pending returns the full list, but we
+  // only need the count to drive the badge.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const list = await listPendingOverridesApi();
+        if (!cancelled) setPendingOverrideCount(Array.isArray(list) ? list.length : 0);
+      } catch {
+        if (!cancelled) setPendingOverrideCount(0);
+      }
+    };
+    refresh();
+    const id = setInterval(refresh, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   // Mirror modal-open state in a ref so async polling closures see the
   // latest value without forcing the polling effect to retrigger.
@@ -713,9 +737,22 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
           <Pressable
             style={styles.chatIconBtn}
             onPress={() => navigation.navigate("PendingOverrides")}
+            accessibilityRole="button"
+            accessibilityLabel={
+              pendingOverrideCount > 0
+                ? `Overrides, ${pendingOverrideCount} pending`
+                : "Overrides"
+            }
           >
             <Feather name="shield" size={16} color="#6D6B3B" />
             <Text style={styles.chatIconBtnText}>Overrides</Text>
+            {pendingOverrideCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {pendingOverrideCount > 9 ? "9+" : pendingOverrideCount}
+                </Text>
+              </View>
+            )}
           </Pressable>
           <Pressable
             style={styles.chatIconBtn}

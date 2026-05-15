@@ -27,11 +27,14 @@ import {
   Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import { Alert } from 'react-native';
 import {
   listResidentOverridesApi,
   type OverrideRequest,
   type OverrideStatus,
 } from '../services/api';
+import { MealService } from '../services/localDataService';
+import { useCart } from './context/CartContext';
 
 const COLORS = {
   primary: '#717644',
@@ -71,7 +74,72 @@ export default function MyOverridesScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [placingOverrideId, setPlacingOverrideId] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { placeOrder } = useCart();
+
+  /**
+   * One-tap reorder for an approved override. Reads the meal IDs off
+   * the override record, resolves them through the local meal cache,
+   * builds the cart items inline, and places the order directly —
+   * skipping the menu navigation + retyping the request that the
+   * resident already went through to get this approved.
+   */
+  const orderApprovedOverride = useCallback(async (r: OverrideRequest) => {
+    if (!residentId) return;
+    setPlacingOverrideId(r.id);
+    try {
+      const ids = String(r.mealIds ?? '')
+        .split(/[, ]+/)
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (ids.length === 0) {
+        Alert.alert('Cannot reorder', 'This approval has no meal information attached.');
+        return;
+      }
+      const meals = await Promise.all(ids.map((id) => MealService.getMealById(id)));
+      const cartItems = meals
+        .filter((m): m is NonNullable<typeof m> => !!m)
+        .map((m) => ({
+          id: Number(m.id),
+          name: m.name,
+          meal_period: m.mealPeriod as any,
+          description: m.description,
+          kcal: m.nutrition?.calories ?? 0,
+          sodium_mg: parseInt(String(m.nutrition?.sodium ?? '0'), 10),
+          protein_g: parseInt(String(m.nutrition?.protein ?? '0'), 10),
+          tags: m.tags ?? [],
+          imageUrl: m.imageUrl,
+        }));
+      if (cartItems.length === 0) {
+        Alert.alert(
+          'Meals not found',
+          'Could not find the approved meals in the local catalog. Please reorder from the menu.',
+        );
+        return;
+      }
+      const period = r.mealOfDay || 'Lunch';
+      const result = await placeOrder(String(residentId), period, cartItems as any);
+      if (result.order) {
+        Alert.alert(
+          'Order placed',
+          `${cartItems.map((c) => c.name).join(', ')} ordered for ${period}.`,
+        );
+      } else if (result.conflict) {
+        Alert.alert(
+          'Already ordered',
+          `There's already an order for ${period} today. Open Upcoming Meals to view it.`,
+        );
+      } else {
+        Alert.alert('Could not place order', 'Please try again or order from the menu.');
+      }
+    } catch (e: any) {
+      console.warn('[Overrides] reorder failed', e);
+      Alert.alert('Order failed', e?.message ?? 'Network error. Please try again.');
+    } finally {
+      setPlacingOverrideId(null);
+    }
+  }, [residentId, placeOrder]);
 
   const load = useCallback(async () => {
     // Guard: residentId must be a real positive integer. `Number(undefined)`
@@ -217,11 +285,32 @@ export default function MyOverridesScreen({ navigation, route }: any) {
                 ) : null}
 
                 {r.status === 'APPROVED' && (
-                  <Text style={styles.approvalNote}>
-                    Approved{r.decidedByName ? ` by ${r.decidedByName}` : ''}
-                    {r.expiresAt ? ` — expires ${formatDateTime(r.expiresAt)}` : ''}.
-                    Place the same order again to use this approval.
-                  </Text>
+                  <View>
+                    <Text style={styles.approvalNote}>
+                      Approved{r.decidedByName ? ` by ${r.decidedByName}` : ''}
+                      {r.expiresAt ? ` — expires ${formatDateTime(r.expiresAt)}` : ''}.
+                    </Text>
+                    <Pressable
+                      onPress={() => orderApprovedOverride(r)}
+                      disabled={placingOverrideId === r.id}
+                      style={({ pressed }) => [
+                        styles.reorderBtn,
+                        placingOverrideId === r.id && { opacity: 0.5 },
+                        pressed && placingOverrideId !== r.id && { opacity: 0.85 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Order this meal now"
+                    >
+                      {placingOverrideId === r.id ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Feather name="check-circle" size={15} color="#FFFFFF" />
+                      )}
+                      <Text style={styles.reorderBtnText}>
+                        {placingOverrideId === r.id ? 'Placing…' : 'Order this meal now'}
+                      </Text>
+                    </Pressable>
+                  </View>
                 )}
                 {r.status === 'DENIED' && r.decisionReason ? (
                   <Text style={styles.deniedNote}>Admin note: {r.decisionReason}</Text>
@@ -293,5 +382,17 @@ const styles = StyleSheet.create({
   violationsHeader: { color: COLORS.danger, fontSize: 12, fontWeight: '700', marginBottom: 4 },
   violationsText: { color: COLORS.text, fontSize: 13, lineHeight: 18 },
   approvalNote: { color: COLORS.success, fontSize: 13, marginTop: 10, lineHeight: 18 },
+  reorderBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: COLORS.success,
+  },
+  reorderBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   deniedNote: { color: COLORS.textMuted, fontSize: 13, marginTop: 10, lineHeight: 18, fontStyle: 'italic' },
 });
