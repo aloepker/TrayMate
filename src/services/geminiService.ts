@@ -1,13 +1,21 @@
 /**
  * TrayMate Gemini AI Service
  *
- * Uses direct REST API calls to Gemini (not the SDK) for maximum
- * compatibility with React Native. Supports model fallback — if one
- * model hits quota (429), it automatically tries the next.
+ * All Gemini calls go through our own backend at
+ *   POST {AI_PROXY_BASE}/ai/gemini
+ * so the API key lives on the server (Render env var) and never ships
+ * in the React Native bundle. This means anyone can clone the GitHub
+ * repo, run the app, and the AI features work without setting up a
+ * personal Google API key.
  *
- * Features:
- * - Direct fetch-based API calls (no SDK dependency issues)
+ * Backend contract (see backend-gemini-route.md for sample code):
+ *   Request:  { model: string, body: <raw Gemini :generateContent body> }
+ *   Response: passes through the Gemini response JSON verbatim
+ *   Errors:   forwards Gemini's status code so 429 cooldown still works
+ *
+ * Features kept from the original direct-call version:
  * - Automatic model fallback (gemini-2.5-flash → 2.0-flash → 2.0-flash-lite)
+ * - 429 cooldown so we don't burn fetches on an exhausted model
  * - Conversation history for multi-turn chat
  * - Resident-aware system prompt with full meal database
  */
@@ -16,7 +24,39 @@ import { GEMINI_CONFIG } from '../config/geminiConfig';
 import { MealService, ResidentService } from './localDataService';
 import { isMealSafe, getUnsafeReason, SafetyResident, SafetyMeal } from './mealSafetyService';
 
-const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+// Backend proxy — same Render host as the rest of the app's API calls.
+// One endpoint forwards to whichever Gemini model the client asks for.
+const AI_PROXY_BASE = 'https://traymate-auth.onrender.com';
+const AI_PROXY_URL  = `${AI_PROXY_BASE}/ai/gemini`;
+
+/**
+ * Single helper used by every Gemini caller in this file. POSTs
+ * `{ model, body }` to the backend, which forwards to Gemini using
+ * its server-side key. Returns the parsed JSON response (same shape
+ * as Gemini's `:generateContent`) or throws with `.status` set so
+ * callers can apply the existing 429 cooldown logic.
+ */
+async function callGeminiViaProxy(model: string, body: any): Promise<any> {
+  let resp: Response;
+  try {
+    resp = await fetch(AI_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, body }),
+    });
+  } catch (e: any) {
+    throw new Error(`Network error contacting AI proxy: ${e?.message ?? e}`);
+  }
+  const text = await resp.text().catch(() => '');
+  let data: any = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { _raw: text }; }
+  if (!resp.ok) {
+    const err = new Error(`[${resp.status}] ${data?.error?.message || data?._raw || `HTTP ${resp.status}`}`);
+    (err as any).status = resp.status;
+    throw err;
+  }
+  return data;
+}
 
 // ─── Quota / rate-limit handling ─────────────────────────────────────────
 // Each free-tier model has its own quota. When one returns 429 we mark it
@@ -352,43 +392,18 @@ async function callGeminiModel(
   history: GeminiMessage[],
   userMessage: string,
 ): Promise<string> {
-  const url = `${BASE_URL}/${modelName}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
-  console.log(`[Granny BT] Calling ${modelName}, key starts with: ${GEMINI_CONFIG.apiKey.substring(0, 10)}...`);
-
-  // Build contents array: conversation history followed by current message
   const contents: GeminiMessage[] = [...history, { role: 'user', parts: [{ text: userMessage }] }];
-
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents,
     generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
   };
 
-  let resp: Response;
+  let data: any;
   try {
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch (fetchErr: any) {
-    console.error(`[Granny BT] fetch() threw: ${fetchErr.message}`);
-    throw new Error(`Network error: ${fetchErr.message}`);
-  }
-
-  console.log(`[Granny BT] ${modelName} response status: ${resp.status}`);
-
-  const text = await resp.text().catch(() => '');
-  let data: any = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch (e) {
-    data = { _raw: text };
-  }
-
-  if (!resp.ok) {
-    const status = resp.status;
-    const message = data?.error?.message || data?._raw || `HTTP ${status}`;
+    data = await callGeminiViaProxy(modelName, body);
+  } catch (err: any) {
+    const status = (err as any)?.status;
     // 429 (free-tier quota exhausted) is expected and recoverable — we
     // cool the model down for 10 minutes and the caller falls back to
     // the next model or the rule-based recommender. Don't shout at the
@@ -401,10 +416,8 @@ async function callGeminiModel(
       rateLimitedUntil[modelName] = Date.now() + 60_000;
       console.warn(`[Granny BT] ${modelName} overloaded (503), cooling down 1 min.`);
     } else {
-      console.error(`[Granny BT] ${modelName} error: [${status}] ${message}`);
+      console.error(`[Granny BT] ${modelName} error: ${err?.message ?? err}`);
     }
-    const err = new Error(`[${status}] ${message}`);
-    (err as any).status = status;
     throw err;
   }
 
@@ -428,16 +441,14 @@ export class GeminiChatService {
   private initPromise: Promise<void> | null = null;
 
   /**
-   * Check if the Gemini API key is configured.
+   * Whether AI calls are reachable. With the backend proxy in place
+   * the client no longer needs an API key — the key lives on the
+   * server. We return true unconditionally; actual reachability is
+   * detected at call time (network errors / 5xx fall through to the
+   * rule-based recommender, same as before).
    */
   isConfigured(): boolean {
-    const key = GEMINI_CONFIG.apiKey;
-    return (
-      typeof key === 'string' &&
-      key.length > 0 &&
-      key !== 'YOUR_GEMINI_API_KEY_HERE' &&
-      key !== 'REPLACE_WITH_YOUR_KEY'
-    );
+    return true;
   }
 
   /**
@@ -622,18 +633,11 @@ ${names.join('\n')}`;
 
   for (const model of GEMINI_CONFIG.models) {
     try {
-      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
       const body = {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
       };
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
+      const data = await callGeminiViaProxy(model, body);
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       // Strip markdown code fences if present
       const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
@@ -667,18 +671,11 @@ ${numbered}`;
 
   for (const model of GEMINI_CONFIG.models) {
     try {
-      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
       const body = {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 2048, temperature: 0.1 },
       };
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
+      const data = await callGeminiViaProxy(model, body);
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
       const numbered = JSON.parse(clean) as Record<string, { Español: string; Français: string; 中文: string }>;
@@ -717,18 +714,11 @@ ${uniqueTags.join('\n')}`;
 
   for (const model of GEMINI_CONFIG.models) {
     try {
-      const url = `${BASE_URL}/${model}:generateContent?key=${GEMINI_CONFIG.apiKey}`;
       const body = {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 800, temperature: 0.1 },
       };
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
+      const data = await callGeminiViaProxy(model, body);
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       const clean = raw.replace(/```json\n?|```\n?/g, '').trim();
       return JSON.parse(clean);

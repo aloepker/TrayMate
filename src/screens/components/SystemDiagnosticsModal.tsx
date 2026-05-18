@@ -91,22 +91,21 @@ async function checkBackend(): Promise<Omit<CheckResult, "key" | "label" | "desc
 }
 
 async function checkGemini(): Promise<Omit<CheckResult, "key" | "label" | "description">> {
+  // Pings the backend AI proxy rather than calling Gemini directly — the
+  // client no longer holds the API key. A 5xx from the proxy means the
+  // server is up but Gemini is unreachable/over quota.
   const started = Date.now();
-  const key = GEMINI_CONFIG.apiKey;
-  if (!key) {
-    return { status: "fail", detail: "no API key configured" };
-  }
   try {
-    const url =
-      `https://generativelanguage.googleapis.com/v1beta/models/` +
-      `${GEMINI_CONFIG.model}:generateContent?key=${key}`;
     const res = await withTimeout(
-      fetch(url, {
+      fetch("https://traymate-auth.onrender.com/ai/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: "ping" }] }],
-          generationConfig: { maxOutputTokens: 8 },
+          model: GEMINI_CONFIG.model,
+          body: {
+            contents: [{ role: "user", parts: [{ text: "ping" }] }],
+            generationConfig: { maxOutputTokens: 8 },
+          },
         }),
       }),
       TIMEOUT_MS,
