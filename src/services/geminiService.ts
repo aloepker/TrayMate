@@ -23,6 +23,7 @@
 import { GEMINI_CONFIG } from '../config/geminiConfig';
 import { MealService, ResidentService } from './localDataService';
 import { isMealSafe, getUnsafeReason, SafetyResident, SafetyMeal } from './mealSafetyService';
+import { getAuthToken } from './storage';
 
 // Backend proxy — same Render host as the rest of the app's API calls.
 // One endpoint forwards to whichever Gemini model the client asks for.
@@ -35,13 +36,21 @@ const AI_PROXY_URL  = `${AI_PROXY_BASE}/ai/gemini`;
  * its server-side key. Returns the parsed JSON response (same shape
  * as Gemini's `:generateContent`) or throws with `.status` set so
  * callers can apply the existing 429 cooldown logic.
+ *
+ * Sends the user's JWT in `Authorization: Bearer …` because the
+ * `/ai/gemini` route is gated by Spring Security — this prevents
+ * anyone with the URL from burning our Gemini quota.
  */
 async function callGeminiViaProxy(model: string, body: any): Promise<any> {
+  const tok = await getAuthToken();
   let resp: Response;
   try {
     resp = await fetch(AI_PROXY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+      },
       body: JSON.stringify({ model, body }),
     });
   } catch (e: any) {

@@ -96,10 +96,14 @@ async function checkGemini(): Promise<Omit<CheckResult, "key" | "label" | "descr
   // server is up but Gemini is unreachable/over quota.
   const started = Date.now();
   try {
+    const tok = await getAuthToken();
     const res = await withTimeout(
       fetch("https://traymate-auth.onrender.com/ai/gemini", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        },
         body: JSON.stringify({
           model: GEMINI_CONFIG.model,
           body: {
