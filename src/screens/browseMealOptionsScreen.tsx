@@ -1897,18 +1897,27 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
 
-  // Auto-suggest next upcoming meal from past orders (always visible, time-aware)
+  // Auto-suggest next upcoming meal — AI-driven, past-order-aware, safety-failsafed.
+  //
+  // Pick flow per period:
+  //   1. Hard-filter candidates with isMealSafe(profile)  ← failsafe layer 1
+  //      (AI literally cannot see allergens-conflicting meals)
+  //   2. Sort by past-order frequency so AI sees "what they usually pick" first
+  //   3. Ask AI to pick — adapts to live profile (allergies, dietary, medical)
+  //   4. Re-check isMealSafe on AI's chosen meal              ← failsafe layer 2
+  //      (defense in depth: profile mutation mid-call, stale cache, etc)
+  //   5. If AI returns null OR unsafe-on-recheck, fall back to history
+  //      score (also safety-filtered) so the user still sees SOMETHING.
+  //
+  // No matter how many times the resident's profile changes, the AI gets a
+  // fresh-safety-filtered list every time the safety profile key changes
+  // (key is in the deps array → effect re-runs → candidates rebuilt).
   useEffect(() => {
     const candidateMeals = autoOrderMeals.length > 0 ? autoOrderMeals : meals;
     if (autoSuggestDismissed || candidateMeals.length === 0) return;
 
-    // Walk Breakfast → Lunch → Dinner starting from whichever period
-    // is current/upcoming, and pick the first one the resident hasn't
-    // already placed an order for. Previously we only checked the
-    // single "next" period and gave up if it was taken — meaning a
-    // resident who ordered breakfast at 8am stopped seeing any
-    // suggestions until lunch started, when they could have been
-    // preparing the lunch tray hours earlier.
+    let cancelled = false;
+    (async () => {
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
     const today = new Date().toISOString().slice(0, 10);
 
@@ -1944,17 +1953,85 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return freq;
     };
 
+    // Resident profile for AI — pulls live allergies/dietary/medical from
+    // the SAME merged safety profile our isMealSafe() filter uses. This
+    // guarantees AI sees the EXACT constraints we enforce — no drift
+    // between "what AI considers" and "what we'd reject as unsafe".
+    const aiResident = {
+      name: residentName,
+      foodAllergies: residentSafetyProfile.foodAllergies ?? [],
+      dietaryRestrictions: residentSafetyProfile.dietaryRestrictions ?? [],
+      medicalConditions: residentSafetyProfile.medicalConditions ?? [],
+    };
+
+    // Convert a Meal → the trimmed shape Gemini expects.
+    const toAICandidate = (m: Meal) => ({
+      id: m.id,
+      name: m.name,
+      description: m.description,
+      ingredients: (m as any).ingredients,
+      allergens: (m as any).allergens,
+      calories: m.kcal,
+      sodium: m.sodium_mg,
+      protein: m.protein_g,
+      tags: m.tags,
+      meal_period: m.meal_period,
+      time_range: m.time_range,
+    });
+
+    // Pick the main meal for a period, with AI in the lead and a
+    // history-based fallback. Both paths go through isMealSafe — there
+    // is no path where an unsafe meal can win.
+    const pickMainMeal = async (periodLabel: string, mealFreq: Map<string, number>): Promise<Meal | null> => {
+      // Step 1 — safety filter (FAILSAFE LAYER 1)
+      const safe = candidateMeals
+        .filter((m) => m.meal_period === periodLabel)
+        .filter((m) => m.isAvailable !== false)
+        .filter((m) => !(m as any)._local)
+        .filter(isSafeForResident);
+      if (safe.length === 0) return null;
+
+      // Step 2 — sort by past-order frequency so AI sees usual favourites first
+      const historyRanked = [...safe].sort(
+        (a, b) =>
+          (mealFreq.get(b.name.toLowerCase()) ?? 0) -
+          (mealFreq.get(a.name.toLowerCase()) ?? 0),
+      );
+
+      // Step 3 — ask the AI (returns null if Gemini unreachable / over-quota)
+      try {
+        const aiPick = await getAIRecommendation(
+          aiResident,
+          historyRanked.map(toAICandidate),
+          periodLabel,
+        );
+        if (aiPick?.meal_name) {
+          const picked = historyRanked.find(
+            (m) => m.name.toLowerCase() === aiPick.meal_name.toLowerCase(),
+          );
+          // Step 4 — re-verify safety on AI's actual returned meal (FAILSAFE LAYER 2)
+          if (picked && isSafeForResident(picked)) {
+            return picked;
+          }
+        }
+      } catch {
+        /* swallow — fall through to history pick */
+      }
+
+      // Step 5 — history-based fallback (safety-filtered internally)
+      return pickAutoOrderMeal(safe, mealFreq, residentSafetyProfile);
+    };
+
     // Build a suggestion for any given meal period. Returns null when
     // there isn't a safe main dish for that period.
-    const buildSuggestionFor = (slot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean }) => {
+    const buildSuggestionFor = async (slot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean }) => {
       const periodLabel = slot.period.label;
       const mealFreq = getFrequencyRanked(periodLabel);
-      const mainMeal = pickAutoOrderMeal(
-        candidateMeals.filter((m) => m.meal_period === periodLabel),
-        mealFreq,
-        residentSafetyProfile,
-      );
+      const mainMeal = await pickMainMeal(periodLabel, mealFreq);
       if (!mainMeal) return null;
+      // Drinks/sides stay history-driven — they're low-stakes and we want
+      // to spare the AI quota for the main meal (which is the one whose
+      // pick actually changes a resident's day).
       const suggestDrink = pickAutoOrderMeal(
         availableDrinks.filter(isSafeForResident),
         getFrequencyRanked('Drinks'),
@@ -1980,7 +2057,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // every remaining period — the modal shows them all as swipeable
     // slides, while the bottom auto-suggest panel keeps using the
     // closest-in-time one.
-    const allSuggestions: typeof autoSuggest[] = [] as any;
+    const slots: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean }[] = [];
     for (let offset = 0; offset < MEAL_SCHEDULE.length; offset++) {
       const idx = (startIdx + offset) % MEAL_SCHEDULE.length;
       const period = MEAL_SCHEDULE[idx];
@@ -1991,9 +2068,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         : (period.start > nowMins
             ? period.start - nowMins
             : 24 * 60 - nowMins + period.start);
-      const s = buildSuggestionFor({ period, minsUntil, isNow });
-      if (s) allSuggestions.push(s as any);
+      slots.push({ period, minsUntil, isNow });
     }
+
+    // Parallel — AI service caches per (resident + period + candidate IDs)
+    // so repeated effect runs with the same profile re-use cached picks.
+    const built = await Promise.all(slots.map(buildSuggestionFor));
+    if (cancelled) return;
+    const allSuggestions = built.filter((s): s is NonNullable<typeof s> => s !== null);
 
     if (allSuggestions.length === 0) {
       setAutoSuggest(null);
@@ -2008,6 +2090,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       setPendingAutoOrder(buildPendingAutoOrder(closest as any));
       setAllPendingAutoOrders(allSuggestions.map((s) => buildPendingAutoOrder(s as any)));
     }
+    })();
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meals, autoOrderMeals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
 
