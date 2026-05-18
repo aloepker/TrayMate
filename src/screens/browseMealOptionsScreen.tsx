@@ -1319,42 +1319,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   const autoOrderListRef = useRef<FlatList<any>>(null);
   const [showAutoOrderPanel, setShowAutoOrderPanel] = useState(false);
 
-  // ── Hardware back button → always log out ────────────────────────────
-  // The iPad lives in the resident's room. Even when admin opened the
-  // "view as resident" screen, pressing back means we're done with the
-  // session — clear auth so the next person at the tablet has to log in
-  // again. Never silently navigate back into a privileged dashboard.
-  // ──────────────────────────────────────────────────────────────────────
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = (): boolean => {
-        if (tabletLocked) {
-          // Kiosk mode: prompt for the staff PIN. Correct PIN → log out;
-          // cancel → stay on the screen. Residents who hit back by
-          // accident see the PIN dialog briefly and just cancel out.
-          setShowUnlockForLogout(true);
-          return true;
-        }
-        Alert.alert(
-          'Log Out?',
-          'This will end the current session. Continue?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Log Out',
-              style: 'destructive',
-              onPress: performLogout,
-            },
-          ],
-        );
-        // Consume the event so the OS doesn't also pop the stack.
-        return true;
-      };
-      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => sub.remove();
-    }, [navigation, tabletLocked, performLogout]),
-  );
-
   // Re-pick the correct tab every time the screen comes into focus
   // (handles the case where the screen stayed mounted in the
   // background while time passed). If the caller asked for a
@@ -1478,6 +1442,42 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     try { await clearAuth(); } catch { /* proceed regardless */ }
     navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
   }, [navigation]);
+
+  // ── Hardware back button → always log out ────────────────────────────
+  // The iPad lives in the resident's room. Even when admin opened the
+  // "view as resident" screen, pressing back means we're done with the
+  // session — clear auth so the next person at the tablet has to log in
+  // again. Never silently navigate back into a privileged dashboard.
+  // ──────────────────────────────────────────────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = (): boolean => {
+        if (tabletLocked) {
+          // Kiosk mode: prompt for the staff PIN. Correct PIN → log out;
+          // cancel → stay on the screen. Residents who hit back by
+          // accident see the PIN dialog briefly and just cancel out.
+          setShowUnlockForLogout(true);
+          return true;
+        }
+        Alert.alert(
+          'Log Out?',
+          'This will end the current session. Continue?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Log Out',
+              style: 'destructive',
+              onPress: performLogout,
+            },
+          ],
+        );
+        // Consume the event so the OS doesn't also pop the stack.
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [navigation, tabletLocked, performLogout]),
+  );
 
   useEffect(() => {
     setAutoSuggest(null);
@@ -3320,7 +3320,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                         setAutoOrderSlideIdx(idx);
                       }
                     }}
-                    renderItem={({ item: slide }) => (
+                    renderItem={({ item: slide }: { item: PendingAuto }) => (
                       <View style={[styles.autoOrderSlide, { width: autoOrderSlideWidth || undefined }]}>
                         <ScrollView contentContainerStyle={{ paddingBottom: 4 }}>
                           {slide.items.map((item) => {
