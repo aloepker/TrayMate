@@ -2540,9 +2540,31 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
       {/* Back Button, Title & Header Actions */}
       <View style={styles.titleRow}>
-                <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={[styles.backButton, { minHeight: touchTarget }]}
+        <TouchableOpacity
+          onPress={() => {
+            // Tablet Mode: prompt for the staff PIN instead of the
+            // logout dialog. Correct PIN logs out; cancel keeps the
+            // resident here.
+            if (tabletLocked) {
+              setShowUnlockForLogout(true);
+              return;
+            }
+            // Always log out — iPads stay in resident rooms, so back
+            // means "end this session", never "return to admin".
+            Alert.alert(
+              'Log Out?',
+              'This will end the current session. Continue?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Log Out',
+                  style: 'destructive',
+                  onPress: performLogout,
+                },
+              ],
+            );
+          }}
+          style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
           <View style={styles.backArrow}>
             <View style={[styles.backArrowLine1, { backgroundColor: pt.titleColor }]} />
