@@ -428,8 +428,30 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={[styles.backButton, { minHeight: touchTarget }]}
+          onPress={() => {
+            // Tablet Mode: prompt for the staff PIN instead of the
+            // logout dialog. Correct PIN logs out; cancel keeps the
+            // resident here.
+            if (tabletLocked) {
+              setShowUnlockForLogout(true);
+              return;
+            }
+            // Always log out — iPads stay in resident rooms, so back
+            // means "end this session", never "return to admin".
+            Alert.alert(
+              'Log Out?',
+              'This will end the current session. Continue?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Log Out',
+                  style: 'destructive',
+                  onPress: performLogout,
+                },
+              ],
+            );
+          }}
+          style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
         >
           <Feather name="chevron-left" size={22} color={COLORS.primary} />
           <Text style={[styles.backText, { fontSize: scaled(16) }]}>
