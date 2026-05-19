@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import {
   View,
@@ -10,6 +11,7 @@ import {
   ScrollView,
   Alert,
   Animated,
+  BackHandler,
 } from 'react-native';
 import type { Order } from './context/CartContext';
 import { useCart } from './context/CartContext';
@@ -20,6 +22,8 @@ import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService
 import { MealService } from '../services/localDataService';
 import { isMealSafe } from '../services/mealSafetyService';
 import { sendMessage as sendApiMessage } from '../services/api';
+import { clearAuth, isTabletModeOn } from '../services/storage';
+import TabletUnlockModal from './components/TabletUnlockModal';
 
 // ── Warm olive palette ────────────────────────────────────────────────────────
 const COLORS = {
@@ -91,6 +95,8 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   const [undoBanner, setUndoBanner] = useState<{ label: string; onUndo: () => void } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoFadeAnim = useRef(new Animated.Value(0)).current;
+  const [tabletLocked, setTabletLocked] = useState(false);
+  const [showUnlockForLogout, setShowUnlockForLogout] = useState(false);
 
   const showUndoBanner = (label: string, onUndo: () => void) => {
     // Clear any existing timer
@@ -119,6 +125,44 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   const residentId        = route?.params?.residentId as string | undefined;
   const residentName      = route?.params?.residentName || 'Resident';
   const residentRoom      = (route?.params?.roomNumber ?? route?.params?.room) as string | undefined;
+
+  useEffect(() => {
+    if (!residentId) return;
+    let cancelled = false;
+    isTabletModeOn(residentId).then((v) => { if (!cancelled) setTabletLocked(v); });
+    return () => { cancelled = true; };
+  }, [residentId]);
+
+  const performLogout = useCallback(async () => {
+    try { await clearAuth(); } catch { /* proceed regardless */ }
+    navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
+  }, [navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = (): boolean => {
+        if (tabletLocked) {
+          setShowUnlockForLogout(true);
+          return true;
+        }
+        Alert.alert(
+          'Log Out?',
+          'This will end the current session. Continue?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Log Out',
+              style: 'destructive',
+              onPress: performLogout,
+            },
+          ],
+        );
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [tabletLocked, performLogout]),
+  );
 
   const handleSendResidentMessage = (order: any) => {
     if (!residentReplyText.trim()) return;
@@ -961,6 +1005,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </Animated.View>
       )}
+      <TabletUnlockModal
+        visible={showUnlockForLogout}
+        onClose={() => setShowUnlockForLogout(false)}
+        onSuccess={() => { setShowUnlockForLogout(false); performLogout(); }}
+      />
     </View>
   );
 }
