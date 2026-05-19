@@ -2541,10 +2541,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       {/* Back Button, Title & Header Actions */}
       <View style={styles.titleRow}>
         <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { minHeight: touchTarget }]}
+        >      
+{/*        <TouchableOpacity
           onPress={() => {
             // Tablet Mode: prompt for the staff PIN instead of the
             // logout dialog. Correct PIN logs out; cancel keeps the
             // resident here.
+//variable and function doesn't exist in upcoming meals            
             if (tabletLocked) {
               setShowUnlockForLogout(true);
               return;
@@ -2559,13 +2564,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 {
                   text: 'Log Out',
                   style: 'destructive',
+//performLogout function needs to be copied:
                   onPress: performLogout,
                 },
               ],
             );
           }}
           style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
-        >
+        > */}
           <View style={styles.backArrow}>
             <View style={[styles.backArrowLine1, { backgroundColor: pt.titleColor }]} />
             <View style={[styles.backArrowLine2, { backgroundColor: pt.titleColor }]} />
