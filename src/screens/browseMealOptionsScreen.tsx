@@ -17,7 +17,6 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  BackHandler,
 } from "react-native";
 import { StatusBar } from "react-native";
 import Feather from "react-native-vector-icons/Feather";
@@ -61,8 +60,7 @@ import {
 import { geminiChat, getAIRecommendation } from "../services/geminiService";
 import { getUnsafeReason, isMealSafe, SafetyResident } from "../services/mealSafetyService";
 import { useClock } from '../context/useClock';
-import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, clearAuth, isTabletModeOn } from '../services/storage';
-import TabletUnlockModal from './components/TabletUnlockModal';
+import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers } from '../services/storage';
 import { Picker } from "@react-native-picker/picker";
 import { sendMessage as sendApiMessage, createOverrideApi, getDefaultMealsApi, getResidentById } from '../services/api';
 
@@ -1423,62 +1421,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   );
   const residentSafetyProfileKey = JSON.stringify(residentSafetyProfile);
 
-  // Tablet (kiosk) mode: when on for this resident, the logout flows
-  // (back arrow + hardware back) become no-ops and instead nudge the
-  // user to long-press the name on the home screen to unlock.
-  const [tabletLocked, setTabletLocked] = useState(false);
-  // PIN-entry modal opens whenever a logout-y gesture fires while
-  // Tablet Mode is on. Successful PIN → log out + return to Login;
-  // Cancel → stay on this screen.
-  const [showUnlockForLogout, setShowUnlockForLogout] = useState(false);
-  useEffect(() => {
-    if (!residentId) return;
-    let cancelled = false;
-    isTabletModeOn(residentId).then((v) => { if (!cancelled) setTabletLocked(v); });
-    return () => { cancelled = true; };
-  }, [residentId]);
-
-  const performLogout = useCallback(async () => {
-    try { await clearAuth(); } catch { /* proceed regardless */ }
-    navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] });
-  }, [navigation]);
-
-  // ── Hardware back button → always log out ────────────────────────────
-  // The iPad lives in the resident's room. Even when admin opened the
-  // "view as resident" screen, pressing back means we're done with the
-  // session — clear auth so the next person at the tablet has to log in
-  // again. Never silently navigate back into a privileged dashboard.
-  // ──────────────────────────────────────────────────────────────────────
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = (): boolean => {
-        if (tabletLocked) {
-          // Kiosk mode: prompt for the staff PIN. Correct PIN → log out;
-          // cancel → stay on the screen. Residents who hit back by
-          // accident see the PIN dialog briefly and just cancel out.
-          setShowUnlockForLogout(true);
-          return true;
-        }
-        Alert.alert(
-          'Log Out?',
-          'This will end the current session. Continue?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Log Out',
-              style: 'destructive',
-              onPress: performLogout,
-            },
-          ],
-        );
-        // Consume the event so the OS doesn't also pop the stack.
-        return true;
-      };
-      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => sub.remove();
-    }, [navigation, tabletLocked, performLogout]),
-  );
-
   useEffect(() => {
     setAutoSuggest(null);
     setPendingAutoOrder(null);
@@ -2564,14 +2506,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       {/* Back Button, Title & Header Actions */}
       <View style={styles.titleRow}>
         <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { minHeight: touchTarget }]}
+        >      
+{/*        <TouchableOpacity
           onPress={() => {
-            // Tablet Mode: prompt for the staff PIN instead of the
-            // logout dialog. Correct PIN logs out; cancel keeps the
-            // resident here.
-            if (tabletLocked) {
-              setShowUnlockForLogout(true);
-              return;
-            }
             // Always log out — iPads stay in resident rooms, so back
             // means "end this session", never "return to admin".
             Alert.alert(
@@ -2582,13 +2521,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 {
                   text: 'Log Out',
                   style: 'destructive',
-                  onPress: performLogout,
                 },
               ],
             );
           }}
           style={[styles.backButton, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder }]}
-        >
+        > */}
           <View style={styles.backArrow}>
             <View style={[styles.backArrowLine1, { backgroundColor: pt.titleColor }]} />
             <View style={[styles.backArrowLine2, { backgroundColor: pt.titleColor }]} />
@@ -3545,12 +3483,6 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           </View>
         </View>
       </Modal>
-
-      <TabletUnlockModal
-        visible={showUnlockForLogout}
-        onClose={() => setShowUnlockForLogout(false)}
-        onSuccess={() => { setShowUnlockForLogout(false); performLogout(); }}
-      />
 
     </SafeAreaView>
   );
