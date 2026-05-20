@@ -1677,37 +1677,29 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             <Text style={[s.headerLabelBtnText, { color: "#2E7D32" }]}>Add Meal</Text>
           </TouchableOpacity>
 
-  <TouchableOpacity style={s.headerLabelBtn} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
-    <Feather name="book-open" size={18} color={C.primary} />
-    <Text style={s.headerLabelBtnText}>Menu</Text>
-  </TouchableOpacity>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#FFF8E7", borderColor: "#F59E0B" }]} onPress={() => { setShowManageMenu(true); loadMenuMeals(); }}>
+            <Feather name="book-open" size={18} color="#B45309" />
+            <Text style={[s.headerLabelBtnText, { color: "#B45309" }]}>Menu</Text>
+          </TouchableOpacity>
 
-  <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowMessagesModal(true)}>
-    <Feather name="message-square" size={18} color={C.primary} />
-    <Text style={s.headerLabelBtnText}>Messages</Text>
-    {msgUnread > 0 && (
-      <View style={s.bellBadge}>
-        <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
-      </View>
-    )}
-  </TouchableOpacity>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#EDE9FE", borderColor: "#8B5CF6" }]} onPress={() => setShowMessagesModal(true)}>
+            <Feather name="message-square" size={18} color="#6D28D9" />
+            <Text style={[s.headerLabelBtnText, { color: "#6D28D9" }]}>Messages</Text>
+            {msgUnread > 0 && (
+              <View style={s.bellBadge}>
+                <Text style={s.bellBadgeText}>{msgUnread > 9 ? "9+" : msgUnread}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-  <TouchableOpacity style={s.headerLabelBtn} onPress={() => setShowSupport(true)}>
-    <Feather name="book-open" size={18} color={C.primary} />
-    <Text style={s.headerLabelBtnText}>Guide</Text>
-  </TouchableOpacity>
+          <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E0F2FE", borderColor: "#38BDF8" }]} onPress={() => setShowSupport(true)}>
+            <Feather name="book-open" size={18} color="#0369A1" />
+            <Text style={[s.headerLabelBtnText, { color: "#0369A1" }]}>Guide</Text>
+          </TouchableOpacity>
 
-<TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
-  <Text
-    style={{
-      fontSize: 15,
-      fontWeight: "700",
-      color: "#3A3A3A",
-    }}
-  >
-    Logout
-  </Text>
-</TouchableOpacity>
+          <TouchableOpacity style={[s.headerLabelBtn, s.logoutBtn]} onPress={handleLogout}>
+            <Text style={[s.headerLabelBtnText, { color: "#B91C1C" }]}>Logout</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1719,14 +1711,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         {/* ── Summary Cards ── */}
         <View style={s.summaryRow}>
           {[
-            { label: "Total",     value: counts.total,     icon: "layers"        as const, color: C.primary  },
-            { label: "Pending",   value: counts.pending,   icon: "clock"         as const, color: C.warning  },
-            { label: "Preparing", value: counts.preparing, icon: "loader"        as const, color: C.danger   },
-            { label: "Ready",     value: counts.ready,     icon: "check-circle"  as const, color: C.success  },
-            { label: "Served",    value: counts.served,    icon: "check-square"  as const, color: "#0369A1"  },
-          ].map(({ label, value, icon, color }) => (
-            <View key={label} style={s.summaryCard}>
-              <Feather name={icon} size={20} color={color} />
+            { label: "Total",     value: counts.total,     icon: "layers"        as const, color: C.primary,  bg: "#F5F3E4", accent: C.primary  },
+            { label: "Pending",   value: counts.pending,   icon: "clock"         as const, color: C.warning,  bg: "#FEF9EC", accent: "#F59E0B" },
+            { label: "Preparing", value: counts.preparing, icon: "loader"        as const, color: C.danger,   bg: "#FEF2F2", accent: C.danger  },
+            { label: "Ready",     value: counts.ready,     icon: "check-circle"  as const, color: C.success,  bg: "#F0FFF4", accent: C.success },
+            { label: "Served",    value: counts.served,    icon: "check-square"  as const, color: "#0369A1",  bg: "#EFF6FF", accent: "#0369A1" },
+          ].map(({ label, value, icon, color, bg, accent }) => (
+            <View key={label} style={[s.summaryCard, { backgroundColor: bg, borderColor: accent + "55" }]}>
+              <View style={[s.summaryCardAccent, { backgroundColor: accent }]} />
+              <Feather name={icon} size={22} color={color} />
               <Text style={[s.summaryValue, { color }]}>{value}</Text>
               <Text style={s.summaryLabel}>{label}</Text>
             </View>
@@ -2657,14 +2650,9 @@ const s = StyleSheet.create({
     color: "#FFF",
   },
   logoutBtn: {
-  height: 44,
-  minWidth: 110,
-  borderWidth: 1.5,
-  borderColor: "#B8AF84",
-  backgroundColor: "#FFFFFF",
-  borderRadius: 16,
-  alignItems: "center",
-  justifyContent: "center",
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+    justifyContent: "center",
   },
 
   // Tabs
@@ -2706,15 +2694,23 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
   summaryCard: {
-  flex: 1,
-  backgroundColor: C.surface,
-  borderRadius: 16,
-  paddingVertical: 18,
-  alignItems: "center",
-  gap: 5,
-  borderWidth: 2,
-  borderColor: "#D7D0A8",
-  elevation: 3,
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1.5,
+    elevation: 2,
+    overflow: "hidden",
+  },
+  summaryCardAccent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   summaryValue: {
     fontSize: 24,
