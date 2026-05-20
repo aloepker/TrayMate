@@ -995,6 +995,22 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                     <Feather name="file-text" size={14} color="#6D6B3B" />
                     <Text style={styles.dietaryHistoryBtnText}>View Dietary History</Text>
                   </Pressable>
+
+                  {/* ── Order History ── */}
+<Pressable
+  style={styles.dietaryHistoryBtn}
+  onPress={() =>
+    navigation.navigate("OrderHistory", {
+      residentId: r.id,
+      residentName: r.name,
+    })
+  }
+>
+  <Feather name="clock" size={14} color="#6D6B3B" />
+  <Text style={styles.dietaryHistoryBtnText}>View Order History</Text>
+</Pressable>
+
+
                 </View>
               );
             })}
