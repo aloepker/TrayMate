@@ -372,6 +372,8 @@ const AIAssistantChat = ({
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const detailScrollRef = useRef<ScrollView>(null);
+  const [noteInputY, setNoteInputY] = useState(0);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2929,6 +2931,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 </TouchableOpacity>
               </View>
               <ScrollView
+                ref={detailScrollRef}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={styles.detailScrollContent}
@@ -2989,16 +2992,30 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     </View>
 
                     {/* Special Note */}
-                    <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>Special note for kitchen</Text>
-                    <TextInput
-                      style={styles.detailNoteInput}
-                      placeholder="e.g. No onions, extra sauce…"
-                      placeholderTextColor="#9CA3AF"
-                      value={specialNote}
-                      onChangeText={setSpecialNote}
-                      multiline
-                      maxLength={200}
-                    />
+                    <View
+                      onLayout={(e) => setNoteInputY(e.nativeEvent.layout.y)}
+                    >
+                      <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>Special note for kitchen</Text>
+                      <TextInput
+                        style={styles.detailNoteInput}
+                        placeholder="e.g. No onions, extra sauce…"
+                        placeholderTextColor="#9CA3AF"
+                        value={specialNote}
+                        onChangeText={setSpecialNote}
+                        multiline
+                        maxLength={200}
+                        onFocus={() => {
+                          // Scroll so the note input sits comfortably above the keyboard.
+                          // Delay slightly so the keyboard has started opening first.
+                          setTimeout(() => {
+                            detailScrollRef.current?.scrollTo({
+                              y: Math.max(0, noteInputY - 80),
+                              animated: true,
+                            });
+                          }, 150);
+                        }}
+                      />
+                    </View>
 
                     {/* Add-on pickers: Drink & Side — horizontal row */}
                     {selectedMeal.meal_period !== 'Drinks' && selectedMeal.meal_period !== 'Sides' && (availableDrinks.length > 0 || availableSides.length > 0) && (
@@ -4498,7 +4515,7 @@ helpAccordionLeft: {
     justifyContent: 'center',
   },
   detailScrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 380, // extra room so the note input can scroll above the keyboard
   },
   detailImageWrap: {
     height: 220,
