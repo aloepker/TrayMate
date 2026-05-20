@@ -1660,11 +1660,15 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             accessibilityRole="button"
             accessibilityLabel="Refresh orders and alerts"
           >
-            {loading ? (
-              <ActivityIndicator size="small" color="#2D3748" />
-            ) : (
-              <Feather name="refresh-cw" size={18} color="#2D3748" />
-            )}
+            {/* Fixed 18x18 icon slot so the loading spinner doesn't make
+                this button taller than the Add Meal button next to it. */}
+            <View style={{ width: 18, height: 18, alignItems: "center", justifyContent: "center" }}>
+              {loading ? (
+                <ActivityIndicator size="small" color="#2D3748" />
+              ) : (
+                <Feather name="refresh-cw" size={18} color="#2D3748" />
+              )}
+            </View>
             <Text style={[s.headerLabelBtnText, { color: "#2D3748" }]}>Refresh</Text>
           </TouchableOpacity>
 
@@ -2606,6 +2610,7 @@ const s = StyleSheet.create({
   gap: 6,
   paddingHorizontal: 14,
   paddingVertical: 9,
+  height: 40,
   borderRadius: 20,
   backgroundColor: C.primaryLight,
   borderWidth: 1.5,

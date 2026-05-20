@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
@@ -1839,6 +1839,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     loadRecommendation();
   }, [selectedPeriod, loadMenu, loadRecommendation]);
 
+  // Derived value that ONLY changes when the resident crosses a meal-
+  // period boundary (e.g. 10am→11am brings them out of breakfast and
+  // into lunch). The clock provider ticks every 60s, but most ticks
+  // don't change the period, so this memo returns the same string and
+  // any effect using it as a dep does NOT re-run. This is the lever
+  // we use to stop the AI auto-suggest from firing every minute and
+  // burning the Gemini quota.
+  const currentPeriodKey = useMemo(() => {
+    const mins = currentTime.getHours() * 60 + currentTime.getMinutes();
+    for (let i = 0; i < MEAL_SCHEDULE.length; i++) {
+      const p = MEAL_SCHEDULE[i];
+      if (mins < p.end) return `${i}:${p.label}`;
+    }
+    return `wrap:${MEAL_SCHEDULE[0].label}`;
+  }, [currentTime]);
+
   // Auto-suggest next upcoming meal — AI-driven, past-order-aware, safety-failsafed.
   //
   // Pick flow per period:
@@ -2036,7 +2052,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meals, autoOrderMeals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentTime.getHours(), currentTime.getMinutes()]);
+  // ⚠️  IMPORTANT: do NOT add currentTime.getMinutes() to this dep array.
+  // The clock provider ticks every 60s — if minutes are a dep, this effect
+  // re-runs every minute, which fires up to N AI calls per minute (one per
+  // unordered meal period) and burns through the Gemini free-tier quota
+  // (250 req/day per model) in roughly an hour PER DEVICE that has the
+  // app open. Period-boundary changes are captured by `currentPeriodKey`
+  // below — see the useMemo that derives it.
+  }, [meals, autoOrderMeals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentPeriodKey]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
