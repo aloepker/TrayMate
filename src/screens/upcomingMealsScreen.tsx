@@ -470,16 +470,18 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
-      <View style={styles.header}> {/*
-        <TouchableOpacity 
+      <View style={styles.header}>
+        {/*
+        <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { minHeight: touchTarget }]}
-        > 
+        >
           <Feather name="chevron-left" size={22} color={COLORS.primary} />
           <Text style={[styles.backText, { fontSize: scaled(16) }]}>
             {t.back?.replace(/^[\s\u2190\u21A9\u2B05]+/, '') || 'Back'}
           </Text>
-        </TouchableOpacity> */}
+        </TouchableOpacity>
+        */}
 
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { fontSize: scaled(22) }]}>{t.upcomingMeals}</Text>
