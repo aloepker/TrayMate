@@ -1319,6 +1319,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Detail sheet — scroll ref + note input position for keyboard avoidance
   const detailScrollRef = useRef<ScrollView>(null);
   const [noteInputY, setNoteInputY] = useState(0);
+  // Session-level recommendation cache: period → recommendation result.
+  // Prevents calling Gemini on every tab switch for the same meal period.
+  // Keyed by "<residentId>:<targetPeriod>" so switching residents busts the cache.
+  const recCacheRef = useRef<Map<string, any>>(new Map());
 
   // Re-pick the correct tab every time the screen comes into focus
   // (handles the case where the screen stayed mounted in the
@@ -1731,6 +1735,16 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       }
 
       // ── Step 4: ask Gemini to pick ONE from the safe candidates ──
+      // Check session cache first — avoids re-calling Gemini when the user
+      // just taps back to a tab they already visited this session.
+      const cacheKey = `${residentId ?? 'default'}:${targetPeriod}`;
+      const cached = recCacheRef.current.get(cacheKey);
+      if (cached !== undefined) {
+        setRecommendation(cached ? { ...cached, targetPeriod: targetPeriod ?? undefined } : null);
+        setRecLoading(false);
+        return;
+      }
+
       const aiCandidates = safeMeals.map((m) => ({
         id: m.id,
         name: m.name,
@@ -1818,6 +1832,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         };
       }
 
+      // Store in session cache so repeat tab visits skip Gemini
+      recCacheRef.current.set(cacheKey, rec ?? null);
       setRecommendation(rec ? { ...rec, targetPeriod: targetPeriod ?? undefined } : null);
       setRecLoading(false);
     } catch (err) {
