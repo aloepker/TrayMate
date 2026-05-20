@@ -372,8 +372,6 @@ const AIAssistantChat = ({
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
-  const detailScrollRef = useRef<ScrollView>(null);
-  const [noteInputY, setNoteInputY] = useState(0);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1318,6 +1316,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   );
   const autoOrderListRef = useRef<FlatList<any>>(null);
   const [showAutoOrderPanel, setShowAutoOrderPanel] = useState(false);
+  // Detail sheet — scroll ref + note input position for keyboard avoidance
+  const detailScrollRef = useRef<ScrollView>(null);
+  const [noteInputY, setNoteInputY] = useState(0);
 
   // Re-pick the correct tab every time the screen comes into focus
   // (handles the case where the screen stayed mounted in the
