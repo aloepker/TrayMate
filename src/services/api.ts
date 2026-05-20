@@ -1073,8 +1073,8 @@ export async function createMeal(payload: CreateMealPayload): Promise<any> {
   });
 }
 
-export async function updateMeal(mealId: number, payload: Partial<CreateMealPayload>): Promise<any> {
-  return request<any>(`/menu/${mealId}`, {
+export async function updateMeal(mealId: number, payload: Partial<CreateMealPayload> ): Promise<any> {
+  return request<any>(`/menu/edit/${mealId}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
