@@ -33,6 +33,25 @@ const OLIVE_BG = "#F0EEE4";
 const SURFACE = "#FAFAF8";
 const BORDER = "#EDECE8";
 
+// ── Avatar color palette — each user gets a consistent color based on their id
+const AVATAR_PALETTE = [
+  { bg: "#DBEAFE", text: "#1E40AF" }, // blue
+  { bg: "#D1FAE5", text: "#065F46" }, // green
+  { bg: "#FCE7F3", text: "#9D174D" }, // pink
+  { bg: "#FEF3C7", text: "#92400E" }, // amber
+  { bg: "#EDE9FE", text: "#5B21B6" }, // purple
+  { bg: "#FFEDD5", text: "#9A3412" }, // orange
+  { bg: "#E0F2FE", text: "#0369A1" }, // sky
+  { bg: "#FEE2E2", text: "#991B1B" }, // red
+  { bg: "#ECFDF5", text: "#047857" }, // emerald
+  { bg: "#FDF4FF", text: "#7E22CE" }, // violet
+];
+const getAvatarColor = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) & 0xffff;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+};
+
 type SidebarEntry = {
   userId: string;
   name: string;
@@ -529,6 +548,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                   >
                     {sidebarList.map((entry) => {
                       const active = selectedUserId === entry.userId;
+                      const ac = getAvatarColor(entry.userId);
 
                       return (
                         <View key={entry.userId}>
@@ -536,8 +556,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                             style={[s.chatRow, active && s.chatRowActive]}
                             onPress={() => loadConversation(entry.userId)}
                           >
-                            <View style={[s.avatar, active && s.avatarActive]}>
-                              <Text style={[s.avatarText, active && s.avatarTextActive]}>
+                            <View style={[s.avatar, active ? s.avatarActive : { backgroundColor: ac.bg }]}>
+                              <Text style={[s.avatarText, active ? s.avatarTextActive : { color: ac.text }]}>
                                 {entry.name.charAt(0).toUpperCase()}
                               </Text>
                             </View>
@@ -618,11 +638,13 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                 ) : (
                   <>
                     <View style={s.chatTopBar}>
-                      <View style={s.avatarMd}>
-                        <Text style={s.avatarMdText}>
+                      {(() => { const ac = getAvatarColor(selectedUserId ?? ""); return (
+                      <View style={[s.avatarMd, { backgroundColor: ac.bg }]}>
+                        <Text style={[s.avatarMdText, { color: ac.text }]}>
                           {selectedUser?.fullName.charAt(0).toUpperCase() ?? "?"}
                         </Text>
                       </View>
+                      ); })()}
                       <View>
                         <Text style={s.chatTopName}>
                           {selectedUser?.fullName ?? `User ${selectedUserId}`}
@@ -653,6 +675,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                           const isOut =
                             currentUserId !== null &&
                             String(msg.senderId) === String(currentUserId);
+                          const bac = getAvatarColor(selectedUserId ?? "");
 
                           return (
                             <View
@@ -660,8 +683,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                               style={[s.bubbleRow, isOut ? s.bubbleOut : s.bubbleIn]}
                             >
                               {!isOut && (
-                                <View style={s.bubbleAvatar}>
-                                  <Text style={s.bubbleAvatarText}>
+                                <View style={[s.bubbleAvatar, { backgroundColor: bac.bg }]}>
+                                  <Text style={[s.bubbleAvatarText, { color: bac.text }]}>
                                     {selectedUser?.fullName.charAt(0).toUpperCase() ?? "?"}
                                   </Text>
                                 </View>
@@ -758,14 +781,16 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
               <Text style={s.pickerEmpty}>No users available</Text>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
-                {newChatUsers.map((user) => (
+                {newChatUsers.map((user) => {
+                  const pac = getAvatarColor(user.id);
+                  return (
                   <Pressable
                     key={user.id}
                     style={s.pickerRow}
                     onPress={() => handleSelectNewChatUser(user)}
                   >
-                    <View style={s.pickerAvatar}>
-                      <Text style={s.pickerAvatarText}>
+                    <View style={[s.pickerAvatar, { backgroundColor: pac.bg }]}>
+                      <Text style={[s.pickerAvatarText, { color: pac.text }]}>
                         {user.fullName.charAt(0).toUpperCase()}
                       </Text>
                     </View>
@@ -775,7 +800,8 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
                     </View>
                     <Feather name="chevron-right" size={16} color="#C4C9D4" />
                   </Pressable>
-                ))}
+                  );
+                })}
               </ScrollView>
             )}
           </View>
@@ -848,9 +874,9 @@ const s = StyleSheet.create({
     padding: 16,
   },
   card: {
-    width: "94%",
-    maxWidth: 1060,
-    height: "84%",
+    width: "97%",
+    maxWidth: 1280,
+    height: "92%",
     backgroundColor: "#FFF",
     borderRadius: 22,
     overflow: "hidden",
@@ -900,7 +926,7 @@ const s = StyleSheet.create({
   body: { flex: 1, flexDirection: "row" },
 
   sidebar: {
-    width: 288,
+    width: 330,
     borderRightWidth: 1,
     borderRightColor: BORDER,
     backgroundColor: SURFACE,
