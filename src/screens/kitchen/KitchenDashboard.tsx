@@ -1502,7 +1502,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         tags: nextTags,
         seasonal: editSeasonal,
         available: editAvailable,
-        imageUrl: editImageUrl.trim(),
+       // imageUrl: editImageUrl.trim(),
+        ...(editImageUrl.trim()
+        ? { imageUrl: editImageUrl.trim() }
+        : {}),
         ...persistedTranslationFields,
       });
       // Update local state
@@ -2405,31 +2408,6 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   <TextInput style={manageMenu.input} value={editProtein} onChangeText={setEditProtein} placeholder="e.g. 22" placeholderTextColor="#ABABAB" keyboardType="numeric" />
                 </View>
               </View>
-
-              <Text style={manageMenu.label}>Tags</Text>
-              <TextInput style={manageMenu.input} value={editTags} onChangeText={setEditTags} placeholder="e.g. Vegetarian, Low Sodium" placeholderTextColor="#ABABAB" />
-
-              <Text style={manageMenu.label}>Photo</Text>
-              {editImageUrl.trim() ? (
-                <View style={{ marginBottom: 14 }}>
-                  <Image source={{ uri: editImageUrl.trim() }} style={{ width: "100%", height: 160, borderRadius: 14, backgroundColor: C.inputBg }} resizeMode="cover" />
-                  <TouchableOpacity
-                    style={{ position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 14, width: 28, height: 28, alignItems: "center", justifyContent: "center" }}
-                    onPress={() => setEditImageUrl("")}
-                  >
-                    <Feather name="x" size={16} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={{ borderWidth: 2, borderColor: C.border, borderStyle: "dashed", borderRadius: 14, paddingVertical: 24, alignItems: "center", marginBottom: 14, backgroundColor: C.inputBg }}
-                  activeOpacity={0.7}
-                  onPress={() => pickImage((uri) => setEditImageUrl(uri))}
-                >
-                  <Feather name="camera" size={24} color={C.primary} />
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: C.text, marginTop: 6 }}>Tap to add photo</Text>
-                </TouchableOpacity>
-              )}
 
               <View style={manageMenu.toggleRow}>
                 <View style={{ flex: 1 }}>
