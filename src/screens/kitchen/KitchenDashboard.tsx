@@ -436,11 +436,21 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
       const id = serverId ? String(serverId) : `local_${Date.now()}`;
       onAdd({ ...payload, serverId, id });
       */
-
-      // Current internal API wrapper call (keeps existing behaviour until
-      // you swap in the above endpoint):
-      const res = await createMeal(createPayload as any);
-      const serverId = res?.id ? Number(res.id) : undefined;
+      const tok = await getAuthToken();
+      const res = await fetch(`${BASE}/menu`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        },
+        body: JSON.stringify(createPayload),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Server returned ${res.status}${text ? ': ' + text : ''}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      const serverId = data?.id ? Number(data.id) : undefined;
       const id = serverId ? String(serverId) : `local_${Date.now()}`;
       onAdd({ ...payload, serverId, id });
       // Reset modal fields and close on success
