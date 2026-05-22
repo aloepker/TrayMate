@@ -1,3 +1,4 @@
+//screens/SettingsScreens.tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -467,7 +468,7 @@ const ActionRow = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3EF',
+    backgroundColor: '#EFE9DC',
     paddingTop: 50,
   },
   header: {

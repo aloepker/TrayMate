@@ -869,6 +869,8 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
 
               return (
                 <View key={r.id || `res-${idx}`} style={[styles.assignRow, isUnassigned && styles.assignRowWarning]}>
+                  <View style={styles.residentCardLayout}>
+                    <View style={styles.residentMainContent}>
 
                   {/* ── Top row: room pill · name · edit/delete ── */}
                   <View style={styles.assignHeader}>
@@ -944,75 +946,66 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
                       </Pressable>
                     </View>
                   </View>
+      </View>
+      
+      <View style={styles.residentSideActions}>
+        <Pressable
+          style={[styles.sideActionBtn, styles.sidePrimaryBtn]}
+          onPress={() => {
+            const cgIds = residentCaregiversMap[rid] ?? [];
+            const firstCgId = cgIds.length > 0 ? cgIds[0] : null;
+            const firstCgName = firstCgId
+              ? (caregivers.find(c => String(c.id) === firstCgId)?.name ?? null)
+              : null;
 
-                  {/* ── Resident Dashboard button ── */}
-                  <Pressable
-                    style={styles.selectResidentBtn}
-                    onPress={() => {
-                      const cgIds = residentCaregiversMap[rid] ?? [];
-                      const firstCgId = cgIds.length > 0 ? cgIds[0] : null;
-                      const firstCgName = firstCgId
-                        ? (caregivers.find(c => String(c.id) === firstCgId)?.name ?? null)
-                        : null;
-                      // Build full array and pass it directly as a param so the
-                      // browse screen has it immediately (storage write is async).
-                      const caregiversArray = cgIds.map(id => {
-                        const found = caregivers.find(c => String(c.id) === id);
-                        return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
-                      }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
-                      // Also persist to storage for future navigations
-                      setResidentCaregivers(String(r.id), caregiversArray);
-                      // Land on Upcoming Meals (the per-period summary)
-                      // instead of the menu. Caregivers and admins
-                      // typically open a resident's session to confirm
-                      // what's been ordered today; the menu is one tap
-                      // deeper via the "Order Breakfast/Lunch/Dinner"
-                      // cards.
-                      navigation.navigate("UpcomingMeals", {
-                        residentId: r.id,
-                        residentName: r.name,
-                        dietaryRestrictions: r.dietaryRestrictions ?? [],
-                        foodAllergies: r.foodAllergies ?? [],
-                        caregiverId: firstCgId,
-                        caregiverName: firstCgName,
-                        assignedCaregivers: caregiversArray,
-                        viewerRole: 'admin',
-                      });
-                    }}
-                  >
-                    <Feather name="log-in" size={14} color="#FFFFFF" />
-                    <Text style={styles.selectResidentBtnText}>Resident Dashboard</Text>
-                  </Pressable>
+            const caregiversArray = cgIds.map(id => {
+              const found = caregivers.find(c => String(c.id) === id);
+              return found ? { caregiverId: String(found.id), caregiverName: found.name } : null;
+            }).filter(Boolean) as Array<{ caregiverId: string; caregiverName: string }>;
 
-                  {/* ── Dietary History (audit log) ── */}
-                  <Pressable
-                    style={styles.dietaryHistoryBtn}
-                    onPress={() => navigation.navigate("DietaryAudit", {
-                      residentId: r.id,
-                      residentName: r.name,
-                    })}
-                  >
-                    <Feather name="file-text" size={14} color="#6D6B3B" />
-                    <Text style={styles.dietaryHistoryBtnText}>View Dietary History</Text>
-                  </Pressable>
+            setResidentCaregivers(String(r.id), caregiversArray);
 
-                  {/* ── Order History ── */}
-<Pressable
-  style={styles.dietaryHistoryBtn}
-  onPress={() =>
-    navigation.navigate("OrderHistory", {
-      residentId: r.id,
-      residentName: r.name,
-    })
-  }
->
-  <Feather name="clock" size={14} color="#6D6B3B" />
-  <Text style={styles.dietaryHistoryBtnText}>View Order History</Text>
-</Pressable>
+            navigation.navigate("UpcomingMeals", {
+              residentId: r.id,
+              residentName: r.name,
+              dietaryRestrictions: r.dietaryRestrictions ?? [],
+              foodAllergies: r.foodAllergies ?? [],
+              caregiverId: firstCgId,
+              caregiverName: firstCgName,
+              assignedCaregivers: caregiversArray,
+              viewerRole: "admin",
+            });
+          }}
+        >
+          <Feather name="log-in" size={13} color="#FFFFFF" />
+          <Text style={styles.sidePrimaryText}>Dashboard</Text>
+        </Pressable>
 
+        <Pressable
+          style={styles.sideActionBtn}
+          onPress={() => navigation.navigate("DietaryAudit", {
+            residentId: r.id,
+            residentName: r.name,
+          })}
+        >
+          <Feather name="file-text" size={13} color="#6D6B3B" />
+          <Text style={styles.sideActionText}>Dietary</Text>
+        </Pressable>
 
-                </View>
-              );
+        <Pressable
+          style={styles.sideActionBtn}
+          onPress={() => navigation.navigate("OrderHistory", {
+            residentId: r.id,
+            residentName: r.name,
+          })}
+        >
+          <Feather name="clock" size={13} color="#6D6B3B" />
+          <Text style={styles.sideActionText}>Orders</Text>
+        </Pressable>
+      </View>
+    </View>
+  </View>
+);
             })}
             <Pressable
               style={styles.outlineBtn}
@@ -1659,6 +1652,54 @@ const styles = StyleSheet.create({
     borderLeftColor: "#E8A020",
     borderColor: "#E8E6DC",
   },
+
+residentCardLayout: {
+  flexDirection: "row",
+  gap: 14,
+  alignItems: "flex-start",
+},
+
+residentMainContent: {
+  flex: 1,
+  gap: 12,
+},
+
+residentSideActions: {
+  width: 130,
+  gap: 8,
+  alignItems: "stretch",
+},
+
+sideActionBtn: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  backgroundColor: "#F0F1DC",
+  borderRadius: 10,
+  paddingVertical: 9,
+  paddingHorizontal: 8,
+  borderWidth: 1,
+  borderColor: "#D9DBC0",
+},
+
+sidePrimaryBtn: {
+  backgroundColor: "#6D6B3B",
+  borderColor: "#6D6B3B",
+},
+
+sideActionText: {
+  fontSize: 12,
+  fontWeight: "800",
+  color: "#6D6B3B",
+},
+
+sidePrimaryText: {
+  fontSize: 12,
+  fontWeight: "800",
+  color: "#FFFFFF",
+},
+
   assignHeader: {
     flexDirection: "row",
     alignItems: "center",

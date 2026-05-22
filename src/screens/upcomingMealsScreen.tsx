@@ -1,3 +1,4 @@
+//screens/upcomingMealsScreen.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
@@ -29,7 +30,8 @@ import TabletUnlockModal from './components/TabletUnlockModal';
 const COLORS = {
   primary:      '#717644',
   primaryLight: '#F0EFE6',
-  background:   '#F5F3EE',
+  background:   '#EFE9DC',
+
   surface:      '#FDFCF9',
   card:         '#FFFFFF',
   border:       '#E2DFD8',
