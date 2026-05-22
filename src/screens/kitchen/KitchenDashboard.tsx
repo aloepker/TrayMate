@@ -347,10 +347,15 @@ const overlay = StyleSheet.create({
 interface SeasonalModalProps {
   visible: boolean;
   onClose: () => void;
+  // `onAdd` may receive a server-side id when the modal persists
+  // the meal directly. `serverId` is the numeric id returned by
+  // the backend; `id` is a string used for local list keys.
   onAdd: (meal: {
     name: string; description: string; period: MealPeriod; tag: string;
     calories?: number; sodium?: number; protein?: number;
     imageUrl?: string; seasonal: boolean;
+    serverId?: number;
+    id?: string;
   }) => void;
 }
 
@@ -378,26 +383,78 @@ const SeasonalMealModal: React.FC<SeasonalModalProps> = ({ visible, onClose, onA
   const toggleDietary = (item: string) =>
     setDietary((prev) => prev.includes(item) ? prev.filter((d) => d !== item) : [...prev, item]);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!name.trim()) { Alert.alert("Required", "Please enter a meal name."); return; }
     // Build tag from dietary selections + seasonal
     const parts = [...dietary];
     if (isSeasonal) parts.unshift("Seasonal");
     const allTags = parts.filter(Boolean).join(", ");
-    onAdd({
-      name: name.trim(), description: description.trim(), period, tag: allTags,
+
+    const payload = {
+      name: name.trim(),
+      description: description.trim(),
+      period,
+      tag: allTags,
       calories: calories ? Number(calories) : undefined,
       sodium: sodium ? Number(sodium) : undefined,
       protein: protein ? Number(protein) : undefined,
       imageUrl: photoUrl.trim() || undefined,
       seasonal: isSeasonal,
-    });
-    // Reset all fields
-    setName(""); setDescription(""); setPeriod("Breakfast");
-    setCalories(""); setSodium(""); setProtein("");
-    setDietary([]); setPhotoUrl(""); setDropdownOpen(false);
-    setIsSeasonal(false);
-    onClose();
+    };
+
+    // Try to persist directly from the modal. If the call succeeds
+    // we'll pass the returned server id back to the parent via
+    // `onAdd` so the parent doesn't try to save again.
+    try {
+      const mealTypeMap: Record<string, string> = {
+        Breakfast: "B", Lunch: "L", Dinner: "D", Sides: "Side", Drinks: "Beverage",
+      };
+      const createPayload = {
+        name: payload.name,
+        description: payload.description,
+        mealperiod: payload.period,
+        mealtype: mealTypeMap[payload.period] || "L",
+        calories: payload.calories,
+        sodium: payload.sodium,
+        protein: payload.protein,
+        tags: payload.tag,
+        available: true,
+        seasonal: payload.seasonal,
+        //imageUrl: payload.imageUrl,
+      };
+      // TODO: Replace this with your backend endpoint when ready.
+      // Example placeholder showing the JSON payload you should POST.
+      // Keep this commented until your API is ready.
+      /*
+      const res = await fetch('https://your-backend.example.com/api/menu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createPayload),
+      });
+      const data = await res.json();
+      const serverId = data?.id ? Number(data.id) : undefined;
+      const id = serverId ? String(serverId) : `local_${Date.now()}`;
+      onAdd({ ...payload, serverId, id });
+      */
+
+      // Current internal API wrapper call (keeps existing behaviour until
+      // you swap in the above endpoint):
+      const res = await createMeal(createPayload as any);
+      const serverId = res?.id ? Number(res.id) : undefined;
+      const id = serverId ? String(serverId) : `local_${Date.now()}`;
+      onAdd({ ...payload, serverId, id });
+      // Reset modal fields and close on success
+      setName(""); setDescription(""); setPeriod("Breakfast");
+      setCalories(""); setSodium(""); setProtein("");
+      setDietary([]); setPhotoUrl(""); setDropdownOpen(false);
+      setIsSeasonal(false);
+      onClose();
+    } catch (e: any) {
+      // Persisting failed — per new behaviour we do NOT add locally.
+      // Keep the modal open so the user can retry or cancel.
+      Alert.alert("Network Error", "Could not save to server. Please try again.");
+      return;
+    }
   };
 
   const selected = PERIOD_OPTIONS.find((o) => o.value === period)!;
@@ -1296,7 +1353,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
   const addSeasonalMeal = async (meal: Omit<SeasonalEntry, "id"> & {
     calories?: number; sodium?: number; protein?: number;
-    imageUrl?: string; seasonal: boolean;
+    imageUrl?: string; seasonal: boolean; serverId?: number; id?: string;
   }) => {
     // Determine mealtype from period
     const mealTypeMap: Record<string, string> = {
@@ -1306,30 +1363,38 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     setAddMealStage({ stage: 'saving', mealName: meal.name });
 
     let savedMealId: number | null = null;
-    try {
-      const result = await createMeal({
-        name: meal.name,
-        description: meal.description,
-        mealperiod: meal.period,
-        mealtype: mealTypeMap[meal.period] || "L",
-        calories: meal.calories,
-        sodium: meal.sodium,
-        protein: meal.protein,
-        tags: meal.tag,
-        available: true,
-        seasonal: meal.seasonal,
-        imageUrl: meal.imageUrl,
-      });
-      const newId = result?.id ? String(result.id) : `meal_${Date.now()}`;
-      savedMealId = result?.id ? Number(result.id) : null;
+    // If the modal already persisted the meal it will pass `serverId`.
+    // In that case skip creating again and just add to local state.
+    if (meal.serverId) {
+      savedMealId = meal.serverId;
+      const newId = meal.id ?? String(meal.serverId);
       setSeasonalMeals((prev) => [...prev, { ...meal, id: newId }]);
-    } catch (e: any) {
-      // Still add locally even if backend fails — keeps the UI usable
-      setSeasonalMeals((prev) => [...prev, { ...meal, id: `local_${Date.now()}` }]);
-      setAddMealStage({ stage: 'error', mealName: meal.name, errorMsg: e?.message ?? 'Network error' });
-      // Give the user a moment to see the error before dismissing
-      setTimeout(() => setAddMealStage(null), 2200);
-      return;
+    } else {
+      try {
+        const result = await createMeal({
+          name: meal.name,
+          description: meal.description,
+          mealperiod: meal.period,
+          mealtype: mealTypeMap[meal.period] || "L",
+          calories: meal.calories,
+          sodium: meal.sodium,
+          protein: meal.protein,
+          tags: meal.tag,
+          available: true,
+          seasonal: meal.seasonal,
+          imageUrl: meal.imageUrl,
+        });
+        const newId = result?.id ? String(result.id) : `meal_${Date.now()}`;
+        savedMealId = result?.id ? Number(result.id) : null;
+        setSeasonalMeals((prev) => [...prev, { ...meal, id: newId }]);
+      } catch (e: any) {
+        // Still add locally even if backend fails — keeps the UI usable
+        setSeasonalMeals((prev) => [...prev, { ...meal, id: `local_${Date.now()}` }]);
+        setAddMealStage({ stage: 'error', mealName: meal.name, errorMsg: e?.message ?? 'Network error' });
+        // Give the user a moment to see the error before dismissing
+        setTimeout(() => setAddMealStage(null), 2200);
+        return;
+      }
     }
 
     // Translation — awaited so the loading screen reflects real progress.
