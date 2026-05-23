@@ -1323,6 +1323,12 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // Prevents calling Gemini on every tab switch for the same meal period.
   // Keyed by "<residentId>:<targetPeriod>" so switching residents busts the cache.
   const recCacheRef = useRef<Map<string, any>>(new Map());
+  // Guards the auto-suggest AI calls. Tracks the last composite key used
+  // to trigger Gemini: "<residentId>:<currentPeriodKey>:<safetyProfileKey>".
+  // When that key is unchanged the effect skips the AI and lets the
+  // history-based fallback handle the pick — no extra quota burned on
+  // a mere Breakfast→Lunch tab switch.
+  const autoSuggestAIKeyRef = useRef<string>("");
 
   // Re-pick the correct tab every time the screen comes into focus
   // (handles the case where the screen stayed mounted in the
@@ -1893,6 +1899,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     const candidateMeals = autoOrderMeals.length > 0 ? autoOrderMeals : meals;
     if (autoSuggestDismissed || candidateMeals.length === 0) return;
 
+    // Skip AI when only the display tab changed (meals dep fired) but the
+    // period boundary / resident / safety-profile is exactly the same as
+    // the last successful AI run. Use the cheap history-based fallback
+    // instead — this is what prevents quota burn on every tab switch.
+    const aiRunKey = `${residentId ?? ''}:${currentPeriodKey}:${residentSafetyProfileKey}`;
+    const skipAI = autoSuggestAIKeyRef.current === aiRunKey;
+
     let cancelled = false;
     (async () => {
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
@@ -1975,24 +1988,28 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           (mealFreq.get(a.name.toLowerCase()) ?? 0),
       );
 
-      // Step 3 — ask the AI (returns null if Gemini unreachable / over-quota)
-      try {
-        const aiPick = await getAIRecommendation(
-          aiResident,
-          historyRanked.map(toAICandidate),
-          periodLabel,
-        );
-        if (aiPick?.meal_name) {
-          const picked = historyRanked.find(
-            (m) => m.name.toLowerCase() === aiPick.meal_name.toLowerCase(),
+      // Step 3 — ask the AI (returns null if Gemini unreachable / over-quota).
+      // Skipped when the period/resident/profile key hasn't changed since the
+      // last run (i.e. only the display tab switched) to avoid burning quota.
+      if (!skipAI) {
+        try {
+          const aiPick = await getAIRecommendation(
+            aiResident,
+            historyRanked.map(toAICandidate),
+            periodLabel,
           );
-          // Step 4 — re-verify safety on AI's actual returned meal (FAILSAFE LAYER 2)
-          if (picked && isSafeForResident(picked)) {
-            return picked;
+          if (aiPick?.meal_name) {
+            const picked = historyRanked.find(
+              (m) => m.name.toLowerCase() === aiPick.meal_name.toLowerCase(),
+            );
+            // Step 4 — re-verify safety on AI's actual returned meal (FAILSAFE LAYER 2)
+            if (picked && isSafeForResident(picked)) {
+              return picked;
+            }
           }
+        } catch {
+          /* swallow — fall through to history pick */
         }
-      } catch {
-        /* swallow — fall through to history pick */
       }
 
       // Step 5 — history-based fallback (safety-filtered internally)
@@ -2052,6 +2069,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // so repeated effect runs with the same profile re-use cached picks.
     const built = await Promise.all(slots.map(buildSuggestionFor));
     if (cancelled) return;
+    // Mark that AI ran for this key so subsequent tab-switch re-runs skip it.
+    if (!skipAI) autoSuggestAIKeyRef.current = aiRunKey;
     const allSuggestions = built.filter((s): s is NonNullable<typeof s> => s !== null);
 
     if (allSuggestions.length === 0) {
