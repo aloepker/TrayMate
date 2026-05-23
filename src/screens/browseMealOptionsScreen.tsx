@@ -1620,14 +1620,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const resId = residentId || ResidentService.getDefaultResident().id;
       const resident = ResidentService.getResidentById(resId);
 
-      // NOTE: We intentionally do NOT filter out restricted meals here.
-      // All meals are shown; unsafe ones are flagged per-card with a
-      // "Restricted" badge so residents/caregivers can request overrides.
-
-      // mapServiceMeal imported from mealDisplayService.ts
-      // const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
-
-      //new code
+      // Do not display the restricted meals
       // Build resident safety profile
       const safetyResident = mergeSafetyProfile(
         route?.params,
@@ -1661,8 +1654,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const sidesServiceMeals = await MealService.getMealsByPeriod("Sides");
       setAvailableSides(sidesServiceMeals.map(mapServiceMeal));
 
-      // setRawServiceMeals(serviceMeals);
-      // setMeals(mapped);
+      //Display safe meals only
       setRawServiceMeals(safeServiceMeals);
       setMeals(mapped);
       setMenuLoading(false);
