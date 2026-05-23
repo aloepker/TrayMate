@@ -1625,7 +1625,35 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       // "Restricted" badge so residents/caregivers can request overrides.
 
       // mapServiceMeal imported from mealDisplayService.ts
-      const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
+      // const mapped: Meal[] = serviceMeals.map(mapServiceMeal);
+
+      //new code
+      // Build resident safety profile
+      const safetyResident = mergeSafetyProfile(
+        route?.params,
+        buildSafetyProfileFromLocalResident(resident),
+      );
+
+      // Only keep SAFE meals for this resident
+      const safeServiceMeals = serviceMeals.filter((meal) =>
+        isMealSafe(
+          {
+            id: meal.id,
+            name: meal.name,
+            description: meal.description,
+            tags: meal.tags,
+            allergenInfo: meal.allergenInfo,
+            ingredients: meal.ingredients,
+            sodium: meal.nutrition?.sodium,
+            sugar: meal.nutrition?.sugar,
+            meal_period: meal.mealPeriod,
+          },
+          safetyResident,
+        ),
+      );
+
+      // mapServiceMeal imported from mealDisplayService.ts
+      const mapped: Meal[] = safeServiceMeals.map(mapServiceMeal);
 
       // Pre-load drinks and sides for the add-on pickers in meal detail modal
       const drinkServiceMeals = await MealService.getMealsByPeriod("Drinks");
@@ -1633,7 +1661,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       const sidesServiceMeals = await MealService.getMealsByPeriod("Sides");
       setAvailableSides(sidesServiceMeals.map(mapServiceMeal));
 
-      setRawServiceMeals(serviceMeals);
+      // setRawServiceMeals(serviceMeals);
+      // setMeals(mapped);
+      setRawServiceMeals(safeServiceMeals);
       setMeals(mapped);
       setMenuLoading(false);
 
