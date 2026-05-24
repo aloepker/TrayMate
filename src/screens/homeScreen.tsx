@@ -13,7 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { useKitchenMessages } from './context/KitchenMessageContext';
-import { translateMealName } from '../services/mealLocalization';
+import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
 import { useMealtimeReminder } from '../hooks/useMealtimeReminder';
 import MealtimeReminderBanner from './components/MealtimeReminderBanner';
@@ -130,6 +130,19 @@ const HomeScreen = ({ navigation, route }: any) => {
     residentOrders,
     residentName,
     !!residentId,
+    (period, phase, mins) => {
+      const translatedPeriod = translateMealPeriod(period, language);
+      return {
+        title:
+          phase === 'pre'
+            ? t.reminderPreTitle.replace('{period}', translatedPeriod).replace('{min}', String(mins))
+            : t.reminderNowTitle.replace('{period}', translatedPeriod),
+        body:
+          phase === 'pre'
+            ? t.reminderPreBody.replace('{period}', translatedPeriod.toLowerCase())
+            : t.reminderNowBody.replace('{period}', translatedPeriod.toLowerCase()),
+      };
+    },
   );
 
   return (
@@ -191,8 +204,8 @@ const HomeScreen = ({ navigation, route }: any) => {
               accessibilityRole="button"
               accessibilityLabel={
                 unreadResidentMsgs > 0
-                  ? `Notifications, ${unreadResidentMsgs} unread`
-                  : "Notifications"
+                  ? `${t.notifications}, ${unreadResidentMsgs} unread`
+                  : t.notifications
               }
               accessibilityHint="Opens the notifications panel"
             >
@@ -396,7 +409,7 @@ const HomeScreen = ({ navigation, route }: any) => {
             <View style={styles.notifHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Feather name="bell" size={18} color="#717644" />
-                <Text style={[styles.notifTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>Notifications</Text>
+                <Text style={[styles.notifTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>{t.notifications}</Text>
               </View>
               <TouchableOpacity onPress={() => setShowNotifCenter(false)} hitSlop={10}>
                 <Feather name="x" size={22} color={theme.textSecondary} />
@@ -407,7 +420,7 @@ const HomeScreen = ({ navigation, route }: any) => {
                 <View style={styles.notifEmpty}>
                   <Feather name="inbox" size={40} color="#D1D5DB" />
                   <Text style={[styles.notifEmptyText, { color: theme.textSecondary }]}>
-                    No messages from the kitchen yet.
+                    {t.noMessagesYet}
                   </Text>
                 </View>
               ) : (

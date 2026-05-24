@@ -55,7 +55,7 @@ const diffLists = (oldVal?: string | null, newVal?: string | null) => {
 };
 
 export default function DietaryAuditScreen({ navigation, route }: any) {
-  const { scaled, theme, getTouchTargetSize } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize } = useSettings();
   const touchTarget = getTouchTargetSize();
 
   const residentId   = route?.params?.residentId   as string | number | undefined;
@@ -103,8 +103,8 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
   const count = (field: FilterTab) =>
     field === 'all' ? entries.length : entries.filter((e) => e.fieldName === field).length;
 
-  const TABS: { key: FilterTab; label: string; color: string }[] = [
-    { key: 'all',               label: 'All',        color: '#717644' },
+  const AUDIT_TABS: { key: FilterTab; label: string; color: string }[] = [
+    { key: 'all',               label: t.all,        color: '#717644' },
     { key: 'foodAllergies',     label: 'Allergies',  color: FIELD_CONFIG.foodAllergies.color },
     { key: 'dietaryRestrictions', label: 'Dietary',  color: FIELD_CONFIG.dietaryRestrictions.color },
     { key: 'medicalConditions', label: 'Conditions', color: FIELD_CONFIG.medicalConditions.color },
@@ -122,14 +122,14 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
             style={[styles.backBtn, { minHeight: touchTarget }]}
           >
             <Feather name="chevron-left" size={22} color="#717644" />
-            <Text style={[styles.backText, { fontSize: scaled(15) }]}>Back</Text>
+            <Text style={[styles.backText, { fontSize: scaled(15) }]}>{t.back}</Text>
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text
               style={[styles.headerTitle, { fontSize: scaled(20), color: theme.textPrimary }]}
               numberOfLines={1}
             >
-              Dietary History
+              {t.dietaryHistory}
             </Text>
             <Text
               style={[styles.headerSub, { fontSize: scaled(13), color: theme.textSecondary }]}
@@ -144,19 +144,19 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
 
       {/* ── Filter tabs ── */}
       <View style={[styles.tabRow, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-        {TABS.map((t) => {
-          const active = tab === t.key;
-          const c      = count(t.key);
+        {AUDIT_TABS.map((tabItem) => {
+          const active = tab === tabItem.key;
+          const c      = count(tabItem.key);
           return (
             <TouchableOpacity
-              key={t.key}
-              style={[styles.tabBtn, active && { borderBottomColor: t.color, borderBottomWidth: 2 }]}
-              onPress={() => setTab(t.key)}
+              key={tabItem.key}
+              style={[styles.tabBtn, active && { borderBottomColor: tabItem.color, borderBottomWidth: 2 }]}
+              onPress={() => setTab(tabItem.key)}
             >
-              <Text style={[styles.tabLabel, { color: active ? t.color : theme.textSecondary, fontSize: scaled(13) }]}>
-                {t.label}
+              <Text style={[styles.tabLabel, { color: active ? tabItem.color : theme.textSecondary, fontSize: scaled(13) }]}>
+                {tabItem.label}
               </Text>
-              <View style={[styles.tabBadge, { backgroundColor: active ? t.color : '#E5E7EB' }]}>
+              <View style={[styles.tabBadge, { backgroundColor: active ? tabItem.color : '#E5E7EB' }]}>
                 <Text style={[styles.tabBadgeText, { color: active ? '#FFF' : '#6B7280' }]}>{c}</Text>
               </View>
             </TouchableOpacity>
@@ -189,12 +189,12 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
             <Feather name="file-text" size={32} color="#717644" />
           </View>
           <Text style={[styles.emptyTitle, { fontSize: scaled(17), color: theme.textPrimary }]}>
-            No changes recorded
+            {t.noChangesRecorded}
           </Text>
           <Text style={[styles.emptyDesc, { fontSize: scaled(13), color: theme.textSecondary }]}>
             {tab === 'all'
               ? 'Once this resident\u2019s allergies, dietary restrictions, conditions, or medications are edited, every change will be listed here.'
-              : 'No changes recorded for this category yet.'}
+              : t.noChangesRecorded}
           </Text>
         </View>
       ) : (

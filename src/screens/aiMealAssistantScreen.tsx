@@ -100,6 +100,7 @@ const RichText = ({
   scaled,
   language,
   onOrderMeal,
+  orderThisLabel,
 }: {
   text: string;
   isUser: boolean;
@@ -107,6 +108,7 @@ const RichText = ({
   scaled: (base: number) => number;
   language: 'English' | 'Español' | 'Français' | '中文';
   onOrderMeal?: (meal: ServiceMeal) => void;
+  orderThisLabel?: string;
 }) => {
   const lines = text.split('\n');
   const norm = (s: string) =>
@@ -189,7 +191,7 @@ const RichText = ({
                   >
                     <Feather name="shopping-bag" size={14} color="#fff" />
                     <Text style={[richStyles.orderBtnText, { fontSize: scaled(13) }]}>
-                      Order this
+                      {orderThisLabel ?? 'Order this'}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -886,6 +888,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
                   scaled={scaled}
                   language={language}
                   onOrderMeal={handleOrderFromChat}
+                  orderThisLabel={t.orderThis}
                 />
               <Text
                 style={[

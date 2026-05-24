@@ -165,6 +165,45 @@ export type TranslationKeys = {
   grannyWelcome: string;
   grannyWelcomeShort: string;
   noRecommendation: string;
+  // OrderHistory new
+  all: string;
+  statusCancelled: string;
+  statusSubstituted: string;
+  noCancelledOrders: string;
+  noOrdersYet: string;
+  cancelledOrdersHere: string;
+  ordersHere30Days: string;
+  orderWasCancelled: string;
+  kitchenRequestedSubstitution: string;
+  last30Days: string;
+  deleteOrder: string;
+  removeFromHistory: string;
+  cancel: string;
+  delete: string;
+  // UpcomingMeals new
+  orderConfirmed: string;
+  room: string;
+  kitchenSuggestedSwap: string;
+  pickAReplacement: string;
+  loadingSafeOptions: string;
+  shouldBeReadySoon: string;
+  reorder: string;
+  messageFromKitchen: string;
+  // AI screen
+  orderThis: string;
+  // Home screen
+  noMessagesYet: string;
+  // Cart
+  removeUnsafeMealsHint: string;
+  placeOrderHint: string;
+  // DietaryAudit
+  dietaryHistory: string;
+  noChangesRecorded: string;
+  // Mealtime reminder
+  reminderPreTitle: string;
+  reminderNowTitle: string;
+  reminderPreBody: string;
+  reminderNowBody: string;
 };
 
 const EN: TranslationKeys = {
@@ -300,6 +339,38 @@ const EN: TranslationKeys = {
   grannyWelcome: "Hey! 👋 I'm Granny BT, your meal planning assistant. I've got {name}'s dietary profile loaded up — allergies, nutrition goals, the works.\n\nWhat can I help you with?",
   grannyWelcomeShort: "Hey! 👋 I'm Granny BT, your meal planning assistant for {name}. I've got their dietary needs covered.\n\nWhat can I help with?",
   noRecommendation: 'No recommendation available.',
+  all: 'All',
+  statusCancelled: 'Cancelled',
+  statusSubstituted: 'Substituted',
+  noCancelledOrders: 'No cancelled orders',
+  noOrdersYet: 'No orders yet',
+  cancelledOrdersHere: 'Cancelled orders will appear here.',
+  ordersHere30Days: 'Orders you place will appear here for 30 days.',
+  orderWasCancelled: 'Order was cancelled',
+  kitchenRequestedSubstitution: 'Kitchen requested a substitution',
+  last30Days: 'Last 30 days',
+  deleteOrder: 'Delete Order',
+  removeFromHistory: 'Remove this order from your history?',
+  cancel: 'Cancel',
+  delete: 'Delete',
+  orderConfirmed: 'Order Confirmed',
+  room: 'Room',
+  kitchenSuggestedSwap: 'Kitchen suggested a swap',
+  pickAReplacement: 'Pick a replacement (all safe for you):',
+  loadingSafeOptions: 'Loading safe options…',
+  shouldBeReadySoon: 'Should be ready soon',
+  reorder: 'Reorder',
+  messageFromKitchen: 'Message from Kitchen',
+  orderThis: 'Order this',
+  noMessagesYet: 'No messages from the kitchen yet.',
+  removeUnsafeMealsHint: 'Remove unsafe meals to enable ordering',
+  placeOrderHint: 'Places your order with the kitchen',
+  dietaryHistory: 'Dietary History',
+  noChangesRecorded: 'No changes recorded for this category yet.',
+  reminderPreTitle: '{period} in {min} min',
+  reminderNowTitle: '{period} time!',
+  reminderPreBody: 'Tap to choose your {period} meal before it starts.',
+  reminderNowBody: "You haven't ordered {period} yet. Tap to browse.",
 };
 
 const ES: TranslationKeys = {
@@ -435,6 +506,38 @@ const ES: TranslationKeys = {
   grannyWelcome: '¡Hola! 👋 Soy Granny BT, tu asistente de planificación de comidas. Tengo el perfil dietético de {name} cargado — alergias, objetivos nutricionales, todo.\n\n¿En qué puedo ayudarte?',
   grannyWelcomeShort: '¡Hola! 👋 Soy Granny BT, tu asistente de comidas para {name}. Tengo sus necesidades dietéticas cubiertas.\n\n¿En qué puedo ayudar?',
   noRecommendation: 'No hay recomendación disponible.',
+  all: 'Todos',
+  statusCancelled: 'Cancelado',
+  statusSubstituted: 'Sustituido',
+  noCancelledOrders: 'Sin pedidos cancelados',
+  noOrdersYet: 'Aún no hay pedidos',
+  cancelledOrdersHere: 'Los pedidos cancelados aparecerán aquí.',
+  ordersHere30Days: 'Los pedidos que realice aparecerán aquí durante 30 días.',
+  orderWasCancelled: 'El pedido fue cancelado',
+  kitchenRequestedSubstitution: 'La cocina solicitó una sustitución',
+  last30Days: 'Últimos 30 días',
+  deleteOrder: 'Eliminar Pedido',
+  removeFromHistory: '¿Eliminar este pedido de tu historial?',
+  cancel: 'Cancelar',
+  delete: 'Eliminar',
+  orderConfirmed: 'Pedido Confirmado',
+  room: 'Habitación',
+  kitchenSuggestedSwap: 'La cocina sugirió un cambio',
+  pickAReplacement: 'Elige un reemplazo (todos seguros para ti):',
+  loadingSafeOptions: 'Cargando opciones seguras…',
+  shouldBeReadySoon: 'Debería estar listo pronto',
+  reorder: 'Volver a pedir',
+  messageFromKitchen: 'Mensaje de la cocina',
+  orderThis: 'Pedir esto',
+  noMessagesYet: 'Aún no hay mensajes de la cocina.',
+  removeUnsafeMealsHint: 'Elimina comidas no seguras para habilitar el pedido',
+  placeOrderHint: 'Envía tu pedido a la cocina',
+  dietaryHistory: 'Historial Dietético',
+  noChangesRecorded: 'Aún no se han registrado cambios para esta categoría.',
+  reminderPreTitle: '{period} en {min} min',
+  reminderNowTitle: '¡Hora de {period}!',
+  reminderPreBody: 'Toca para elegir tu comida de {period} antes de que empiece.',
+  reminderNowBody: 'Aún no has pedido {period}. Toca para ver opciones.',
 };
 
 const FR: TranslationKeys = {
@@ -570,6 +673,38 @@ const FR: TranslationKeys = {
   grannyWelcome: "Salut ! 👋 Je suis Granny BT, votre assistant de planification des repas. J'ai le profil diététique de {name} — allergies, objectifs nutritionnels, tout.\n\nComment puis-je vous aider ?",
   grannyWelcomeShort: "Salut ! 👋 Je suis Granny BT, votre assistant repas pour {name}. Ses besoins alimentaires sont pris en charge.\n\nComment puis-je aider ?",
   noRecommendation: 'Aucune recommandation disponible.',
+  all: 'Tout',
+  statusCancelled: 'Annulé',
+  statusSubstituted: 'Substitué',
+  noCancelledOrders: 'Aucune commande annulée',
+  noOrdersYet: 'Aucune commande pour le moment',
+  cancelledOrdersHere: 'Les commandes annulées apparaîtront ici.',
+  ordersHere30Days: 'Vos commandes apparaîtront ici pendant 30 jours.',
+  orderWasCancelled: 'La commande a été annulée',
+  kitchenRequestedSubstitution: 'La cuisine a demandé une substitution',
+  last30Days: '30 derniers jours',
+  deleteOrder: 'Supprimer la commande',
+  removeFromHistory: 'Retirer cette commande de votre historique ?',
+  cancel: 'Annuler',
+  delete: 'Supprimer',
+  orderConfirmed: 'Commande Confirmée',
+  room: 'Chambre',
+  kitchenSuggestedSwap: 'La cuisine a suggéré un échange',
+  pickAReplacement: 'Choisissez un remplacement (tous sûrs pour vous) :',
+  loadingSafeOptions: 'Chargement des options sûres…',
+  shouldBeReadySoon: 'Devrait être prêt bientôt',
+  reorder: 'Recommander',
+  messageFromKitchen: 'Message de la cuisine',
+  orderThis: 'Commander ça',
+  noMessagesYet: 'Aucun message de la cuisine pour le moment.',
+  removeUnsafeMealsHint: 'Retirez les repas non sûrs pour activer la commande',
+  placeOrderHint: 'Envoie votre commande à la cuisine',
+  dietaryHistory: 'Historique Diététique',
+  noChangesRecorded: 'Aucun changement enregistré pour cette catégorie.',
+  reminderPreTitle: '{period} dans {min} min',
+  reminderNowTitle: "C'est l'heure de {period} !",
+  reminderPreBody: 'Appuyez pour choisir votre repas {period} avant le début.',
+  reminderNowBody: "Vous n'avez pas encore commandé {period}. Appuyez pour parcourir.",
 };
 
 const ZH: TranslationKeys = {
@@ -705,6 +840,38 @@ const ZH: TranslationKeys = {
   grannyWelcome: '你好！👋 我是Granny BT，您的餐食规划助手。我已经加载了{name}的饮食档案——过敏信息、营养目标，一应俱全。\n\n有什么可以帮您的？',
   grannyWelcomeShort: '你好！👋 我是Granny BT，{name}的餐食助手。他们的饮食需求已覆盖。\n\n有什么可以帮忙的？',
   noRecommendation: '暂无推荐。',
+  all: '全部',
+  statusCancelled: '已取消',
+  statusSubstituted: '已替换',
+  noCancelledOrders: '没有已取消的订单',
+  noOrdersYet: '暂无订单',
+  cancelledOrdersHere: '已取消的订单将显示在这里。',
+  ordersHere30Days: '您下的订单将在30天内显示在这里。',
+  orderWasCancelled: '订单已取消',
+  kitchenRequestedSubstitution: '厨房请求了一个替换',
+  last30Days: '最近30天',
+  deleteOrder: '删除订单',
+  removeFromHistory: '从您的历史记录中删除此订单？',
+  cancel: '取消',
+  delete: '删除',
+  orderConfirmed: '订单已确认',
+  room: '房间',
+  kitchenSuggestedSwap: '厨房建议了一个替换',
+  pickAReplacement: '选择一个替换（对您均安全）：',
+  loadingSafeOptions: '正在加载安全选项…',
+  shouldBeReadySoon: '应该很快就绪',
+  reorder: '重新下单',
+  messageFromKitchen: '来自厨房的消息',
+  orderThis: '点这道',
+  noMessagesYet: '暂无来自厨房的消息。',
+  removeUnsafeMealsHint: '移除不安全餐食以启用下单',
+  placeOrderHint: '将您的订单发送到厨房',
+  dietaryHistory: '饮食记录',
+  noChangesRecorded: '此类别尚无变更记录。',
+  reminderPreTitle: '{period}还有{min}分钟',
+  reminderNowTitle: '{period}时间到！',
+  reminderPreBody: '点击在开始前选择您的{period}餐食。',
+  reminderNowBody: '您还没有点{period}。点击浏览菜单。',
 };
 
 const TRANSLATIONS: Record<Language, TranslationKeys> = {

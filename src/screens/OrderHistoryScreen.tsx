@@ -13,22 +13,24 @@ import { useCart, Order } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 
 // ─── Meal period config ────────────────────────────────────────────────────
-const PERIOD_CONFIG: Record<string, { label: string; abbr: string; color: string }> = {
-  Breakfast: { label: 'Breakfast', abbr: 'BRKFST', color: '#92400E' },
-  Lunch:     { label: 'Lunch',     abbr: 'LUNCH',  color: '#065F46' },
-  Dinner:    { label: 'Dinner',    abbr: 'DINNER', color: '#3730A3' },
-  Drinks:    { label: 'Drinks',    abbr: 'DRINKS', color: '#1E40AF' },
-  Sides:     { label: 'Sides',     abbr: 'SIDES',  color: '#9D174D' },
+// Labels are set at render time from t.* to support i18n
+const PERIOD_CONFIG: Record<string, { abbr: string; color: string }> = {
+  Breakfast: { abbr: 'BRKFST', color: '#92400E' },
+  Lunch:     { abbr: 'LUNCH',  color: '#065F46' },
+  Dinner:    { abbr: 'DINNER', color: '#3730A3' },
+  Drinks:    { abbr: 'DRINKS', color: '#1E40AF' },
+  Sides:     { abbr: 'SIDES',  color: '#9D174D' },
 };
 
 // ─── Status config ─────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  confirmed:              { label: 'Confirmed',   color: '#15803D', bg: '#DCFCE7', icon: 'check-circle' },
-  preparing:              { label: 'Preparing',   color: '#B45309', bg: '#FEF3C7', icon: 'clock'        },
-  ready:                  { label: 'Ready',       color: '#0369A1', bg: '#E0F2FE', icon: 'check-circle' },
-  completed:              { label: 'Completed',   color: '#166534', bg: '#BBF7D0', icon: 'check'        },
-  cancelled:              { label: 'Cancelled',   color: '#DC2626', bg: '#FEE2E2', icon: 'x-circle'     },
-  substitution_requested: { label: 'Substituted', color: '#C2410C', bg: '#FFEDD5', icon: 'refresh-cw'  },
+// Labels are set at render time from t.* to support i18n
+const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
+  confirmed:              { color: '#15803D', bg: '#DCFCE7', icon: 'check-circle' },
+  preparing:              { color: '#B45309', bg: '#FEF3C7', icon: 'clock'        },
+  ready:                  { color: '#0369A1', bg: '#E0F2FE', icon: 'check-circle' },
+  completed:              { color: '#166534', bg: '#BBF7D0', icon: 'check'        },
+  cancelled:              { color: '#DC2626', bg: '#FEE2E2', icon: 'x-circle'     },
+  substitution_requested: { color: '#C2410C', bg: '#FFEDD5', icon: 'refresh-cw'  },
 };
 
 type FilterTab = 'all' | 'active' | 'cancelled';
@@ -45,7 +47,7 @@ function groupItemsByPeriod(items: Order['items']): Record<string, Order['items'
 
 export default function OrderHistoryScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, removeOrder } = useCart();
-  const { scaled, theme, getTouchTargetSize } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [tab, setTab] = useState<FilterTab>('all');
 
@@ -76,16 +78,16 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
   const countCancelled = recentOrders.filter((o) => (o.status as string) === 'cancelled').length;
 
   const handleDelete = (order: Order) => {
-    Alert.alert('Delete Order', 'Remove this order from your history?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => removeOrder(order.id) },
+    Alert.alert(t.deleteOrder, t.removeFromHistory, [
+      { text: t.cancel, style: 'cancel' },
+      { text: t.delete, style: 'destructive', onPress: () => removeOrder(order.id) },
     ]);
   };
 
   const TABS: { key: FilterTab; label: string; count: number; color: string }[] = [
-    { key: 'all',       label: 'All',       count: countAll,       color: '#717644' },
-    { key: 'active',    label: 'Active',    count: countActive,    color: '#15803D' },
-    { key: 'cancelled', label: 'Cancelled', count: countCancelled, color: '#DC2626' },
+    { key: 'all',       label: t.all,             count: countAll,       color: '#717644' },
+    { key: 'active',    label: t.activeOrdersLabel, count: countActive,  color: '#15803D' },
+    { key: 'cancelled', label: t.statusCancelled,  count: countCancelled, color: '#DC2626' },
   ];
 
   return (
@@ -97,14 +99,14 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
           style={[styles.backBtn, { minHeight: touchTarget }]}
         >
           <Feather name="chevron-left" size={22} color="#717644" />
-          <Text style={[styles.backText, { fontSize: scaled(15) }]}>Back</Text>
+          <Text style={[styles.backText, { fontSize: scaled(15) }]}>{t.back}</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { fontSize: scaled(18), color: theme.textPrimary }]}>
-            Order History
+            {t.orderHistory}
           </Text>
           <Text style={[styles.headerSub, { fontSize: scaled(12), color: theme.textSecondary }]}>
-            {residentName ?? 'Resident'} · Last 30 days
+            {residentName ?? 'Resident'} · {t.last30Days}
           </Text>
         </View>
         <View style={{ width: 70 }} />
@@ -112,19 +114,19 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
 
       {/* ── Filter Tabs ── */}
       <View style={[styles.tabRow, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-        {TABS.map((t) => {
-          const active = tab === t.key;
+        {TABS.map((tabItem) => {
+          const active = tab === tabItem.key;
           return (
             <TouchableOpacity
-              key={t.key}
-              style={[styles.tabBtn, active && { borderBottomColor: t.color, borderBottomWidth: 2 }]}
-              onPress={() => setTab(t.key)}
+              key={tabItem.key}
+              style={[styles.tabBtn, active && { borderBottomColor: tabItem.color, borderBottomWidth: 2 }]}
+              onPress={() => setTab(tabItem.key)}
             >
-              <Text style={[styles.tabLabel, { color: active ? t.color : theme.textSecondary, fontSize: scaled(13) }]}>
-                {t.label}
+              <Text style={[styles.tabLabel, { color: active ? tabItem.color : theme.textSecondary, fontSize: scaled(13) }]}>
+                {tabItem.label}
               </Text>
-              <View style={[styles.tabBadge, { backgroundColor: active ? t.color : '#E5E7EB' }]}>
-                <Text style={[styles.tabBadgeText, { color: active ? '#FFF' : '#6B7280' }]}>{t.count}</Text>
+              <View style={[styles.tabBadge, { backgroundColor: active ? tabItem.color : '#E5E7EB' }]}>
+                <Text style={[styles.tabBadgeText, { color: active ? '#FFF' : '#6B7280' }]}>{tabItem.count}</Text>
               </View>
             </TouchableOpacity>
           );
@@ -138,12 +140,10 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
             <Feather name={tab === 'cancelled' ? 'x-circle' : 'rotate-ccw'} size={32} color="#717644" />
           </View>
           <Text style={[styles.emptyTitle, { fontSize: scaled(17), color: theme.textPrimary }]}>
-            {tab === 'cancelled' ? 'No cancelled orders' : 'No orders yet'}
+            {tab === 'cancelled' ? t.noCancelledOrders : t.noOrdersYet}
           </Text>
           <Text style={[styles.emptyDesc, { fontSize: scaled(13), color: theme.textSecondary }]}>
-            {tab === 'cancelled'
-              ? 'Cancelled orders will appear here.'
-              : 'Orders you place will appear here for 30 days.'}
+            {tab === 'cancelled' ? t.cancelledOrdersHere : t.ordersHere30Days}
           </Text>
         </View>
       ) : (
@@ -153,6 +153,15 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
             const statusCfg   = STATUS_CONFIG[status] ?? STATUS_CONFIG.confirmed;
             const isCancelled = status === 'cancelled';
             const isSubstituted = status === 'substitution_requested';
+            const statusLabels: Record<string, string> = {
+              confirmed:              t.confirmed,
+              preparing:              t.preparing,
+              ready:                  t.ready,
+              completed:              t.mealCompleted,
+              cancelled:              t.statusCancelled,
+              substitution_requested: t.statusSubstituted,
+            };
+            const statusLabel = statusLabels[status] ?? status;
             const grouped     = groupItemsByPeriod(order.items);
             const placed      = order.placedAt instanceof Date ? order.placedAt : new Date(order.placedAt);
             const dateStr     = placed.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -174,7 +183,7 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
                   <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
                     <Feather name={statusCfg.icon as any} size={11} color={statusCfg.color} />
                     <Text style={[styles.statusText, { color: statusCfg.color, fontSize: scaled(11) }]}>
-                      {statusCfg.label.toUpperCase()}
+                      {statusLabel.toUpperCase()}
                     </Text>
                   </View>
 
@@ -204,7 +213,7 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
                   <View style={[styles.alertRow, { backgroundColor: isCancelled ? '#FEF2F2' : '#FFF7ED' }]}>
                     <Feather name={isCancelled ? 'x-circle' : 'refresh-cw'} size={11} color={statusCfg.color} />
                     <Text style={[styles.alertText, { color: statusCfg.color, fontSize: scaled(12) }]}>
-                      {isCancelled ? 'Order was cancelled' : 'Kitchen requested a substitution'}
+                      {isCancelled ? t.orderWasCancelled : t.kitchenRequestedSubstitution}
                     </Text>
                   </View>
                 )}
@@ -252,21 +261,21 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
                       <Text style={[styles.nutritionVal, { color: theme.textPrimary, fontSize: scaled(12) }]}>
                         {order.totalNutrition.calories}
                       </Text>
-                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>kcal</Text>
+                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>{t.calories}</Text>
                     </View>
                     <View style={styles.nutritionDot} />
                     <View style={styles.nutritionPill}>
                       <Text style={[styles.nutritionVal, { color: theme.textPrimary, fontSize: scaled(12) }]}>
                         {order.totalNutrition.sodium}mg
                       </Text>
-                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>sodium</Text>
+                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>{t.sodium}</Text>
                     </View>
                     <View style={styles.nutritionDot} />
                     <View style={styles.nutritionPill}>
                       <Text style={[styles.nutritionVal, { color: theme.textPrimary, fontSize: scaled(12) }]}>
                         {order.totalNutrition.protein}g
                       </Text>
-                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>protein</Text>
+                      <Text style={[styles.nutritionKey, { color: theme.textSecondary, fontSize: scaled(10) }]}>{t.protein}</Text>
                     </View>
                   </View>
                 )}

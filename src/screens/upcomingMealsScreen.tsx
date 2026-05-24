@@ -367,14 +367,14 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       progress: 1.0,
     },
     cancelled: {
-      label: 'Cancelled',
+      label: t.statusCancelled,
       color: '#dc2626',
       bg:    '#fee2e2',
       featherIcon: 'x-circle',
       progress: 0,
     },
     substitution_requested: {
-      label: 'Sub Requested',
+      label: t.statusSubstituted,
       color: '#7c3aed',
       bg:    '#ede9fe',
       featherIcon: 'refresh-cw',
@@ -597,11 +597,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <Feather name="refresh-cw" size={16} color="#C2410C" />
                         <Text style={{ fontSize: scaled(14), fontWeight: '800', color: '#7C2D12' }}>
-                          Kitchen suggested a swap
+                          {t.kitchenSuggestedSwap}
                         </Text>
                       </View>
                       <Text style={{ fontSize: scaled(12), color: '#7C2D12', marginBottom: 10 }}>
-                        Pick a replacement (all safe for you):
+                        {t.pickAReplacement}
                       </Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {(periodAlternatives[bucket.key] ?? []).map((alt: any) => (
@@ -631,7 +631,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         ))}
                         {(periodAlternatives[bucket.key] ?? []).length === 0 && (
                           <Text style={{ fontSize: scaled(12), color: '#9C4221', fontStyle: 'italic' }}>
-                            Loading safe options…
+                            {t.loadingSafeOptions}
                           </Text>
                         )}
                       </ScrollView>
@@ -658,11 +658,11 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             <Feather name="check" size={13} color="#FFF" />
                           </View>
                           <View>
-                            <Text style={styles.confirmTitle}>Order Confirmed</Text>
+                            <Text style={styles.confirmTitle}>{t.orderConfirmed}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                               <Text style={styles.confirmId}>Order #{order.backendId ?? order.id.slice(-6).toUpperCase()}</Text>
                               {residentRoom ? (
-                                <Text style={styles.confirmRoom}>· Room {residentRoom}</Text>
+                                <Text style={styles.confirmRoom}>· {t.room} {residentRoom}</Text>
                               ) : null}
                             </View>
                           </View>
@@ -682,7 +682,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         />
                         {isOverdue ? (
                           <Text style={[styles.reminderRowText, { color: '#15803d' }]}>
-                            Est. ready by {estReady} · Should be ready soon
+                            Est. ready by {estReady} · {t.shouldBeReadySoon}
                           </Text>
                         ) : minsLeft <= 30 ? (
                           <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
@@ -781,7 +781,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             >
                               <Feather name="refresh-cw" size={13} color="#FFF" />
                               <Text style={{ fontSize: scaled(12), fontWeight: '800', color: '#FFF' }}>
-                                Reorder
+                                {t.reorder}
                               </Text>
                             </TouchableOpacity>
                           )}
@@ -850,7 +850,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             <View style={styles.kitchenMsgHeader}>
                               <Feather name="message-square" size={13} color="#4A5C2A" />
                               <Text style={[styles.kitchenMsgTitle, { fontSize: scaled(11) }]}>
-                                Message from Kitchen
+                                {t.messageFromKitchen}
                               </Text>
                             </View>
                             {orderMsgs.map((msg) => {

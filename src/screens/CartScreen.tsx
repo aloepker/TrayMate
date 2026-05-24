@@ -415,8 +415,8 @@ const CartScreen = ({ navigation, route }: any) => {
               }
               accessibilityHint={
                 hasUnsafe
-                  ? "Remove unsafe meals to enable ordering"
-                  : "Places your order with the kitchen"
+                  ? t.removeUnsafeMealsHint
+                  : t.placeOrderHint
               }
             >
               <Feather

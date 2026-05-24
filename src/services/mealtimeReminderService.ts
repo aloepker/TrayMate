@@ -76,36 +76,28 @@ export function hasOrderedForPeriod(
 }
 
 /**
- * Returns a human-friendly reminder message for a meal window, or null
- * if no reminder should fire right now.
+ * Returns structured data for a mealtime reminder, or null if no reminder
+ * should fire right now. Callers (e.g. homeScreen) are responsible for
+ * building the localised title/body strings using their translation object.
  *
  * @param orders Today's orders for the resident
- * @param residentName Display name used in the message
+ * @param residentName Display name used by callers in the message body
  * @param now Override for testing
  */
 export function buildReminder(
   orders: ReadonlyArray<{ placedAt: Date | string; items: ReadonlyArray<any>; status: string }>,
   residentName: string,
   now: Date = new Date(),
-): { period: MealPeriod; title: string; body: string; emoji: string } | null {
+): { period: MealPeriod; phase: 'pre' | 'now'; minutesUntilStart: number; emoji: string } | null {
   const window = getActiveReminderWindow(now);
   if (!window) return null;
   if (hasOrderedForPeriod(window.period, orders, now)) return null;
 
   const minuteOfDay = now.getHours() * 60 + now.getMinutes();
   const minutesUntilStart = window.mealStart - minuteOfDay;
+  const phase: 'pre' | 'now' = minutesUntilStart > 0 ? 'pre' : 'now';
 
-  const title =
-    minutesUntilStart > 0
-      ? `${window.period} in ${minutesUntilStart} min`
-      : `${window.period} time!`;
-
-  const body =
-    minutesUntilStart > 0
-      ? `${residentName}, tap to choose your ${window.period.toLowerCase()} meal before it starts.`
-      : `${residentName}, you haven't ordered ${window.period.toLowerCase()} yet. Tap to browse.`;
-
-  return { period: window.period, title, body, emoji: window.emoji };
+  return { period: window.period, phase, minutesUntilStart, emoji: window.emoji };
 }
 
 /**
