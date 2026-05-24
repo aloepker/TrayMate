@@ -336,7 +336,7 @@ const AIAssistantChat = ({
   medicalConditions?: string[];
   onMealTap?: (meal: ServiceMeal) => void;
 }) => {
-  const { t, scaled, language } = useSettings();
+  const { t, scaled, language, use24Hour } = useSettings();
     const [aiAvailable, setAiAvailable] = useState<boolean>(false);
   // Pick a menu question that matches the wall clock — inside a serving
   // window we ask about that period, between meals (or after dinner) we
@@ -821,7 +821,7 @@ const AIAssistantChat = ({
                     { fontSize: scaled(10) },
                     message.role === 'user' && chatStyles.userTimestamp,
                   ]}>
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour })}
                   </Text>
                 </View>
               </View>
@@ -1243,7 +1243,7 @@ const MealCardImage: React.FC<{
 
 // ---------- Main Component ----------
 const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
-  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId, use24Hour } = useSettings();
   const touchTarget = getTouchTargetSize();
   // --- all hooks at the top, unconditionally, in fixed order ---
   const { currentTime } = useClock();

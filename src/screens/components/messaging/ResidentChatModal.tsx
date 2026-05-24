@@ -53,7 +53,7 @@ export default function ResidentChatModal({
   assignedCaregiverId   = null,
   assignedCaregiverName = null,
 }: Props) {
-  const { t } = useSettings();
+  const { t, use24Hour } = useSettings();
   // Live caregiver list — refreshed from storage every time the modal opens
   const [liveCaregivers, setLiveCaregivers] = useState<CaregiverEntry[]>([]);
 
@@ -160,7 +160,7 @@ export default function ResidentChatModal({
       d.getMonth()    === now.getMonth() &&
       d.getFullYear() === now.getFullYear();
     return today
-      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: !use24Hour })
       : d.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 

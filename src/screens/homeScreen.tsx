@@ -25,7 +25,7 @@ import {
 
 const HomeScreen = ({ navigation, route }: any) => {
   const { orders, getCartCount, getOrdersForResident } = useCart();
-  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId, use24Hour } = useSettings();
   const { messages: kitchenMessages, markRead: markKitchenMsgRead } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
   const [showNotifCenter, setShowNotifCenter] = useState(false);
@@ -448,7 +448,7 @@ const HomeScreen = ({ navigation, route }: any) => {
                         <Text style={styles.notifCardTime}>
                           {new Date(msg.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                           {' · '}
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour })}
                         </Text>
                       </View>
                       <Text style={[styles.notifCardText, { fontSize: scaled(14), color: theme.textPrimary }]}>

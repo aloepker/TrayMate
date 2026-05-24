@@ -55,14 +55,14 @@ const COLORS = {
 
 // STATUS_STYLES built at render time using t.* keys — see inside component
 
-function formatDateTime(iso: string | null | undefined): string {
+function formatDateTime(iso: string | null | undefined, hour12 = true): string {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleString();
+  return d.toLocaleString([], { hour12 });
 }
 
 export default function MyOverridesScreen({ navigation, route }: any) {
-  const { t, setCurrentResidentId } = useSettings();
+  const { t, setCurrentResidentId, use24Hour } = useSettings();
 
   const STATUS_STYLES: Record<OverrideStatus, { label: string; fg: string; bg: string; icon: string }> = {
     PENDING:  { label: t.statusPending,  fg: COLORS.amber,     bg: COLORS.amberBg,   icon: 'clock' },
@@ -265,7 +265,7 @@ export default function MyOverridesScreen({ navigation, route }: any) {
                     <Feather name={s.icon as any} size={12} color={s.fg} />
                     <Text style={[styles.statusPillText, { color: s.fg }]}>{s.label}</Text>
                   </View>
-                  <Text style={styles.timeText}>{formatDateTime(r.requestedAt)}</Text>
+                  <Text style={styles.timeText}>{formatDateTime(r.requestedAt, !use24Hour)}</Text>
                 </View>
 
                 <View style={styles.metaRow}>
@@ -295,7 +295,7 @@ export default function MyOverridesScreen({ navigation, route }: any) {
                   <View>
                     <Text style={styles.approvalNote}>
                       Approved{r.decidedByName ? ` by ${r.decidedByName}` : ''}
-                      {r.expiresAt ? ` — expires ${formatDateTime(r.expiresAt)}` : ''}.
+                      {r.expiresAt ? ` — expires ${formatDateTime(r.expiresAt, !use24Hour)}` : ''}.
                     </Text>
                     <Pressable
                       onPress={() => orderApprovedOverride(r)}

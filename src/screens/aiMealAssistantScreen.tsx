@@ -356,7 +356,7 @@ type ChatMessage = {
 
 // ---------- Main Screen ----------
 const AIMealAssistantScreen = ({ navigation, route }: any) => {
-  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId, use24Hour } = useSettings();
   const touchTarget = getTouchTargetSize();
   const residentId =
     (route?.params?.residentId as string | undefined) ||
@@ -904,6 +904,7 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
                 {message.timestamp.toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
+                  hour12: !use24Hour,
                 })}
               </Text>
             </View>

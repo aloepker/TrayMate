@@ -1122,6 +1122,8 @@ type SettingsContextType = {
     success: string;
     danger: string;
   };
+  /** True when the active language conventionally uses 24-hour clock (FR, ZH, ES). */
+  use24Hour: boolean;
   currentResidentId: string | null;
   setCurrentResidentId: (id: string | null) => void;
 };
@@ -1187,6 +1189,8 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const t = useMemo(() => TRANSLATIONS[language], [language]);
+  // English uses 12-hr AM/PM; French, Chinese, and Spanish use 24-hr clock
+  const use24Hour = language !== 'English';
   const fontScale = useMemo(() => TEXT_SIZE_SCALES[textSize], [textSize]);
   const scaled = useCallback((base: number) => Math.round(base * TEXT_SIZE_SCALES[textSize]), [textSize]);
 
@@ -1278,6 +1282,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         toggleNotification,
         getTouchTargetSize,
         theme,
+        use24Hour,
         currentResidentId,
         setCurrentResidentId,
       }}

@@ -47,7 +47,7 @@ function groupItemsByPeriod(items: Order['items']): Record<string, Order['items'
 
 export default function OrderHistoryScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, removeOrder } = useCart();
-  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId, use24Hour } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [tab, setTab] = useState<FilterTab>('all');
 
@@ -169,7 +169,7 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
             const grouped     = groupItemsByPeriod(order.items);
             const placed      = order.placedAt instanceof Date ? order.placedAt : new Date(order.placedAt);
             const dateStr     = placed.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-            const timeStr     = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const timeStr     = placed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour });
 
             return (
               <View

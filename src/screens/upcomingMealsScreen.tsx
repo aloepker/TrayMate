@@ -66,10 +66,10 @@ function isToday(date: Date | string): boolean {
 }
 
 /** Returns the estimated ready time: placedAt + 2 hours */
-function estimatedReadyTime(placedAt: Date): string {
+function estimatedReadyTime(placedAt: Date, hour12 = true): string {
   const d = new Date(placedAt);
   d.setHours(d.getHours() + 2);
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12 });
 }
 
 /** Returns how many minutes until the estimated ready time; negative if past. */
@@ -81,7 +81,7 @@ function minutesUntilReady(placedAt: Date): number {
 
 function UpcomingMealsScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, clearAllOrders, removeOrder, replaceOrder } = useCart();
-  const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId } = useSettings();
+  const { t, scaled, language, notifications, getTouchTargetSize, setCurrentResidentId, use24Hour } = useSettings();
   const { messages: kitchenMessages, markRead: markKitchenMsgRead, sendMessage: sendKitchenMessage } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -388,7 +388,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     setExpandedId((curr) => (curr === id ? null : id));
 
   const formatTime = (date: Date) =>
-    new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: !use24Hour });
 
   const formatDate = (date: Date) => {
     const d   = new Date(date);
@@ -497,7 +497,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           )} */}
           <TouchableOpacity
             style={[styles.settingsButton, { minHeight: touchTarget, minWidth: touchTarget }]}
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => navigation.navigate('Settings', {
+              residentId,
+              residentName,
+              dietaryRestrictions,
+              foodAllergies,
+              caregiverId:        route?.params?.caregiverId        ?? null,
+              caregiverName:      route?.params?.caregiverName      ?? null,
+              assignedCaregivers: route?.params?.assignedCaregivers ?? undefined,
+            })}
           >
             <Feather name="settings" size={20} color={COLORS.primary} />
           </TouchableOpacity>
@@ -641,7 +649,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                   const expanded   = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];
                   const minsLeft   = minutesUntilReady(order.placedAt);
-                  const estReady   = estimatedReadyTime(order.placedAt);
+                  const estReady   = estimatedReadyTime(order.placedAt, !use24Hour);
                   const isOverdue  = minsLeft <= 0;
 
                   return (
@@ -865,7 +873,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                                     {cleanText}
                                   </Text>
                                   <Text style={[styles.kitchenMsgTime, { fontSize: scaled(10) }]}>
-                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour })}
                                   </Text>
                                 </View>
                               );

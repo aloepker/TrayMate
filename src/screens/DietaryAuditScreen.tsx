@@ -55,7 +55,7 @@ const diffLists = (oldVal?: string | null, newVal?: string | null) => {
 };
 
 export default function DietaryAuditScreen({ navigation, route }: any) {
-  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId, use24Hour } = useSettings();
   const touchTarget = getTouchTargetSize();
 
   const residentId   = route?.params?.residentId   as string | number | undefined;
@@ -208,7 +208,7 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
             const { added, removed } = diffLists(e.oldValue, e.newValue);
             const when      = new Date(e.changedAt);
             const dateStr   = when.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-            const timeStr   = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const timeStr   = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour });
             const actorRole = e.changedByRole ? (ROLE_LABEL[e.changedByRole] ?? e.changedByRole) : 'System';
             const actorName = e.changedByName ?? 'System';
             const isInitial = (e.oldValue ?? '').trim() === '' && added.length > 0 && removed.length === 0;
