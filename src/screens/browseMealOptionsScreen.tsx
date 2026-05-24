@@ -1522,34 +1522,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   const HELP_SECTIONS = [
-  {
-    id: 'placeOrder',
-    icon: 'shopping-cart',
-    title: 'How to Place an Order',
-    description: 'Tap a meal, review the details, add any drink or side, then place your order.',
-    video: null,
-  },
-  {
-    id: 'upcomingMeals',
-    icon: 'calendar',
-    title: 'How to Check Upcoming Meals',
-    description: 'Use the meal tabs to view breakfast, lunch, dinner, beverages, desserts, and seasonal options.',
-    video:null,
-  },
-  {
-    id: 'cancelMeal',
-    icon: 'x-circle',
-    title: 'How to Cancel a Meal',
-    description: 'Open your upcoming orders, choose the meal you no longer want, and confirm the cancellation.',
-    video:null,
-  },
-  {
-    id: 'grannyBT',
-    icon: 'message-circle',
-    title: 'How to Use Granny BT',
-    description: 'Ask Granny BT for meal recommendations, dietary help, or what is available today.',
-    video:null,
-  },
+  { id: 'placeOrder',    icon: 'shopping-cart',  title: t.howToPlaceOrder,    description: t.howToPlaceOrderDesc,    video: null },
+  { id: 'upcomingMeals', icon: 'calendar',       title: t.howToCheckUpcoming, description: t.howToCheckUpcomingDesc, video: null },
+  { id: 'cancelMeal',    icon: 'x-circle',       title: t.howToCancelMeal,    description: t.howToCancelMealDesc,    video: null },
+  { id: 'grannyBT',      icon: 'message-circle', title: t.howToUseGrannyBT,   description: t.howToUseGrannyBTDesc,   video: null },
 ];
 
   const loadAutoOrderCandidates = useCallback(async () => {
@@ -3439,23 +3415,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               showsVerticalScrollIndicator={true}
               contentContainerStyle={{ paddingBottom: 24 }}>
             <View style={styles.supportCardHeader}>
-              <Text style={[styles.supportCardTitle, { fontSize: scaled(20) }]}>Need Help?</Text>
+              <Text style={[styles.supportCardTitle, { fontSize: scaled(20) }]}>{t.needHelp}</Text>
               <TouchableOpacity onPress={() => setShowBrowseSupport(false)} hitSlop={10}>
                 <Feather name="x" size={22} color="#1A1A1A" />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.supportCardSub, { fontSize: scaled(14) }]}>Contact your care team or kitchen staff for assistance with meal orders.</Text>
+            <Text style={[styles.supportCardSub, { fontSize: scaled(14) }]}>{t.contactCareTeamHint}</Text>
 
             <View style={styles.scheduleCardBlock}>
-              <Text style={[styles.scheduleCardTitle, { fontSize: scaled(16) }]}>Kitchen Hours</Text>
-              <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>Kitchen open 7 am – 7 pm daily</Text>
+              <Text style={[styles.scheduleCardTitle, { fontSize: scaled(16) }]}>{t.kitchenHours}</Text>
+              <Text style={[styles.scheduleKitchenNote, { fontSize: scaled(13) }]}>{t.kitchenOpenDaily}</Text>
               {MEAL_SCHEDULE.map((s) => {
                 const isActive = activePeriod === s.label;
                 return (
                   <View key={s.label} style={[styles.scheduleCardRow, isActive && styles.scheduleCardRowActive]}>
                     <Text style={[styles.scheduleCardIcon, { fontSize: scaled(20) }]}>{s.icon}</Text>
                     <Text style={[styles.scheduleCardLabel, { fontSize: scaled(15) }, isActive && styles.scheduleCardLabelActive]}>
-                      {s.label}
+                      {translateMealPeriod(s.label as any, language)}
                     </Text>
                     <Text style={[styles.scheduleCardTime, { fontSize: scaled(14) }, isActive && styles.scheduleCardLabelActive]}>
                       {s.label === 'Breakfast' ? '7:00 am – 10:00 am' : s.label === 'Lunch' ? '11:00 am – 2:00 pm' : '4:00 pm – 7:00 pm'}
@@ -3469,7 +3445,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <ScrollView>
 
   <Text style={[styles.helpTopicsTitle, { fontSize: scaled(16) }]}>
-    What would you like help with?
+    {t.whatWouldYouLikeHelpWith}
   </Text>
 
   {HELP_SECTIONS.map((section) => {

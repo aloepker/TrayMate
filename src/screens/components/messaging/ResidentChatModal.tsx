@@ -25,6 +25,7 @@ import {
 } from "../../../services/api";
 import { getResidentCaregivers } from "../../../services/storage";
 import { Message } from "./messagingTypes";
+import { useSettings } from "../../context/SettingsContext";
 
 type CaregiverEntry = { caregiverId: string; caregiverName: string };
 
@@ -52,6 +53,7 @@ export default function ResidentChatModal({
   assignedCaregiverId   = null,
   assignedCaregiverName = null,
 }: Props) {
+  const { t } = useSettings();
   // Live caregiver list — refreshed from storage every time the modal opens
   const [liveCaregivers, setLiveCaregivers] = useState<CaregiverEntry[]>([]);
 
@@ -198,7 +200,7 @@ export default function ResidentChatModal({
                 <Feather name="message-square" size={18} color={OLIVE} />
               </View>
               <View>
-                <Text style={s.headerTitle}>Contact Caregiver</Text>
+                <Text style={s.headerTitle}>{t.contactCaregiver}</Text>
                 <Text style={s.headerSub}>
                   {selectedCaregiver
                     ? `Chatting with ${selectedCaregiver.caregiverName}`
@@ -219,7 +221,7 @@ export default function ResidentChatModal({
               <View style={s.unassignedIcon}>
                 <Feather name="user-x" size={36} color={OLIVE} />
               </View>
-              <Text style={s.unassignedTitle}>No caregiver assigned</Text>
+              <Text style={s.unassignedTitle}>{t.noCaregiverAssigned}</Text>
               <Text style={s.unassignedSub}>
                 An admin will assign a caregiver to your account.{"\n"}
                 Check back soon or ask a staff member for help.
@@ -230,7 +232,7 @@ export default function ResidentChatModal({
 
             /* Caregiver selection list */
             <ScrollView style={s.pickerScroll} contentContainerStyle={s.pickerContent}>
-              <Text style={s.pickerTitle}>Select a caregiver to message</Text>
+              <Text style={s.pickerTitle}>{t.selectCaregiverToMessage}</Text>
               {liveCaregivers.map((cg) => (
                 <Pressable
                   key={cg.caregiverId}
@@ -245,7 +247,7 @@ export default function ResidentChatModal({
                   </View>
                   <View style={s.pickerInfo}>
                     <Text style={s.pickerName}>{cg.caregiverName}</Text>
-                    <Text style={s.pickerLabel}>Assigned caregiver</Text>
+                    <Text style={s.pickerLabel}>{t.assignedCaregiver}</Text>
                   </View>
                   <Feather name="chevron-right" size={18} color="#9CA3AF" />
                 </Pressable>
@@ -263,7 +265,7 @@ export default function ResidentChatModal({
                 </View>
                 <View>
                   <Text style={s.cgName}>{selectedCaregiver.caregiverName}</Text>
-                  <Text style={s.cgLabel}>Your assigned caregiver</Text>
+                  <Text style={s.cgLabel}>{t.yourAssignedCaregiver}</Text>
                 </View>
               </View>
 
@@ -281,7 +283,7 @@ export default function ResidentChatModal({
                 ) : messages.length === 0 ? (
                   <View style={s.emptyMsgs}>
                     <Feather name="message-circle" size={32} color="#D1D5DB" />
-                    <Text style={s.emptyMsgsText}>No messages yet — say hello! 👋</Text>
+                    <Text style={s.emptyMsgsText}>{t.noMessagesYetSayHello}</Text>
                   </View>
                 ) : (
                   messages.map((msg) => {

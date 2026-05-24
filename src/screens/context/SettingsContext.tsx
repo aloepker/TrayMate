@@ -204,6 +204,46 @@ export type TranslationKeys = {
   reminderNowTitle: string;
   reminderPreBody: string;
   reminderNowBody: string;
+  // Settings screen
+  noneRecorded: string;
+  dietaryHistoryDesc: string;
+  overrideRequests: string;
+  overrideRequestsDesc: string;
+  // MyOverrides screen
+  retry: string;
+  noOverrideRequestsYet: string;
+  noOverrideRequestsHint: string;
+  mealIds: string;
+  whyFlagged: string;
+  adminNote: string;
+  orderThisMealNow: string;
+  placing: string;
+  statusPending: string;
+  statusApproved: string;
+  statusDenied: string;
+  statusExpired: string;
+  statusUsed: string;
+  // ResidentChatModal
+  contactCaregiver: string;
+  noCaregiverAssigned: string;
+  selectCaregiverToMessage: string;
+  assignedCaregiver: string;
+  yourAssignedCaregiver: string;
+  noMessagesYetSayHello: string;
+  // Help modal (Browse meals)
+  needHelp: string;
+  contactCareTeamHint: string;
+  kitchenHours: string;
+  kitchenOpenDaily: string;
+  whatWouldYouLikeHelpWith: string;
+  howToPlaceOrder: string;
+  howToPlaceOrderDesc: string;
+  howToCheckUpcoming: string;
+  howToCheckUpcomingDesc: string;
+  howToCancelMeal: string;
+  howToCancelMealDesc: string;
+  howToUseGrannyBT: string;
+  howToUseGrannyBTDesc: string;
 };
 
 const EN: TranslationKeys = {
@@ -371,6 +411,42 @@ const EN: TranslationKeys = {
   reminderNowTitle: '{period} time!',
   reminderPreBody: 'Tap to choose your {period} meal before it starts.',
   reminderNowBody: "You haven't ordered {period} yet. Tap to browse.",
+  noneRecorded: 'None recorded',
+  dietaryHistoryDesc: "See every change to this resident's diet",
+  overrideRequests: 'Override Requests',
+  overrideRequestsDesc: 'See the status of medical overrides on this account',
+  retry: 'Retry',
+  noOverrideRequestsYet: 'No override requests yet',
+  noOverrideRequestsHint: 'When a cart is blocked by the dietary profile you can ask the administrator for a one-time override. It will show up here.',
+  mealIds: 'Meal IDs {ids}',
+  whyFlagged: 'Why this was flagged',
+  adminNote: 'Admin note: {note}',
+  orderThisMealNow: 'Order this meal now',
+  placing: 'Placing…',
+  statusPending: 'Pending',
+  statusApproved: 'Approved',
+  statusDenied: 'Denied',
+  statusExpired: 'Expired',
+  statusUsed: 'Used',
+  contactCaregiver: 'Contact Caregiver',
+  noCaregiverAssigned: 'No caregiver assigned',
+  selectCaregiverToMessage: 'Select a caregiver to message',
+  assignedCaregiver: 'Assigned caregiver',
+  yourAssignedCaregiver: 'Your assigned caregiver',
+  noMessagesYetSayHello: 'No messages yet — say hello! 👋',
+  needHelp: 'Need Help?',
+  contactCareTeamHint: 'Contact your care team or kitchen staff for assistance with meal orders.',
+  kitchenHours: 'Kitchen Hours',
+  kitchenOpenDaily: 'Kitchen open 7 am – 7 pm daily',
+  whatWouldYouLikeHelpWith: 'What would you like help with?',
+  howToPlaceOrder: 'How to Place an Order',
+  howToPlaceOrderDesc: 'Tap a meal, review the details, add any drink or side, then place your order.',
+  howToCheckUpcoming: 'How to Check Upcoming Meals',
+  howToCheckUpcomingDesc: 'Use the meal tabs to view breakfast, lunch, dinner, beverages, desserts, and seasonal options.',
+  howToCancelMeal: 'How to Cancel a Meal',
+  howToCancelMealDesc: 'Open your upcoming orders, choose the meal you no longer want, and confirm the cancellation.',
+  howToUseGrannyBT: 'How to Use Granny BT',
+  howToUseGrannyBTDesc: 'Ask Granny BT for meal recommendations, dietary help, or what is available today.',
 };
 
 const ES: TranslationKeys = {
@@ -538,6 +614,42 @@ const ES: TranslationKeys = {
   reminderNowTitle: '¡Hora de {period}!',
   reminderPreBody: 'Toca para elegir tu comida de {period} antes de que empiece.',
   reminderNowBody: 'Aún no has pedido {period}. Toca para ver opciones.',
+  noneRecorded: 'Sin registros',
+  dietaryHistoryDesc: 'Ver todos los cambios en la dieta de este residente',
+  overrideRequests: 'Solicitudes de excepción',
+  overrideRequestsDesc: 'Ver el estado de las excepciones médicas en esta cuenta',
+  retry: 'Reintentar',
+  noOverrideRequestsYet: 'Aún no hay solicitudes de excepción',
+  noOverrideRequestsHint: 'Cuando un carrito es bloqueado por el perfil dietético, puedes pedir al administrador una excepción por única vez. Aparecerá aquí.',
+  mealIds: 'IDs de comida {ids}',
+  whyFlagged: 'Por qué fue marcado',
+  adminNote: 'Nota del administrador: {note}',
+  orderThisMealNow: 'Pedir esta comida ahora',
+  placing: 'Procesando…',
+  statusPending: 'Pendiente',
+  statusApproved: 'Aprobado',
+  statusDenied: 'Denegado',
+  statusExpired: 'Expirado',
+  statusUsed: 'Usado',
+  contactCaregiver: 'Contactar al cuidador',
+  noCaregiverAssigned: 'Sin cuidador asignado',
+  selectCaregiverToMessage: 'Selecciona un cuidador para enviar un mensaje',
+  assignedCaregiver: 'Cuidador asignado',
+  yourAssignedCaregiver: 'Tu cuidador asignado',
+  noMessagesYetSayHello: 'Aún no hay mensajes — ¡di hola! 👋',
+  needHelp: '¿Necesitas ayuda?',
+  contactCareTeamHint: 'Contacta a tu equipo de cuidado o al personal de cocina para asistencia con pedidos de comida.',
+  kitchenHours: 'Horario de Cocina',
+  kitchenOpenDaily: 'Cocina abierta de 7 am a 7 pm todos los días',
+  whatWouldYouLikeHelpWith: '¿Con qué necesitas ayuda?',
+  howToPlaceOrder: 'Cómo hacer un pedido',
+  howToPlaceOrderDesc: 'Toca una comida, revisa los detalles, agrega una bebida o acompañamiento, luego realiza tu pedido.',
+  howToCheckUpcoming: 'Cómo ver las comidas próximas',
+  howToCheckUpcomingDesc: 'Usa las pestañas de comidas para ver desayuno, almuerzo, cena, bebidas, postres y opciones de temporada.',
+  howToCancelMeal: 'Cómo cancelar una comida',
+  howToCancelMealDesc: 'Abre tus pedidos próximos, elige la comida que ya no quieres y confirma la cancelación.',
+  howToUseGrannyBT: 'Cómo usar Granny BT',
+  howToUseGrannyBTDesc: 'Pregúntale a Granny BT recomendaciones de comidas, ayuda dietética o qué hay disponible hoy.',
 };
 
 const FR: TranslationKeys = {
@@ -705,6 +817,42 @@ const FR: TranslationKeys = {
   reminderNowTitle: "C'est l'heure de {period} !",
   reminderPreBody: 'Appuyez pour choisir votre repas {period} avant le début.',
   reminderNowBody: "Vous n'avez pas encore commandé {period}. Appuyez pour parcourir.",
+  noneRecorded: 'Aucun enregistrement',
+  dietaryHistoryDesc: 'Voir tous les changements dans le régime de ce résident',
+  overrideRequests: 'Demandes de dérogation',
+  overrideRequestsDesc: 'Voir le statut des dérogations médicales sur ce compte',
+  retry: 'Réessayer',
+  noOverrideRequestsYet: "Aucune demande de dérogation pour l'instant",
+  noOverrideRequestsHint: "Quand un panier est bloqué par le profil diététique, vous pouvez demander une dérogation unique à l'administrateur. Elle apparaîtra ici.",
+  mealIds: 'IDs de repas {ids}',
+  whyFlagged: 'Pourquoi cela a été signalé',
+  adminNote: "Note de l'administrateur: {note}",
+  orderThisMealNow: 'Commander ce repas maintenant',
+  placing: 'En cours…',
+  statusPending: 'En attente',
+  statusApproved: 'Approuvé',
+  statusDenied: 'Refusé',
+  statusExpired: 'Expiré',
+  statusUsed: 'Utilisé',
+  contactCaregiver: "Contacter l'aidant",
+  noCaregiverAssigned: 'Aucun aidant assigné',
+  selectCaregiverToMessage: 'Sélectionnez un aidant pour envoyer un message',
+  assignedCaregiver: 'Aidant assigné',
+  yourAssignedCaregiver: 'Votre aidant assigné',
+  noMessagesYetSayHello: 'Aucun message pour l\'instant — dites bonjour! 👋',
+  needHelp: "Besoin d'aide?",
+  contactCareTeamHint: "Contactez votre équipe soignante ou le personnel de cuisine pour obtenir de l'aide avec les commandes de repas.",
+  kitchenHours: 'Horaires de la Cuisine',
+  kitchenOpenDaily: 'Cuisine ouverte de 7h à 19h tous les jours',
+  whatWouldYouLikeHelpWith: 'Avec quoi souhaitez-vous de l\'aide?',
+  howToPlaceOrder: 'Comment passer une commande',
+  howToPlaceOrderDesc: 'Appuyez sur un repas, vérifiez les détails, ajoutez une boisson ou un accompagnement, puis passez votre commande.',
+  howToCheckUpcoming: 'Comment consulter les repas à venir',
+  howToCheckUpcomingDesc: 'Utilisez les onglets repas pour voir le petit-déjeuner, le déjeuner, le dîner, les boissons, les desserts et les options saisonnières.',
+  howToCancelMeal: 'Comment annuler un repas',
+  howToCancelMealDesc: "Ouvrez vos commandes à venir, choisissez le repas que vous ne voulez plus et confirmez l'annulation.",
+  howToUseGrannyBT: 'Comment utiliser Granny BT',
+  howToUseGrannyBTDesc: "Demandez à Granny BT des recommandations de repas, de l'aide diététique ou ce qui est disponible aujourd'hui.",
 };
 
 const ZH: TranslationKeys = {
@@ -872,6 +1020,42 @@ const ZH: TranslationKeys = {
   reminderNowTitle: '{period}时间到！',
   reminderPreBody: '点击在开始前选择您的{period}餐食。',
   reminderNowBody: '您还没有点{period}。点击浏览菜单。',
+  noneRecorded: '无记录',
+  dietaryHistoryDesc: '查看此居民饮食的所有变更',
+  overrideRequests: '例外申请',
+  overrideRequestsDesc: '查看此账户的医疗例外状态',
+  retry: '重试',
+  noOverrideRequestsYet: '暂无例外申请',
+  noOverrideRequestsHint: '当购物车因饮食档案被阻止时，您可以向管理员申请一次性例外。它将显示在这里。',
+  mealIds: '餐食ID {ids}',
+  whyFlagged: '为何被标记',
+  adminNote: '管理员备注: {note}',
+  orderThisMealNow: '立即点餐',
+  placing: '处理中…',
+  statusPending: '待处理',
+  statusApproved: '已批准',
+  statusDenied: '已拒绝',
+  statusExpired: '已过期',
+  statusUsed: '已使用',
+  contactCaregiver: '联系护理人员',
+  noCaregiverAssigned: '未分配护理人员',
+  selectCaregiverToMessage: '选择一位护理人员发送消息',
+  assignedCaregiver: '指定护理人员',
+  yourAssignedCaregiver: '您的指定护理人员',
+  noMessagesYetSayHello: '暂无消息 — 打个招呼吧！👋',
+  needHelp: '需要帮助？',
+  contactCareTeamHint: '如需餐食订购帮助，请联系您的护理团队或厨房人员。',
+  kitchenHours: '厨房营业时间',
+  kitchenOpenDaily: '厨房每天7点至19点开放',
+  whatWouldYouLikeHelpWith: '您需要什么帮助？',
+  howToPlaceOrder: '如何下单',
+  howToPlaceOrderDesc: '点击一道餐食，查看详情，添加饮品或配菜，然后下单。',
+  howToCheckUpcoming: '如何查看即将到来的餐食',
+  howToCheckUpcomingDesc: '使用餐食标签查看早餐、午餐、晚餐、饮品、甜点和时令选项。',
+  howToCancelMeal: '如何取消餐食',
+  howToCancelMealDesc: '打开您即将到来的订单，选择不想要的餐食，确认取消。',
+  howToUseGrannyBT: '如何使用Granny BT',
+  howToUseGrannyBTDesc: '向Granny BT询问餐食推荐、饮食帮助，或了解今日可选内容。',
 };
 
 const TRANSLATIONS: Record<Language, TranslationKeys> = {

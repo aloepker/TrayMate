@@ -298,7 +298,7 @@ function SettingsScreen({ navigation, route }: any) {
                   </View>
                 ))
               ) : (
-                <Text style={[styles.noPillsText, { fontSize: scaled(13), color: theme.textSecondary }]}>None recorded</Text>
+                <Text style={[styles.noPillsText, { fontSize: scaled(13), color: theme.textSecondary }]}>{t.noneRecorded}</Text>
               )}
             </View>
           </View>
@@ -329,16 +329,16 @@ function SettingsScreen({ navigation, route }: any) {
           />
           <ActionRow
             featherIcon="file-text" bg="#F0E8D8"
-            title="Dietary History"
-            desc="See every change to this resident's diet"
+            title={t.dietaryHistory}
+            desc={t.dietaryHistoryDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
             onPress={() => navigation.navigate('DietaryAudit', { residentId, residentName })}
           />
           <ActionRow
             featherIcon="shield" bg="#E8EDD7"
-            title="Override Requests"
-            desc="See the status of medical overrides on this account"
+            title={t.overrideRequests}
+            desc={t.overrideRequestsDesc}
             fontSize={scaled(16)} descFontSize={scaled(13)}
             minHeight={touchTarget}
             onPress={() => navigation.navigate('MyOverrides', { residentId: Number(residentId), residentName })}

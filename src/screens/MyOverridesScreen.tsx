@@ -35,6 +35,7 @@ import {
 } from '../services/api';
 import { MealService } from '../services/localDataService';
 import { useCart } from './context/CartContext';
+import { useSettings } from './context/SettingsContext';
 
 const COLORS = {
   primary: '#717644',
@@ -52,13 +53,7 @@ const COLORS = {
   grayBg: '#EFEFEF',
 };
 
-const STATUS_STYLES: Record<OverrideStatus, { label: string; fg: string; bg: string; icon: string }> = {
-  PENDING:  { label: 'Pending',   fg: COLORS.amber,   bg: COLORS.amberBg,   icon: 'clock' },
-  APPROVED: { label: 'Approved',  fg: COLORS.success, bg: COLORS.successBg, icon: 'check-circle' },
-  DENIED:   { label: 'Denied',    fg: COLORS.danger,  bg: COLORS.dangerBg,  icon: 'x-circle' },
-  EXPIRED:  { label: 'Expired',   fg: COLORS.textMuted, bg: COLORS.grayBg,  icon: 'clock' },
-  CONSUMED: { label: 'Used',      fg: COLORS.textMuted, bg: COLORS.grayBg,  icon: 'check' },
-};
+// STATUS_STYLES built at render time using t.* keys — see inside component
 
 function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -67,6 +62,16 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export default function MyOverridesScreen({ navigation, route }: any) {
+  const { t } = useSettings();
+
+  const STATUS_STYLES: Record<OverrideStatus, { label: string; fg: string; bg: string; icon: string }> = {
+    PENDING:  { label: t.statusPending,  fg: COLORS.amber,     bg: COLORS.amberBg,   icon: 'clock' },
+    APPROVED: { label: t.statusApproved, fg: COLORS.success,   bg: COLORS.successBg, icon: 'check-circle' },
+    DENIED:   { label: t.statusDenied,   fg: COLORS.danger,    bg: COLORS.dangerBg,  icon: 'x-circle' },
+    EXPIRED:  { label: t.statusExpired,  fg: COLORS.textMuted, bg: COLORS.grayBg,    icon: 'clock' },
+    CONSUMED: { label: t.statusUsed,     fg: COLORS.textMuted, bg: COLORS.grayBg,    icon: 'check' },
+  };
+
   const residentId: number | undefined = route?.params?.residentId;
   const residentName: string | undefined = route?.params?.residentName;
 
@@ -194,10 +199,10 @@ export default function MyOverridesScreen({ navigation, route }: any) {
         <View style={styles.headerRow}>
           <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={10}>
             <Feather name="chevron-left" size={22} color={COLORS.primary} />
-            <Text style={styles.backText}>Back</Text>
+            <Text style={styles.backText}>{t.back.replace(/^[←↩⬅]\s*/, '')}</Text>
           </Pressable>
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.title} numberOfLines={1}>Override Requests</Text>
+            <Text style={styles.title} numberOfLines={1}>{t.overrideRequests}</Text>
             {residentName ? (
               <Text style={styles.subtitle} numberOfLines={1}>{residentName}</Text>
             ) : null}
@@ -214,16 +219,14 @@ export default function MyOverridesScreen({ navigation, route }: any) {
         <View style={styles.centerWrap}>
           <Text style={styles.errorText}>{error}</Text>
           <Pressable style={styles.retryBtn} onPress={load}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t.retry}</Text>
           </Pressable>
         </View>
       ) : items.length === 0 ? (
         <View style={styles.centerWrap}>
           <Feather name="inbox" size={36} color={COLORS.textMuted} />
-          <Text style={styles.emptyHeader}>No override requests yet</Text>
-          <Text style={styles.emptySub}>
-            When a cart is blocked by the dietary profile you can ask the administrator for a one-time override. It will show up here.
-          </Text>
+          <Text style={styles.emptyHeader}>{t.noOverrideRequestsYet}</Text>
+          <Text style={styles.emptySub}>{t.noOverrideRequestsHint}</Text>
         </View>
       ) : (
         <ScrollView
@@ -273,13 +276,13 @@ export default function MyOverridesScreen({ navigation, route }: any) {
                     </View>
                   ) : null}
                   <View style={styles.metaPill}>
-                    <Text style={styles.metaPillText}>Meal IDs {r.mealIds}</Text>
+                    <Text style={styles.metaPillText}>{t.mealIds.replace('{ids}', String(r.mealIds))}</Text>
                   </View>
                 </View>
 
                 {r.violationsJson ? (
                   <View style={styles.violationsBox}>
-                    <Text style={styles.violationsHeader}>Why this was flagged</Text>
+                    <Text style={styles.violationsHeader}>{t.whyFlagged}</Text>
                     <Text style={styles.violationsText}>{r.violationsJson}</Text>
                   </View>
                 ) : null}
@@ -307,13 +310,13 @@ export default function MyOverridesScreen({ navigation, route }: any) {
                         <Feather name="check-circle" size={15} color="#FFFFFF" />
                       )}
                       <Text style={styles.reorderBtnText}>
-                        {placingOverrideId === r.id ? 'Placing…' : 'Order this meal now'}
+                        {placingOverrideId === r.id ? t.placing : t.orderThisMealNow}
                       </Text>
                     </Pressable>
                   </View>
                 )}
                 {r.status === 'DENIED' && r.decisionReason ? (
-                  <Text style={styles.deniedNote}>Admin note: {r.decisionReason}</Text>
+                  <Text style={styles.deniedNote}>{t.adminNote.replace('{note}', r.decisionReason)}</Text>
                 ) : null}
               </View>
             );
