@@ -47,12 +47,16 @@ function groupItemsByPeriod(items: Order['items']): Record<string, Order['items'
 
 export default function OrderHistoryScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, removeOrder } = useCart();
-  const { t, scaled, theme, getTouchTargetSize } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [tab, setTab] = useState<FilterTab>('all');
 
   const residentId   = route?.params?.residentId   as string | undefined;
   const residentName = route?.params?.residentName as string | undefined;
+
+  useEffect(() => {
+    setCurrentResidentId(residentId ?? null);
+  }, [residentId, setCurrentResidentId]);
 
   useEffect(() => {
     if (residentId) fetchOrderHistory(residentId);

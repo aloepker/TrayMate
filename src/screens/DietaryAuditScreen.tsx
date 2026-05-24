@@ -55,11 +55,15 @@ const diffLists = (oldVal?: string | null, newVal?: string | null) => {
 };
 
 export default function DietaryAuditScreen({ navigation, route }: any) {
-  const { t, scaled, theme, getTouchTargetSize } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
 
   const residentId   = route?.params?.residentId   as string | number | undefined;
   const residentName = route?.params?.residentName as string | undefined;
+
+  useEffect(() => {
+    setCurrentResidentId(residentId != null ? String(residentId) : null);
+  }, [residentId, setCurrentResidentId]);
 
   const [entries, setEntries] = useState<DietaryAuditEntry[]>([]);
   const [loading, setLoading] = useState(true);

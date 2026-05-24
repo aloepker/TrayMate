@@ -62,7 +62,7 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export default function MyOverridesScreen({ navigation, route }: any) {
-  const { t } = useSettings();
+  const { t, setCurrentResidentId } = useSettings();
 
   const STATUS_STYLES: Record<OverrideStatus, { label: string; fg: string; bg: string; icon: string }> = {
     PENDING:  { label: t.statusPending,  fg: COLORS.amber,     bg: COLORS.amberBg,   icon: 'clock' },
@@ -74,6 +74,10 @@ export default function MyOverridesScreen({ navigation, route }: any) {
 
   const residentId: number | undefined = route?.params?.residentId;
   const residentName: string | undefined = route?.params?.residentName;
+
+  useEffect(() => {
+    setCurrentResidentId(residentId != null ? String(residentId) : null);
+  }, [residentId, setCurrentResidentId]);
 
   const [items, setItems] = useState<OverrideRequest[]>([]);
   const [loading, setLoading] = useState(true);

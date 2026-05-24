@@ -356,11 +356,15 @@ type ChatMessage = {
 
 // ---------- Main Screen ----------
 const AIMealAssistantScreen = ({ navigation, route }: any) => {
-  const { t, scaled, language, getTouchTargetSize, theme } = useSettings();
+  const { t, scaled, language, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
   const touchTarget = getTouchTargetSize();
   const residentId =
     (route?.params?.residentId as string | undefined) ||
     ResidentService.getDefaultResident().id;
+
+  useEffect(() => {
+    setCurrentResidentId(residentId ?? null);
+  }, [residentId, setCurrentResidentId]);
   const resident = ResidentService.getResidentById(residentId);
   const residentName = route?.params?.residentName || resident?.fullName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions || [];
