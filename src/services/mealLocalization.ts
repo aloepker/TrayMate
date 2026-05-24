@@ -61,16 +61,24 @@ const MEAL_NAME_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>
     Français: "Bol d'Avoine",
     中文: '燕麦碗',
   },
+  // ↓ Alias for casing variant from backend ("chicken" lowercase).
+  //   findKeyCaseInsensitive() would already match 'Caesar Salad with Chicken'
+  //   above, but keeping this explicit entry makes exact lookups O(1).
   'Caesar Salad with chicken': {
     Español: 'Ensalada César con Pollo',
     Français: 'Salade César au Poulet',
     中文: '鸡肉凯撒沙拉',
   },
+  // ↓ Typo alias — backend occasionally sends "Brushetta" (misspelled).
+  //   DO NOT delete: removing this causes the misspelled version to fall
+  //   back to untranslated English for non-English residents.
   'Chicken Brushetta': {
     Español: 'Pollo Bruschetta',
     Français: 'Poulet Bruschetta',
     中文: '意式番茄鸡肉',
   },
+  // ↓ Typo alias — backend variant uses "Herbed" instead of "Herb".
+  //   Same rule as above: keep until the backend data is corrected.
   'Herbed Baked Chicken': {
     Español: 'Pollo al Horno con Hierbas',
     Français: 'Poulet Rôti aux Herbes',
@@ -126,11 +134,10 @@ const MEAL_NAME_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>
     Français: 'Part de Gâteau à la Vanille',
     中文: '香草蛋糕片',
   },
-  'Side Garden Salad': {
-    Español: 'Ensalada Verde de Acompañamiento',
-    Français: 'Salade Verte en Accompagnement',
-    中文: '配菜田园沙拉',
-  },
+  // 'Side Garden Salad' entry removed — the actual meal in localDataService is
+  // 'Garden Side Salad' (id 26). The reversed-word-order key was never matched
+  // at runtime, and the Chinese translations differed ('配菜田园' vs '田园配菜').
+  // Canonical entry is 'Garden Side Salad' further below.
   'Oatmeal Cookie': {
     Español: 'Galleta de Avena',
     Français: "Biscuit à l'Avoine",
@@ -394,6 +401,7 @@ const MEAL_DESCRIPTION_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, 
     Français: 'Baies fraîches et sirop léger',
     中文: '新鲜莓果，轻糖浆',
   },
+  // Double-quotes required here because the key itself contains an apostrophe.
   "Chef's Daily Creation": {
     Español: 'Creación diaria del chef',
     Français: 'Création quotidienne du chef',
@@ -767,7 +775,11 @@ const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
   'High Sugar': { Español: 'Alto en Azúcar', Français: 'Riche en Sucre', 中文: '高糖' },
   'Low Sugar': { Español: 'Bajo en Azúcar', Français: 'Faible en Sucre', 中文: '低糖' },
   'Gluten-Free': { Español: 'Sin Gluten', Français: 'Sans Gluten', 中文: '无麸质' },
+  // ↓ Space-variant alias — backend occasionally sends "Gluten Free" (no hyphen).
   'Gluten Free': { Español: 'Sin Gluten', Français: 'Sans Gluten', 中文: '无麸质' },
+  // ↓ The entries below are NOT used by localDataService meals but ARE used by
+  //   backend-served / seasonal meals that arrive via the API. Keep them so
+  //   non-English residents see translated tags on those meals too.
   'Dairy-Free': { Español: 'Sin Lácteos', Français: 'Sans Produits Laitiers', 中文: '无乳制品' },
   'Nut-Free': { Español: 'Sin Nueces', Français: 'Sans Fruits à Coque', 中文: '无坚果' },
   Halal: { Español: 'Halal', Français: 'Halal', 中文: '清真' },
@@ -777,13 +789,16 @@ const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
   Caffeine: { Español: 'Cafeína', Français: 'Caféine', 中文: '含咖啡因' },
   Decaf: { Español: 'Descafeinado', Français: 'Décaféiné', 中文: '低咖啡因' },
   'Caffeine-Free': { Español: 'Sin Cafeína', Français: 'Sans Caféine', 中文: '无咖啡因' },
-  Warming: { Español: 'Reconfortante', Français: 'Réconfortant', 中文: '暖胃' },
+  // 'Warming' = temperature-focused warmth (hot drink / soup); 'Comfort' = emotional
+  // comfort food. Spanish and French now use distinct terms for each.
+  Warming: { Español: 'Calentador', Français: 'Réchauffant', 中文: '暖胃' },
   Calming: { Español: 'Relajante', Français: 'Apaisant', 中文: '舒缓' },
   Calcium: { Español: 'Calcio', Français: 'Calcium', 中文: '钙' },
   Gentle: { Español: 'Suave', Français: 'Doux', 中文: '温和' },
   Comfort: { Español: 'Reconfortante', Français: 'Réconfortant', 中文: '舒适暖心' },
   Dairy: { Español: 'Lácteos', Français: 'Produits Laitiers', 中文: '乳制品' },
   Gluten: { Español: 'Gluten', Français: 'Gluten', 中文: '麸质' },
+  // ↓ Also backend-only (not in local meal data):
   'Whole Grain': { Español: 'Grano Integral', Français: 'Céréales Complètes', 中文: '全谷物' },
   'UTI Prevention': { Español: 'Prevención Urinaria', Français: 'Prévention Urinaire', 中文: '泌尿护理' },
   'Soft Bite': { Español: 'Bocado Suave', Français: 'Bouchées Tendres', 中文: '软食' },
@@ -814,6 +829,10 @@ const TIME_RANGE_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string
   '7am - 7pm': { Español: '7 a. m. - 7 p. m.', Français: '7 h - 19 h', 中文: '上午7点 - 晚上7点' },
   '7am - 8pm': { Español: '7 a. m. - 8 p. m.', Français: '7 h - 20 h', 中文: '上午7点 - 晚上8点' },
   '8am - 8pm': { Español: '8 a. m. - 8 p. m.', Français: '8 h - 20 h', 中文: '上午8点 - 晚上8点' },
+  // ↓ En-dash (–) variants of the hyphen-minus (-) entries above.
+  //   The backend and localDataService sometimes store time ranges with an
+  //   en-dash instead of a hyphen-minus. Both encodings must be present so
+  //   translateMealTimeRange() matches either form.  DO NOT merge or remove.
   '7am – 8pm': { Español: '7 a. m. - 8 p. m.', Français: '7 h - 20 h', 中文: '上午7点 - 晚上8点' },
   '8am – 8pm': { Español: '8 a. m. - 8 p. m.', Français: '8 h - 20 h', 中文: '上午8点 - 晚上8点' },
   '11am – 7pm': { Español: '11 a. m. - 7 p. m.', Français: '11 h - 19 h', 中文: '上午11点 - 晚上7点' },
