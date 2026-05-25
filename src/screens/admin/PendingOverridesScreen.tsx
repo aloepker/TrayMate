@@ -113,11 +113,13 @@ export default function PendingOverridesScreen({ navigation }: any) {
     } catch (err: any) {
       console.warn(`Failed to ${verb} override`, err);
       if (err?.status === 403) {
+        // Surface the backend's actual message — the two-person rule is
+        // now relaxed for single-admin facilities (see
+        // OverrideAuthorizationService.assertCanDecide), so a hardcoded
+        // "another admin has to do it" line would be wrong post-deploy.
         Alert.alert(
           'Not authorized',
-          err?.message?.includes('yourself')
-            ? "You can't approve or deny an override you filed yourself — another admin has to do it."
-            : 'Only administrators can decide override requests.',
+          err?.message ?? 'Only administrators can decide override requests.',
         );
       } else {
         Alert.alert(`Unable to ${verb}`, err?.message ?? 'Please try again.');
