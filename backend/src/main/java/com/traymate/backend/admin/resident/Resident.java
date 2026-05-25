@@ -130,6 +130,17 @@ public class Resident {
     @Builder.Default
     private Boolean tabletMode = false;
 
+    // Per-resident UI language. Stored as the same display string the
+    // frontend uses ("English", "Español", "Français", "中文") so the
+    // app can hydrate SettingsContext directly off this column without
+    // a translation step. Default English; never null. Also fed into
+    // the Gemini system prompt so GrannyBT replies in the resident's
+    // chosen language without the frontend having to re-pick it each
+    // session.
+    @Column(name = "language", nullable = false, length = 20, columnDefinition = "VARCHAR(20) DEFAULT 'English'")
+    @Builder.Default
+    private String language = "English";
+
     //to assign caregivers to residents
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "caregiver_id")

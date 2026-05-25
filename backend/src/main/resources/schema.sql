@@ -116,3 +116,11 @@ ALTER TABLE meal_orders
 -- endpoints so we know who started the tray.
 ALTER TABLE meal_orders
     ADD COLUMN IF NOT EXISTS cook VARCHAR(200) NULL;
+
+-- Per-resident UI language preference. Stored as the same display
+-- string the frontend uses ("English", "Español", "Français", "中文")
+-- so the app can hydrate SettingsContext directly. Default English so
+-- existing residents are unaffected. Same column also feeds the
+-- Gemini system prompt so GrannyBT replies in the resident's language.
+ALTER TABLE residents
+    ADD COLUMN IF NOT EXISTS language VARCHAR(20) NOT NULL DEFAULT 'English';

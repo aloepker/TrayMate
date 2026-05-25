@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect, useRef } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { getResidentLanguage, setResidentLanguage as apiSetResidentLanguage } from '../../services/api';
 
 // ---------- Types ----------
 
@@ -1258,6 +1259,27 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
 
   const setCurrentResidentId = useCallback((id: string | null) => {
     setCurrentResidentIdState(id);
+    // Hydrate the resident's persisted language from the backend so
+    // their choice survives logout/reinstall and so Gemini ('GrannyBT')
+    // picks it up automatically on the next chat init. Best-effort —
+    // network failures fall through to whatever's already in state.
+    if (id) {
+      getResidentLanguage(id)
+        .then((lang) => {
+          if (!lang) return;
+          const SUPPORTED: Language[] = ['English', 'Español', 'Français', '中文'];
+          if (!SUPPORTED.includes(lang as Language)) return;
+          setResidentSettings(prev => {
+            const cur = prev[id] ?? DEFAULT_PER_RESIDENT;
+            // Don't clobber a value the user just changed locally
+            // before the GET resolved — only hydrate if the slice is
+            // still at the default.
+            if (cur.language && cur.language !== DEFAULT_PER_RESIDENT.language) return prev;
+            return { ...prev, [id]: { ...cur, language: lang as Language } };
+          });
+        })
+        .catch(() => { /* silent — already logged in api layer */ });
+    }
   }, []);
 
   // Derive active settings from the current resident (or global default)
@@ -1277,7 +1299,16 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const setLanguage = useCallback(
-    (lang: Language) => updateCurrentSettings(prev => ({ ...prev, language: lang })),
+    (lang: Language) => {
+      updateCurrentSettings(prev => ({ ...prev, language: lang }));
+      // Fire-and-forget persist to backend so the choice survives the
+      // session. Same column is read by the Gemini system prompt so
+      // GrannyBT switches languages with the resident without any
+      // extra wiring. Silently no-ops when no resident is in scope
+      // (e.g. on the login screen).
+      const rid = currentResidentIdRef.current;
+      if (rid) apiSetResidentLanguage(rid, lang);
+    },
     [updateCurrentSettings],
   );
 

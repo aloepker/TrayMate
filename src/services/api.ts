@@ -1237,3 +1237,46 @@ export async function setResidentTabletMode(
   );
   return data?.tabletMode ?? enabled;
 }
+
+/* ─────────── Per-resident UI language ─────────── */
+//
+// Persists the resident's language choice to the backend so it survives
+// app reinstalls, logouts, and tablet swaps. Same value also feeds the
+// Gemini system prompt (`buildSystemPrompt` in geminiService.ts) so
+// GrannyBT replies in their language without the frontend re-selecting
+// each session. Lives at /residents/{id}/language — not /admin/ —
+// because the resident updates their own preference.
+
+/** Fetch the resident's persisted UI language. Falls back to 'English'. */
+export async function getResidentLanguage(
+  residentId: string | number,
+): Promise<string> {
+  try {
+    const data = await request<{ language?: string }>(
+      `/residents/${residentId}/language`,
+    );
+    const lang = (data?.language || "").trim();
+    return lang || "English";
+  } catch {
+    // Offline / not-yet-deployed / 404 — caller already has whatever
+    // is cached in SettingsContext, so silently keep that.
+    return "English";
+  }
+}
+
+/** Save the resident's UI language. Best-effort; never throws. */
+export async function setResidentLanguage(
+  residentId: string | number,
+  language: string,
+): Promise<boolean> {
+  try {
+    await request(`/residents/${residentId}/language`, {
+      method: "PUT",
+      body: JSON.stringify({ language }),
+    });
+    return true;
+  } catch (e) {
+    console.warn("[Language] failed to persist", e);
+    return false;
+  }
+}
