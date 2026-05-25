@@ -561,7 +561,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               if (!bucket.order) {
                 return (
                   <View key={`bucket-${bucket.key}`} style={{ marginBottom: 12 }}>
-                    <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>
+                    <Text style={[styles.sectionHeader, { fontSize: scaled(18) }]}>
                       {bucket.label}
                     </Text>
                     <TouchableOpacity
@@ -585,7 +585,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
               return (
                 <View key={`bucket-${bucket.key}`}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={[styles.sectionHeader, { fontSize: scaled(13), marginBottom: 0 }]}>
+                    <Text style={[styles.sectionHeader, { fontSize: scaled(18), marginBottom: 0 }]}>
                       {bucket.label}
                     </Text>
                     {needsAttention && (
@@ -674,12 +674,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           </View>
                           <View>
                             <Text style={styles.confirmTitle}>{t.orderConfirmed}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                              <Text style={styles.confirmId}>Order #{order.backendId ?? order.id.slice(-6).toUpperCase()}</Text>
-                              {residentRoom ? (
-                                <Text style={styles.confirmRoom}>· {t.room} {residentRoom}</Text>
-                              ) : null}
-                            </View>
+                            {/* Order #ID dropped — residents track orders by the
+                                meal/time, not by a backend integer. Room number
+                                kept because staff sometimes ask "what's your room
+                                number?" and it's handy to glance at. */}
+                            {residentRoom ? (
+                              <Text style={styles.confirmRoom}>{t.room} {residentRoom}</Text>
+                            ) : null}
                           </View>
                         </View>
                         <View style={styles.confirmRight}>
@@ -697,15 +698,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         />
                         {isOverdue ? (
                           <Text style={[styles.reminderRowText, { color: '#15803d' }]}>
-                            Est. ready by {estReady} · {t.shouldBeReadySoon}
+                            {t.estReadyBy.replace('{time}', estReady)} · {t.shouldBeReadySoon}
                           </Text>
                         ) : minsLeft <= 30 ? (
                           <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
-                            Ready in ~{minsLeft} min · Est. {estReady}
+                            {t.readyInAbout.replace('{min}', String(minsLeft)).replace('{time}', estReady)}
                           </Text>
                         ) : (
                           <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
-                            2-hr reminder · Est. ready by {estReady}
+                            {t.twoHourReminder.replace('{time}', estReady)}
                           </Text>
                         )}
                       </View>
@@ -803,13 +804,18 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <TouchableOpacity
                             style={styles.removeOrderBtn}
                             onPress={(e) => { e.stopPropagation?.(); handleRemoveOrder(order.id); }}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={t.cancelOrder}
                           >
-                            <Feather name="trash-2" size={15} color={COLORS.danger} />
+                            <Feather name="x" size={16} color={COLORS.danger} />
+                            <Text style={[styles.removeOrderBtnText, { fontSize: scaled(13) }]}>
+                              {t.cancelOrder}
+                            </Text>
                           </TouchableOpacity>
                           <Feather
                             name={expanded ? 'chevron-down' : 'chevron-right'}
-                            size={20}
+                            size={28}
                             color={COLORS.textMuted}
                           />
                         </View>
@@ -832,12 +838,24 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                               </View>
                             )}
                             <View style={styles.mealRowInfo}>
-                              <Text style={[styles.mealName, { fontSize: scaled(16) }]}>
+                              <Text style={[styles.mealName, { fontSize: scaled(18) }]}>
                                 {translateMealName(item.name, language)}
                               </Text>
-                              <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
-                                {translateMealPeriod(item.meal_period, language)}
-                              </Text>
+                              {/* Period label is redundant for main meals — the
+                                  bucket header ("Lunch") already says when it's
+                                  for. We only show the label for add-ons
+                                  (Drinks/Sides/Dessert) so the resident knows
+                                  which item is the actual entrée vs. the side. */}
+                              {(() => {
+                                const p = String(item.meal_period ?? '').toLowerCase();
+                                const isAddOn = p === 'drinks' || p === 'sides' || p === 'dessert' || p === 'desserts';
+                                if (!isAddOn) return null;
+                                return (
+                                  <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
+                                    {translateMealPeriod(item.meal_period, language)}
+                                  </Text>
+                                );
+                              })()}
                             </View>
                             <View style={styles.mealCalBadge}>
                               <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>
@@ -919,9 +937,13 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <TouchableOpacity
                             style={styles.residentComposeToggle}
                             onPress={() => { setReplyingToOrder(order.id); setResidentReplyText(''); }}
+                            accessibilityRole="button"
+                            accessibilityLabel={t.messageKitchen}
                           >
-                            <Feather name="message-circle" size={14} color={COLORS.primary} />
-                            <Text style={styles.residentComposeToggleText}>{t.messageKitchen}</Text>
+                            <Feather name="message-circle" size={18} color={COLORS.primary} />
+                            <Text style={[styles.residentComposeToggleText, { fontSize: scaled(16) }]}>
+                              {t.messageKitchen}
+                            </Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -958,7 +980,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {addOnActiveOrders.length > 0 && (
               <View style={{ marginTop: 4, marginBottom: 4 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <Text style={[styles.sectionHeader, { fontSize: scaled(13), marginBottom: 0 }]}>
+                  <Text style={[styles.sectionHeader, { fontSize: scaled(18), marginBottom: 0 }]}>
                     {t.drinksAndSides}
                   </Text>
                 </View>
@@ -1051,7 +1073,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
             {/* ── Completed Orders ── */}
             {completedOrders.length > 0 && (
               <>
-                <Text style={[styles.sectionHeader, { fontSize: scaled(13) }]}>{t.completed}</Text>
+                <Text style={[styles.sectionHeader, { fontSize: scaled(18) }]}>{t.completed}</Text>
                 {completedOrders.map((order) => (
                   <View key={order.id} style={styles.completedCard}>
                     <View style={styles.completedHeader}>
@@ -1192,15 +1214,15 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 36, paddingTop: 16 },
 
-  // Section headers
+  // Section headers — title case + larger + darker so they're
+  // legible at arm's length on a tablet for elderly residents.
+  // ALL-CAPS was a real readability hit (no word-shape cue).
   sectionHeader: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
     marginBottom: 10,
-    marginTop: 4,
+    marginTop: 6,
   },
 
   // Empty state
@@ -1400,15 +1422,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   statusText: { fontSize: 12, fontWeight: '700' },
+  // Was a 32x32 icon-only tap target. Replaced with an explicit
+  // "✕ Cancel order" pill so elderly users know what they're tapping —
+  // a lone red trash icon reads as ambiguous/scary, especially when
+  // it's their only visible action on the order.
   removeOrderBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: COLORS.dangerBg,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: COLORS.dangerBg,
     borderWidth: 1,
     borderColor: '#FECACA',
+  },
+  removeOrderBtnText: {
+    color: COLORS.danger,
+    fontWeight: '700',
   },
 
   // Meal rows
@@ -1620,15 +1652,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Promoted from a small inline link to an explicit pill button.
+  // "Message Kitchen" is a key support affordance — residents who
+  // can't see it just don't reach out when something's wrong.
   residentComposeToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 10,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.warmBorder,
   },
   residentComposeToggleText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: COLORS.primary,
   },
 

@@ -269,6 +269,10 @@ export type TranslationKeys = {
   dismissAll: string;
   noMealsForPeriod: string;
   orderPlaced: string;
+  cancelOrder: string;
+  readyInAbout: string;       // "Ready in about {min} minutes (around {time})"
+  twoHourReminder: string;    // "Tracking your order · Ready by {time}"
+  estReadyBy: string;         // "Ready by {time}"
 };
 
 const EN: TranslationKeys = {
@@ -492,6 +496,10 @@ const EN: TranslationKeys = {
   dismissAll: 'Dismiss all',
   noMealsForPeriod: 'No meals found for this period.',
   orderPlaced: 'Order Placed',
+  cancelOrder: 'Cancel order',
+  readyInAbout: 'Ready in about {min} minutes (around {time})',
+  twoHourReminder: 'Tracking your order · Ready by {time}',
+  estReadyBy: 'Ready by {time}',
   breakfastServed: 'Served 7 – 10 AM',
   lunchServed: 'Served 11 AM – 2 PM',
   dinnerServed: 'Served 4 – 7 PM',
@@ -718,6 +726,10 @@ const ES: TranslationKeys = {
   dismissAll: 'Descartar todo',
   noMealsForPeriod: 'No se encontraron comidas para este período.',
   orderPlaced: 'Pedido realizado',
+  cancelOrder: 'Cancelar pedido',
+  readyInAbout: 'Listo en aproximadamente {min} minutos (alrededor de las {time})',
+  twoHourReminder: 'Siguiendo su pedido · Listo a las {time}',
+  estReadyBy: 'Listo a las {time}',
   breakfastServed: 'Servido 7 a. m. - 10 a. m.',
   lunchServed: 'Servido 11 a. m. - 2 p. m.',
   dinnerServed: 'Servido 4 p. m. - 7 p. m.',
@@ -944,6 +956,10 @@ const FR: TranslationKeys = {
   dismissAll: 'Tout rejeter',
   noMealsForPeriod: 'Aucun repas trouvé pour cette période.',
   orderPlaced: 'Commande passée',
+  cancelOrder: 'Annuler la commande',
+  readyInAbout: 'Prêt dans environ {min} minutes (vers {time})',
+  twoHourReminder: 'Suivi de votre commande · Prêt à {time}',
+  estReadyBy: 'Prêt à {time}',
   breakfastServed: 'Servi 7 h - 10 h',
   lunchServed: 'Servi 11 h - 14 h',
   dinnerServed: 'Servi 16 h - 19 h',
@@ -1170,6 +1186,10 @@ const ZH: TranslationKeys = {
   dismissAll: '全部忽略',
   noMealsForPeriod: '此时段没有可用的餐点。',
   orderPlaced: '订单已提交',
+  cancelOrder: '取消订单',
+  readyInAbout: '大约 {min} 分钟后准备好（约 {time}）',
+  twoHourReminder: '正在跟踪您的订单 · {time} 准备就绪',
+  estReadyBy: '{time} 准备就绪',
   breakfastServed: '上午7点 - 上午10点 供应',
   lunchServed: '上午11点 - 下午2点 供应',
   dinnerServed: '下午4点 - 晚上7点 供应',
