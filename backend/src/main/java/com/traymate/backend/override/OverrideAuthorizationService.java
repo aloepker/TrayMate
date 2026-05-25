@@ -3,6 +3,7 @@ package com.traymate.backend.override;
 import com.traymate.backend.admin.resident.Resident;
 import com.traymate.backend.admin.resident.ResidentRepository;
 import com.traymate.backend.auth.model.User;
+import com.traymate.backend.auth.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
@@ -34,6 +35,7 @@ import org.springframework.stereotype.Service;
 public class OverrideAuthorizationService {
 
     private final ResidentRepository residentRepository;
+    private final UserRepository userRepository;
 
     public static final String ROLE_ADMIN = "ROLE_ADMIN";
     public static final String ROLE_CAREGIVER = "ROLE_CAREGIVER";
@@ -98,8 +100,18 @@ public class OverrideAuthorizationService {
 
         if (request.getRequestedByUserId() != null
             && request.getRequestedByUserId().equals(actor.getId())) {
-            throw new AccessDeniedException(
-                "You cannot approve or deny an override you filed yourself.");
+            // Single-admin facilities have nobody else to escalate to —
+            // blocking self-approval there leaves the request permanently
+            // stuck (and the resident's notification can't clear). Only
+            // enforce the two-person rule when there's at least one OTHER
+            // admin available to step in.
+            long otherAdminCount = userRepository.findByRole(ROLE_ADMIN).stream()
+                .filter(u -> !u.getId().equals(actor.getId()))
+                .count();
+            if (otherAdminCount > 0) {
+                throw new AccessDeniedException(
+                    "You cannot approve or deny an override you filed yourself.");
+            }
         }
     }
 
