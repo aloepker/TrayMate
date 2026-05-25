@@ -103,3 +103,16 @@ ALTER TABLE meal_orders
 UPDATE meal_orders
    SET created_at = TIMESTAMP(date, '00:00:00')
  WHERE created_at IS NULL AND date IS NOT NULL;
+
+-- Original status column was VARCHAR(7) — silently truncated longer status
+-- values like "preparing" (9), "completed" (9), and "cancelled" (9), which
+-- is why kitchen-side status changes never made it back to the resident.
+-- Widen to fit every valid status incl. "substitution_requested" (22).
+ALTER TABLE meal_orders
+    MODIFY COLUMN status VARCHAR(32) NULL;
+
+-- Optional cook attribution for orders that went through the
+-- "preparing" transition. Used by the kitchen single/bulk status PUT
+-- endpoints so we know who started the tray.
+ALTER TABLE meal_orders
+    ADD COLUMN IF NOT EXISTS cook VARCHAR(200) NULL;
