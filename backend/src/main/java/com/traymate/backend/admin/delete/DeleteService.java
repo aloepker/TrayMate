@@ -3,19 +3,26 @@ package com.traymate.backend.admin.delete;
 import com.traymate.backend.admin.resident.ResidentRepository;
 import com.traymate.backend.auth.model.User;
 import com.traymate.backend.auth.repository.UserRepository;
+import com.traymate.backend.mealOrders.MealOrdersRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class DeleteService {
     private final UserRepository userRepository;
     private final ResidentRepository residentRepository;
+    private final MealOrdersRepository mealOrdersRepository;
 
+    @Transactional
     public void deleteEntity(String type, Long id) {
 
         if (type.equalsIgnoreCase("resident")) {
 
+            // Cascade: remove this resident's orders first so they don't
+            // linger as orphaned rows pointing at a deleted residentId.
+            mealOrdersRepository.deleteByUserId(String.valueOf(id));
             residentRepository.deleteById(id.intValue());
 
         } else if (type.equalsIgnoreCase("user")) {

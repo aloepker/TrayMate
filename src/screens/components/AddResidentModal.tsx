@@ -15,6 +15,7 @@ import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -311,11 +312,15 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
   return (
     <>
       <Modal visible={visible} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add Resident</Text>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Add Resident</Text>
 
-            <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
+              <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Names row */}
               <View style={styles.row}>
                 <View style={[styles.col, { flex: 2 }]}>
@@ -484,6 +489,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
             </Pressable>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Gender picker mini-modal */}

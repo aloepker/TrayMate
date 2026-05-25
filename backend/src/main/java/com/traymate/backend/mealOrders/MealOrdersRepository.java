@@ -19,4 +19,9 @@ public interface MealOrdersRepository extends JpaRepository<MealOrders, Integer>
 
     //for checking if meal has been placed
     Optional<MealOrders> findByUserIdAndMealOfDayAndDate(String userId, String mealOfDay, LocalDate date);
+
+    // Cascade cleanup when a resident is deleted — without this, orders
+    // hang around with a userId pointing at a row that no longer exists,
+    // which surfaces as stale "remaining meals" on next admin load.
+    long deleteByUserId(String userId);
 }

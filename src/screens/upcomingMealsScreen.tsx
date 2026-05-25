@@ -196,7 +196,10 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     if (!residentId) return;
     fetchOrderHistory(residentId);
     const unsub = navigation.addListener('focus', () => fetchOrderHistory(residentId));
-    return unsub;
+    // Poll every 15s so kitchen-side status changes (preparing → ready →
+    // completed → cancelled) show up without a manual refresh.
+    const poll = setInterval(() => fetchOrderHistory(residentId), 15000);
+    return () => { unsub(); clearInterval(poll); };
   }, [fetchOrderHistory, residentId, navigation]);
 
   // ── Only show today's orders, excluding soft-deleted ones ─────────────────

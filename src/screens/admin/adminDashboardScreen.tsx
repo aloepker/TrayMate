@@ -118,6 +118,7 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
     }, []),
   );
 
+
   // Tracks the unread count from the previous poll so we only pop the
   // auto-order Alert once per *new* incoming message — not every 30s.
   const lastUnreadRef = useRef<number | null>(null);
@@ -376,6 +377,16 @@ export default function AdminDashboard({ navigation }: AdminDashboardProps) {
       Alert.alert("Failed to refresh residents", e.message);
     }
   };
+
+  // Re-read residents from backend every time the admin dash regains focus.
+  // Without this, caregiver assignments made by other sessions / accounts
+  // don't show up until app restart — even though they ARE persisted server-side.
+  useFocusEffect(
+    useCallback(() => {
+      refreshResidents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
 
   const refreshCaregivers = async () => {
     try {
