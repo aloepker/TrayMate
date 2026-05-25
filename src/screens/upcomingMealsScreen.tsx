@@ -539,16 +539,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           </View>
         ) : (
           <>
-            {/* Meal reminder banner */}
-            {notifications.mealReminders && activeOrders.length > 0 && (
-              <View style={styles.reminderBanner}>
-                <Feather name="bell" size={14} color="#92400E" />
-                <Text style={[styles.reminderText, { fontSize: scaled(13) }]}>
-                  {t.mealReminders}: {t.mealRemindersDesc}
-                </Text>
-              </View>
-            )}
-
             {/* ── Active Orders, grouped by meal period ──
                 Always render all three sections so the resident sees
                 at a glance which trays still need a pick. The card
@@ -1094,24 +1084,6 @@ const styles = StyleSheet.create({
 
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 36, paddingTop: 16 },
-
-  // Reminder banner (notifications setting)
-  reminderBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  reminderText: {
-    color: '#92400E',
-    fontWeight: '600',
-    flex: 1,
-  },
 
   // Section headers
   sectionHeader: {
