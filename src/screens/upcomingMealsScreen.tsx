@@ -214,10 +214,10 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   // Three fixed buckets shown even when empty so the resident can see
   // at a glance which meals they still need to pick. Matches the
   // facility's serving cadence — one tray per period per day.
-  const MEAL_BUCKETS: Array<{ key: string; label: string; serves: string }> = [
-    { key: 'Breakfast', label: 'Breakfast', serves: 'Served 7 – 10 AM' },
-    { key: 'Lunch',     label: 'Lunch',     serves: 'Served 11 AM – 2 PM' },
-    { key: 'Dinner',    label: 'Dinner',    serves: 'Served 4 – 7 PM' },
+  const MEAL_BUCKETS: Array<{ key: string; label: string; serves: string; orderCta: string }> = [
+    { key: 'Breakfast', label: translateMealPeriod('Breakfast', language), serves: t.breakfastServed, orderCta: t.orderBreakfastCta },
+    { key: 'Lunch',     label: translateMealPeriod('Lunch', language),     serves: t.lunchServed,     orderCta: t.orderLunchCta },
+    { key: 'Dinner',    label: translateMealPeriod('Dinner', language),    serves: t.dinnerServed,    orderCta: t.orderDinnerCta },
   ];
   const matchesPeriod = (order: Order, period: string): boolean => {
     const mod = (order.mealOfDay ?? '').toLowerCase();
@@ -567,7 +567,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                     >
                       <Feather name="plus-circle" size={22} color={COLORS.primary} />
                       <Text style={[{ fontSize: scaled(15), color: COLORS.primary, fontWeight: '700', marginTop: 6 }]}>
-                        Order {bucket.label}
+                        {bucket.orderCta}
                       </Text>
                       <Text style={[{ fontSize: scaled(12), color: '#6B7280', marginTop: 2 }]}>
                         {bucket.serves}
@@ -679,7 +679,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           </View>
                         </View>
                         <View style={styles.confirmRight}>
-                          <Text style={styles.confirmPlacedLabel}>Placed at</Text>
+                          <Text style={styles.confirmPlacedLabel}>{t.placedAt}</Text>
                           <Text style={styles.confirmPlacedTime}>{formatTime(order.placedAt)}</Text>
                         </View>
                       </View>
@@ -917,7 +917,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             onPress={() => { setReplyingToOrder(order.id); setResidentReplyText(''); }}
                           >
                             <Feather name="message-circle" size={14} color={COLORS.primary} />
-                            <Text style={styles.residentComposeToggleText}>Message Kitchen</Text>
+                            <Text style={styles.residentComposeToggleText}>{t.messageKitchen}</Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -1016,7 +1016,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
           <Feather name="trash-2" size={16} color="#FFF" />
           <Text style={styles.undoBannerText}>{undoBanner.label}</Text>
           <TouchableOpacity style={styles.undoBtn} onPress={undoBanner.onUndo}>
-            <Text style={styles.undoBtnText}>Undo</Text>
+            <Text style={styles.undoBtnText}>{t.undo}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}

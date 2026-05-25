@@ -244,6 +244,16 @@ export type TranslationKeys = {
   howToCancelMealDesc: string;
   howToUseGrannyBT: string;
   howToUseGrannyBTDesc: string;
+  // Upcoming meals bucket CTAs
+  messageKitchen: string;
+  placedAt: string;
+  undo: string;
+  orderBreakfastCta: string;
+  orderLunchCta: string;
+  orderDinnerCta: string;
+  breakfastServed: string;
+  lunchServed: string;
+  dinnerServed: string;
 };
 
 const EN: TranslationKeys = {
@@ -447,6 +457,15 @@ const EN: TranslationKeys = {
   howToCancelMealDesc: 'Open your upcoming orders, choose the meal you no longer want, and confirm the cancellation.',
   howToUseGrannyBT: 'How to Use Granny BT',
   howToUseGrannyBTDesc: 'Ask Granny BT for meal recommendations, dietary help, or what is available today.',
+  messageKitchen: 'Message Kitchen',
+  placedAt: 'Placed at',
+  undo: 'Undo',
+  orderBreakfastCta: 'Order Breakfast',
+  orderLunchCta: 'Order Lunch',
+  orderDinnerCta: 'Order Dinner',
+  breakfastServed: 'Served 7 – 10 AM',
+  lunchServed: 'Served 11 AM – 2 PM',
+  dinnerServed: 'Served 4 – 7 PM',
 };
 
 const ES: TranslationKeys = {
@@ -650,6 +669,15 @@ const ES: TranslationKeys = {
   howToCancelMealDesc: 'Abre tus pedidos próximos, elige la comida que ya no quieres y confirma la cancelación.',
   howToUseGrannyBT: 'Cómo usar Granny BT',
   howToUseGrannyBTDesc: 'Pregúntale a Granny BT recomendaciones de comidas, ayuda dietética o qué hay disponible hoy.',
+  messageKitchen: 'Mensaje a la cocina',
+  placedAt: 'Realizado a las',
+  undo: 'Deshacer',
+  orderBreakfastCta: 'Pedir desayuno',
+  orderLunchCta: 'Pedir almuerzo',
+  orderDinnerCta: 'Pedir cena',
+  breakfastServed: 'Servido 7 a. m. - 10 a. m.',
+  lunchServed: 'Servido 11 a. m. - 2 p. m.',
+  dinnerServed: 'Servido 4 p. m. - 7 p. m.',
 };
 
 const FR: TranslationKeys = {
@@ -853,6 +881,15 @@ const FR: TranslationKeys = {
   howToCancelMealDesc: "Ouvrez vos commandes à venir, choisissez le repas que vous ne voulez plus et confirmez l'annulation.",
   howToUseGrannyBT: 'Comment utiliser Granny BT',
   howToUseGrannyBTDesc: "Demandez à Granny BT des recommandations de repas, de l'aide diététique ou ce qui est disponible aujourd'hui.",
+  messageKitchen: 'Message à la cuisine',
+  placedAt: 'Passée à',
+  undo: 'Annuler',
+  orderBreakfastCta: 'Commander le petit-déjeuner',
+  orderLunchCta: 'Commander le déjeuner',
+  orderDinnerCta: 'Commander le dîner',
+  breakfastServed: 'Servi 7 h - 10 h',
+  lunchServed: 'Servi 11 h - 14 h',
+  dinnerServed: 'Servi 16 h - 19 h',
 };
 
 const ZH: TranslationKeys = {
@@ -1056,6 +1093,15 @@ const ZH: TranslationKeys = {
   howToCancelMealDesc: '打开您即将到来的订单，选择不想要的餐食，确认取消。',
   howToUseGrannyBT: '如何使用Granny BT',
   howToUseGrannyBTDesc: '向Granny BT询问餐食推荐、饮食帮助，或了解今日可选内容。',
+  messageKitchen: '联系厨房',
+  placedAt: '下单时间',
+  undo: '撤销',
+  orderBreakfastCta: '点早餐',
+  orderLunchCta: '点午餐',
+  orderDinnerCta: '点晚餐',
+  breakfastServed: '上午7点 - 上午10点 供应',
+  lunchServed: '上午11点 - 下午2点 供应',
+  dinnerServed: '下午4点 - 晚上7点 供应',
 };
 
 const TRANSLATIONS: Record<Language, TranslationKeys> = {
