@@ -129,6 +129,46 @@ public class MealOrdersService {
     public List<MealOrders> getUserHistory(String userId) {
         return mealOrdersRepository.findByUserId(userId);
     }
+
+    /**
+     * Kitchen-side: flip the status on a single order matched by the
+     * (userId, mealOfDay, date) triple — the same composite key the
+     * place-order conflict logic uses. Returns the updated row, or null
+     * if no order matched. `cook` is optional and only persisted when
+     * the new status is "preparing".
+     */
+    public MealOrders setStatusForSingleOrder(
+            String userId, String mealOfDay, LocalDate date,
+            String newStatus, String cook) {
+        MealOrders existing = mealOrdersRepository
+            .findByUserIdAndMealOfDayAndDate(userId, mealOfDay, date)
+            .orElse(null);
+        if (existing == null) return null;
+        existing.setStatus(newStatus);
+        if (cook != null && !cook.isBlank() && "preparing".equalsIgnoreCase(newStatus)) {
+            existing.setCook(cook.trim());
+        }
+        return mealOrdersRepository.save(existing);
+    }
+
+    /**
+     * Kitchen-side bulk update: flip every order for a meal-period+date
+     * to the same status in one shot. Used by the "Mark all as ready"
+     * affordance so staff don't have to tap each tray individually.
+     */
+    public int setStatusBulkByMealAndDate(
+            String mealOfDay, LocalDate date,
+            String newStatus, String cook) {
+        List<MealOrders> matches = mealOrdersRepository.findByMealOfDayAndDate(mealOfDay, date);
+        boolean recordCook = cook != null && !cook.isBlank()
+            && "preparing".equalsIgnoreCase(newStatus);
+        for (MealOrders o : matches) {
+            o.setStatus(newStatus);
+            if (recordCook) o.setCook(cook.trim());
+        }
+        mealOrdersRepository.saveAll(matches);
+        return matches.size();
+    }
     public MealOrders updateExistingOrderById(Integer id, MealOrders newOrderData) {
     // 1. Find the exact record the user wants to overwrite
     MealOrders existing = mealOrdersRepository.findById(id)

@@ -28,11 +28,22 @@ public class MealOrders {
     @Column(name = "user_id", length = 8)
     private String userId; // Matching your varchar(8) requirement
 
-    @Column(name = "status", length = 7)
-    private String status; // pending, started, served
+    // VARCHAR length must hold the longest valid status string.
+    // Longest is "substitution_requested" (22 chars), so 32 leaves headroom.
+    // Originally 7 — silently truncated "preparing"/"completed"/"cancelled"
+    // on save, which surfaced as the resident-side "status never changes" bug.
+    @Column(name = "status", length = 32)
+    private String status; // pending, confirmed, preparing, ready, completed, cancelled, substitution_requested
 
     @Column(name = "meal_items_id_numbers", length = 16)
     private String mealItemsIdNumbers;
+
+    // Email or name of the staff member who marked this order as preparing.
+    // Optional; only set by the kitchen single/bulk status endpoints when
+    // transitioning into "preparing". 200 is the same length as
+    // resident.emergencyContact so it'll fit any user identifier we have.
+    @Column(name = "cook", length = 200)
+    private String cook;
 
     @Column(name = "note", length = 1000)
     private String note;

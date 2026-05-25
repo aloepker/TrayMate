@@ -1721,34 +1721,10 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
           </Text>
         </View>
         <View style={s.headerRight}>
-          {/* Manual refresh — reruns today's orders + coverage alerts.
-              The dashboard already polls and refreshes on focus, but
-              kitchen staff often want to confirm the screen is live
-              after taking an action elsewhere. The spinner replaces
-              the icon while in flight so they get visual feedback. */}
-          <TouchableOpacity
-            style={[s.headerLabelBtn, { backgroundColor: "#EDF2F7", borderColor: "#A0AEC0" }]}
-            onPress={async () => {
-              await Promise.all([
-                fetchAllOrders(),
-                loadCoverageAlerts(),
-              ]);
-            }}
-            disabled={loading}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh orders and alerts"
-          >
-            {/* Fixed 18x18 icon slot so the loading spinner doesn't make
-                this button taller than the Add Meal button next to it. */}
-            <View style={{ width: 18, height: 18, alignItems: "center", justifyContent: "center" }}>
-              {loading ? (
-                <ActivityIndicator size="small" color="#2D3748" />
-              ) : (
-                <Feather name="refresh-cw" size={18} color="#2D3748" />
-              )}
-            </View>
-            <Text style={[s.headerLabelBtnText, { color: "#2D3748" }]}>Refresh</Text>
-          </TouchableOpacity>
+          {/* Manual refresh button removed — dashboard polls every 45s
+              and re-fetches on focus, so the button was visual noise.
+              "Auto-refreshes every 45s" caption under the header still
+              tells staff the screen is live. */}
 
           <TouchableOpacity style={[s.headerLabelBtn, { backgroundColor: "#E8F5E9", borderColor: "#81C784" }]} onPress={() => setShowSeasonalModal(true)}>
             <Feather name="plus-circle" size={18} color="#2E7D32" />

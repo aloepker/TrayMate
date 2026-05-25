@@ -85,6 +85,52 @@ public ResponseEntity<?> placeOrder(@RequestBody MealOrders newOrder) {
         //return mealOrdersService.getUserHistory(userId);
         return mealOrdersService.getUserHistoryWithDetails(userId);
     }
+
+    /**
+     * Kitchen-side single-order status update. Called from
+     * KitchenDashboard.apiSetStatusSingle when staff taps a tray's
+     * status pill. Without this endpoint the call 404'd and the
+     * resident never saw "preparing"/"ready"/"completed" propagate.
+     */
+    @PutMapping("/status/single")
+    public ResponseEntity<?> setStatusSingle(
+            @RequestParam String userId,
+            @RequestParam String mealOfDay,
+            @RequestParam String date,
+            @RequestParam String newStatus,
+            @RequestParam(required = false) String cook) {
+        try {
+            LocalDate localDate = LocalDate.parse(date);
+            MealOrders updated = mealOrdersService.setStatusForSingleOrder(
+                userId, mealOfDay, localDate, newStatus, cook);
+            if (updated == null) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /**
+     * Kitchen-side bulk status update for a whole meal period at once
+     * (e.g. "mark all of today's breakfasts as ready").
+     */
+    @PutMapping("/status/bulk")
+    public ResponseEntity<?> setStatusBulk(
+            @RequestParam String mealOfDay,
+            @RequestParam String date,
+            @RequestParam String newStatus,
+            @RequestParam(required = false) String cook) {
+        try {
+            LocalDate localDate = LocalDate.parse(date);
+            int n = mealOrdersService.setStatusBulkByMealAndDate(
+                mealOfDay, localDate, newStatus, cook);
+            return ResponseEntity.ok().body(java.util.Map.of("updated", n));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
     
     //3. get information for a specific meal and date
     @GetMapping("/search")
