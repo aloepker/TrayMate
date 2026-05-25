@@ -11,6 +11,7 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import { useCart, Order } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
+import { translateMealName } from '../services/mealLocalization';
 
 // ─── Meal period config ────────────────────────────────────────────────────
 // Labels are set at render time from t.* to support i18n
@@ -47,7 +48,7 @@ function groupItemsByPeriod(items: Order['items']): Record<string, Order['items'
 
 export default function OrderHistoryScreen({ navigation, route }: any) {
   const { orders, getOrdersForResident, fetchOrderHistory, removeOrder } = useCart();
-  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId, use24Hour } = useSettings();
+  const { t, scaled, theme, getTouchTargetSize, setCurrentResidentId, use24Hour, language } = useSettings();
   const touchTarget = getTouchTargetSize();
   const [tab, setTab] = useState<FilterTab>('all');
 
@@ -247,7 +248,7 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
                           ]}
                           numberOfLines={1}
                         >
-                          {item.name}
+                          {translateMealName(item.name, language)}
                         </Text>
                         {/* Calories */}
                         <Text style={[styles.itemKcal, { fontSize: scaled(11), color: theme.textSecondary }]}>

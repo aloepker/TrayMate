@@ -630,7 +630,7 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                             accessibilityLabel={`Replace with ${alt.name}`}
                           >
                             <Text style={{ fontSize: scaled(13), fontWeight: '700', color: '#7C2D12' }} numberOfLines={1}>
-                              {alt.name}
+                              {translateMealName(alt.name, language)}
                             </Text>
                             <Text style={{ fontSize: scaled(11), color: '#9C4221' }} numberOfLines={1}>
                               {alt.nutrition?.calories ?? '?'} kcal
