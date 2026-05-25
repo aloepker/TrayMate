@@ -32,7 +32,8 @@ const HomeScreen = ({ navigation, route }: any) => {
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
-    setCurrentResidentId(route?.params?.residentId ?? null);
+    const rid = route?.params?.residentId;
+    if (rid) setCurrentResidentId(String(rid));
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Schedule OS-level daily mealtime notifications for this resident.

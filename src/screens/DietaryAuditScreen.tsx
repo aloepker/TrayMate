@@ -62,7 +62,7 @@ export default function DietaryAuditScreen({ navigation, route }: any) {
   const residentName = route?.params?.residentName as string | undefined;
 
   useEffect(() => {
-    setCurrentResidentId(residentId != null ? String(residentId) : null);
+    if (residentId != null) setCurrentResidentId(String(residentId));
   }, [residentId, setCurrentResidentId]);
 
   const [entries, setEntries] = useState<DietaryAuditEntry[]>([]);

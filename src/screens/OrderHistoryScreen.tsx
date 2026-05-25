@@ -56,7 +56,9 @@ export default function OrderHistoryScreen({ navigation, route }: any) {
   const residentName = route?.params?.residentName as string | undefined;
 
   useEffect(() => {
-    setCurrentResidentId(residentId ?? null);
+    // Skip when route lacks residentId so we don't wipe the context's
+    // language/settings for the resident the user is mid-session with.
+    if (residentId) setCurrentResidentId(String(residentId));
   }, [residentId, setCurrentResidentId]);
 
   useEffect(() => {

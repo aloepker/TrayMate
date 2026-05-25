@@ -417,13 +417,33 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           }
           return new Date(rawDate ?? Date.now());
         };
-        const resolved = backendOrders.map((o) => ({
-          ...o,
-          placedAt: resolvePlacedAt(
-            history.find((h) => h.order.id === o.backendId)?.order,
-            o,
-          ),
-        }));
+        const resolved = backendOrders.map((o) => {
+          const existing = prevByBackendId.get(String(o.backendId));
+          // Bundled-only meals (frontend FALLBACK_MEALS not seeded in the
+          // backend) get placed with their bundled id, then re-fetched
+          // resolves that id against the backend's meals table and
+          // surfaces a totally unrelated meal (e.g. salmon → Diet Coke).
+          // Detect this by comparing the freshly-resolved item names against
+          // the names we held locally for the same backendId — if any name
+          // changed, the backend's resolution is bogus and we keep the
+          // local snapshot. Status/period/date still come from the backend.
+          let items = o.items;
+          if (existing && existing.items.length === o.items.length) {
+            const localNames = existing.items.map((it) => it.name).sort().join('|');
+            const backendNames = o.items.map((it) => it.name).sort().join('|');
+            if (localNames !== backendNames && existing.items.length > 0) {
+              items = existing.items;
+            }
+          }
+          return {
+            ...o,
+            items,
+            placedAt: resolvePlacedAt(
+              history.find((h) => h.order.id === o.backendId)?.order,
+              o,
+            ),
+          };
+        });
         // Map keyed by backendId so duplicates collapse — last write wins
         // (which is fine; the backend payload is the source of truth).
         const seen = new Map<string, typeof resolved[number]>();

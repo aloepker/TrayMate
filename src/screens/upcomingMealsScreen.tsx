@@ -189,7 +189,8 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   const foodAllergies: string[] = route?.params?.foodAllergies ?? [];
 
   useEffect(() => {
-    setCurrentResidentId(route?.params?.residentId ?? null);
+    const rid = route?.params?.residentId;
+    if (rid) setCurrentResidentId(String(rid));
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   useEffect(() => {

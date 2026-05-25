@@ -363,8 +363,12 @@ const AIMealAssistantScreen = ({ navigation, route }: any) => {
     ResidentService.getDefaultResident().id;
 
   useEffect(() => {
-    setCurrentResidentId(residentId ?? null);
-  }, [residentId, setCurrentResidentId]);
+    // residentId has a fallback to the default resident; only push it
+    // into context when route actually supplied one so we don't flip
+    // settings to a different resident's prefs.
+    const rid = route?.params?.residentId as string | undefined;
+    if (rid) setCurrentResidentId(String(rid));
+  }, [route?.params?.residentId, setCurrentResidentId]);
   const resident = ResidentService.getResidentById(residentId);
   const residentName = route?.params?.residentName || resident?.fullName || 'Resident';
   const dietaryRestrictions: string[] = route?.params?.dietaryRestrictions || [];

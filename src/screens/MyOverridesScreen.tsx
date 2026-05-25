@@ -76,7 +76,7 @@ export default function MyOverridesScreen({ navigation, route }: any) {
   const residentName: string | undefined = route?.params?.residentName;
 
   useEffect(() => {
-    setCurrentResidentId(residentId != null ? String(residentId) : null);
+    if (residentId != null) setCurrentResidentId(String(residentId));
   }, [residentId, setCurrentResidentId]);
 
   const [items, setItems] = useState<OverrideRequest[]>([]);

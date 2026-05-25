@@ -16,7 +16,7 @@ import {
   translateMealName,
   translateMealPeriod,
 } from '../services/mealLocalization';
-import { ResidentService } from '../services/localDataService';
+import { MealService, ResidentService } from '../services/localDataService';
 import { getUnsafeReason } from '../services/mealSafetyService';
 import { createOverrideApi } from '../services/api';
 
@@ -56,7 +56,13 @@ const CartScreen = ({ navigation, route }: any) => {
   const touchTarget = getTouchTargetSize();
 
   useEffect(() => {
-    setCurrentResidentId(route?.params?.residentId ?? null);
+    // Only update the context when we actually have a residentId from the
+    // route — passing null here would briefly drop the resident's settings
+    // (language, font size, theme) back to defaults until the next screen
+    // restored them, which showed up as an English "flash" after confirming
+    // an order in another language.
+    const rid = route?.params?.residentId;
+    if (rid) setCurrentResidentId(String(rid));
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   const residentId =
@@ -187,6 +193,49 @@ const CartScreen = ({ navigation, route }: any) => {
       }
 
       if (conflict && conflict.id > 0) {
+        // If the new cart is only drinks/sides, MERGE with the existing
+        // order's items instead of replacing — replacing would wipe the
+        // breakfast main when a resident just wanted to add coffee.
+        const cartIsAddOnsOnly = cartItems.every(
+          (it) => it.meal_period === 'Drinks' || it.meal_period === 'Sides',
+        );
+        if (cartIsAddOnsOnly) {
+          // Pull each existing meal back out of the catalog so we can
+          // ship the union to replaceOrder, then dedupe by id so a
+          // resident re-adding the same drink doesn't double it up.
+          const existingIds = String(conflict.mealItemsIdNumbers ?? '')
+            .split(/[, ]+/)
+            .map((s) => Number(s.trim()))
+            .filter((n) => Number.isFinite(n) && n > 0);
+          const existingMeals = (
+            await Promise.all(existingIds.map((id) => MealService.getMealById(id)))
+          )
+            .filter((m): m is NonNullable<typeof m> => !!m)
+            .map((m) => ({
+              id: Number(m.id),
+              name: m.name,
+              meal_period: m.mealPeriod as any,
+              description: m.description,
+              kcal: m.nutrition?.calories ?? 0,
+              sodium_mg: parseInt(String(m.nutrition?.sodium ?? '0'), 10),
+              protein_g: parseInt(String(m.nutrition?.protein ?? '0'), 10),
+              tags: m.tags ?? [],
+              imageUrl: m.imageUrl,
+            }));
+          const seen = new Set<number>();
+          const merged = [...existingMeals, ...cartItems].filter((it) => {
+            if (seen.has(it.id)) return false;
+            seen.add(it.id);
+            return true;
+          });
+          const replaced = await replaceOrder(conflict.id, residentId, conflict.mealOfDay, merged as any);
+          if (replaced && notifications.orderUpdates) {
+            Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
+          }
+          navigation.navigate('UpcomingMeals', { residentId, residentName, dietaryRestrictions, foodAllergies });
+          return;
+        }
+
         Alert.alert(
           'Order Already Exists',
           `You already have a pending ${conflict.mealOfDay} order for ${conflict.date}. Replace it with this cart?`,

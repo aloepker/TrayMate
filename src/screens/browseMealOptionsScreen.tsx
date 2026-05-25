@@ -1418,7 +1418,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
   // Activate this resident's settings when screen mounts
   useEffect(() => {
-    setCurrentResidentId(route?.params?.residentId ?? null);
+    const rid = route?.params?.residentId;
+    if (rid) setCurrentResidentId(String(rid));
   }, [route?.params?.residentId, setCurrentResidentId]);
 
   // Get resident name from route params or use localDataService
