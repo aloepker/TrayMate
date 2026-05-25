@@ -24,6 +24,7 @@ import {
   getMe,
 } from "../../../services/api";
 import { getResidentCaregivers } from "../../../services/storage";
+import { parseServerTimestamp } from "../../../services/dateUtils";
 import { Message } from "./messagingTypes";
 import { useSettings } from "../../context/SettingsContext";
 
@@ -152,7 +153,9 @@ export default function ResidentChatModal({
 
   const formatTime = (iso: string) => {
     if (!iso) return "";
-    const d = new Date(iso);
+    // Backend LocalDateTime arrives without a zone marker; treat as UTC
+    // so we don't show messages 7-8 hours off the actual time.
+    const d = parseServerTimestamp(iso);
     if (Number.isNaN(d.getTime())) return "";
     const now   = new Date();
     const today =

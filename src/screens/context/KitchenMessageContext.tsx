@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { getAuthToken } from '../../services/storage';
+import { parseServerTimestamp } from '../../services/dateUtils';
 
 const BASE = 'https://traymate-auth.onrender.com';
 
@@ -103,7 +104,7 @@ async function apiFetchMessages(): Promise<KitchenMessage[]> {
       fromRole: (m.senderRole ?? m.fromRole ?? 'kitchen') as KitchenMessage['fromRole'],
       fromName: String(m.senderName ?? m.fromName ?? ''),
       text: String(m.text ?? ''),
-      timestamp: new Date(m.sentAt ?? m.timestamp ?? m.createdAt ?? Date.now()),
+      timestamp: parseServerTimestamp(m.sentAt ?? m.timestamp ?? m.createdAt),
       read: Boolean(m.read),
       channel: m.channel === 'staff' ? 'staff' : 'order',
     }));

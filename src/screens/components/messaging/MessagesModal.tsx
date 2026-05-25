@@ -27,6 +27,7 @@ import {
   MessageUser,
   MessagesModalProps,
 } from "./messagingTypes";
+import { parseServerTimestamp, parseServerTimestampMs } from "../../../services/dateUtils";
 
 const OLIVE = "#717644";
 const OLIVE_BG = "#F0EEE4";
@@ -147,7 +148,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         const other = isMine ? String(chat.receiverId) : String(chat.senderId);
         const existing = previewMap[other];
 
-        if (!existing || new Date(chat.createdAt) > new Date(existing.createdAt)) {
+        if (!existing || parseServerTimestamp(chat.createdAt) > parseServerTimestamp(existing.createdAt)) {
           previewMap[other] = {
             preview: chat.content || "",
             createdAt: chat.createdAt,
@@ -299,7 +300,7 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
         })
         .sort((a, b) => {
           if (a.createdAt && b.createdAt) {
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            return parseServerTimestampMs(b.createdAt) - parseServerTimestampMs(a.createdAt);
           }
           if (a.createdAt) return -1;
           if (b.createdAt) return 1;
@@ -470,7 +471,9 @@ export default function MessagesModal({ visible, onClose }: MessagesModalProps) 
 
   const formatTime = (value: string) => {
     if (!value) return "";
-    const d = new Date(value);
+    // Backend LocalDateTime arrives without a zone marker; treat as UTC
+    // so timestamps don't render 7-8 hours off the actual local time.
+    const d = parseServerTimestamp(value);
     if (Number.isNaN(d.getTime())) return "";
 
     const now = new Date();
