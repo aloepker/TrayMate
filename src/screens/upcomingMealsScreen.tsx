@@ -238,6 +238,19 @@ function UpcomingMealsScreen({ navigation, route }: any) {
       return p === period.toLowerCase() || p === 'all day';
     });
   };
+  // True only when every item in the order is a drink, side, or dessert.
+  // Empty-item orders (not yet hydrated) are treated as main orders so
+  // they still appear somewhere rather than disappearing.
+  const isAddOnOnly = (order: Order): boolean => {
+    if (!order.items || order.items.length === 0) return false;
+    return order.items.every((it) => {
+      const p = String((it as any).meal_period ?? '').toLowerCase();
+      return p === 'drinks' || p === 'sides' || p === 'dessert' || p === 'desserts';
+    });
+  };
+  // Standalone drink/side orders shown in their own section — not mixed
+  // into the Breakfast/Lunch/Dinner buckets.
+  const addOnActiveOrders = activeOrders.filter(isAddOnOnly);
   // Cache of safe alternative meals per period, refreshed when the
   // resident's safety profile changes. Used by the substitution-swap
   // dropdown so we can offer 3-5 alternatives that are guaranteed
@@ -324,15 +337,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
   };
 
   const bucketedActiveOrders = MEAL_BUCKETS.map((b) => {
-    // Prefer an order that has a main item for this period. Fall back
-    // to a period-matching order even if it's only drinks/sides — so
-    // that an old drink-only order still shows somewhere instead of
-    // disappearing entirely.
+    // Prefer an order that has a main item for this period. Never fall
+    // back to a drinks/sides-only order — those live in the separate
+    // Drinks & Sides section so the resident can see the bucket is still
+    // open for a real meal selection.
     const withMain = activeOrders.find(
       (o) => matchesPeriod(o, b.key) && hasMainMealFor(o, b.key),
     );
     const anyMatch = withMain
-      ?? activeOrders.find((o) => matchesPeriod(o, b.key))
+      ?? activeOrders.find((o) => matchesPeriod(o, b.key) && !isAddOnOnly(o))
       ?? null;
     return { ...b, order: anyMatch };
   });
@@ -940,6 +953,100 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                 </View>
               );
             })}
+
+            {/* ── Drinks & Sides (standalone add-on orders) ── */}
+            {addOnActiveOrders.length > 0 && (
+              <View style={{ marginTop: 4, marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <Text style={[styles.sectionHeader, { fontSize: scaled(13), marginBottom: 0 }]}>
+                    {t.drinksAndSides}
+                  </Text>
+                </View>
+                {addOnActiveOrders.map((order) => {
+                  const statusInfo = statusConfig[order.status];
+                  return (
+                    <View key={order.id} style={[styles.mealCard, { marginBottom: 12 }]}>
+                      {/* Status pill + time */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <View style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 5,
+                          backgroundColor: statusInfo?.bg ?? '#F3F4F6',
+                          borderRadius: 20, paddingVertical: 4, paddingHorizontal: 10,
+                        }}>
+                          <Feather
+                            name={(statusInfo?.featherIcon ?? 'circle') as any}
+                            size={12}
+                            color={statusInfo?.color ?? '#374151'}
+                          />
+                          <Text style={{ fontSize: scaled(12), fontWeight: '700', color: statusInfo?.color ?? '#374151' }}>
+                            {statusInfo?.label ?? order.status}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: scaled(12), color: '#9CA3AF' }}>
+                          {formatTime(order.placedAt)}
+                        </Text>
+                      </View>
+
+                      {/* Item rows */}
+                      {order.items.map((item, idx) => {
+                        const img = getMealImage(item.name);
+                        const remoteUri = (item as any).imageUrl?.trim?.() || null;
+                        const ph = getMealPlaceholder(item.name);
+                        return (
+                          <View key={`${item.id}-${idx}`} style={styles.mealRow}>
+                            {img ? (
+                              <Image source={img} style={styles.mealThumb} />
+                            ) : remoteUri ? (
+                              <Image source={{ uri: remoteUri }} style={styles.mealThumb} />
+                            ) : (
+                              <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
+                                <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
+                              </View>
+                            )}
+                            <View style={styles.mealRowInfo}>
+                              <Text style={[styles.mealName, { fontSize: scaled(16) }]}>
+                                {translateMealName(item.name, language)}
+                              </Text>
+                              <Text style={[styles.mealPeriod, { fontSize: scaled(13) }]}>
+                                {translateMealPeriod(item.meal_period, language)}
+                              </Text>
+                            </View>
+                            {item.kcal ? (
+                              <View style={styles.mealCalBadge}>
+                                <Text style={[styles.mealCal, { fontSize: scaled(13) }]}>{item.kcal} kcal</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+
+                      {/* Remove button */}
+                      <TouchableOpacity
+                        style={{ alignSelf: 'flex-end', marginTop: 8, padding: 4 }}
+                        onPress={() => handleRemoveOrder(order.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove order"
+                      >
+                        <Feather name="trash-2" size={15} color={COLORS.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+
+                {/* CTA to add more drinks/sides */}
+                <TouchableOpacity
+                  style={[styles.mealCard, { paddingVertical: 14, alignItems: 'center', backgroundColor: '#F0FDF4', borderColor: COLORS.primaryLight }]}
+                  onPress={() => navigation.navigate('BrowseMealOptions', { residentId, residentName, dietaryRestrictions, foodAllergies, initialPeriod: 'Drinks' })}
+                  activeOpacity={0.85}
+                >
+                  <Feather name="plus-circle" size={20} color={COLORS.primary} />
+                  <Text style={[{ fontSize: scaled(14), color: COLORS.primary, fontWeight: '700', marginTop: 4 }]}>
+                    {t.orderDrinksCta}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* ── Completed Orders ── */}
             {completedOrders.length > 0 && (

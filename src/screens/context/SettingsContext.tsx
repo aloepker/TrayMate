@@ -254,6 +254,8 @@ export type TranslationKeys = {
   breakfastServed: string;
   lunchServed: string;
   dinnerServed: string;
+  drinksAndSides: string;
+  orderDrinksCta: string;
 };
 
 const EN: TranslationKeys = {
@@ -463,6 +465,8 @@ const EN: TranslationKeys = {
   orderBreakfastCta: 'Order Breakfast',
   orderLunchCta: 'Order Lunch',
   orderDinnerCta: 'Order Dinner',
+  drinksAndSides: 'Drinks & Sides',
+  orderDrinksCta: 'Order drinks & sides',
   breakfastServed: 'Served 7 – 10 AM',
   lunchServed: 'Served 11 AM – 2 PM',
   dinnerServed: 'Served 4 – 7 PM',
@@ -675,6 +679,8 @@ const ES: TranslationKeys = {
   orderBreakfastCta: 'Pedir desayuno',
   orderLunchCta: 'Pedir almuerzo',
   orderDinnerCta: 'Pedir cena',
+  drinksAndSides: 'Bebidas y Complementos',
+  orderDrinksCta: 'Pedir bebidas y complementos',
   breakfastServed: 'Servido 7 a. m. - 10 a. m.',
   lunchServed: 'Servido 11 a. m. - 2 p. m.',
   dinnerServed: 'Servido 4 p. m. - 7 p. m.',
@@ -887,6 +893,8 @@ const FR: TranslationKeys = {
   orderBreakfastCta: 'Commander le petit-déjeuner',
   orderLunchCta: 'Commander le déjeuner',
   orderDinnerCta: 'Commander le dîner',
+  drinksAndSides: 'Boissons & Accompagnements',
+  orderDrinksCta: 'Commander boissons & accompagnements',
   breakfastServed: 'Servi 7 h - 10 h',
   lunchServed: 'Servi 11 h - 14 h',
   dinnerServed: 'Servi 16 h - 19 h',
@@ -1099,6 +1107,8 @@ const ZH: TranslationKeys = {
   orderBreakfastCta: '点早餐',
   orderLunchCta: '点午餐',
   orderDinnerCta: '点晚餐',
+  drinksAndSides: '饮料与小食',
+  orderDrinksCta: '点饮料和小食',
   breakfastServed: '上午7点 - 上午10点 供应',
   lunchServed: '上午11点 - 下午2点 供应',
   dinnerServed: '下午4点 - 晚上7点 供应',
