@@ -2875,19 +2875,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                       );
                     } catch {}
                   }
-                  Alert.alert('Order Placed', `Your ${autoSuggest.period} order has been placed: ${itemNames}`);
+                  Alert.alert(t.orderPlaced, `${autoSuggest.period}: ${itemNames}`);
                 }
               }}
             >
               <Feather name="check-circle" size={20} color="#FFF" />
-              <Text style={[styles.bottomCardPlaceAllText, { fontSize: scaled(18) }]}>Place Order</Text>
+              <Text style={[styles.bottomCardPlaceAllText, { fontSize: scaled(18) }]}>{t.placeOrder}</Text>
             </TouchableOpacity>
             {/* Dismiss all */}
             <TouchableOpacity
               style={styles.bottomCardSuggestDismiss}
               onPress={() => { setAutoSuggestDismissed(true); setAutoSuggest(null); }}
             >
-              <Text style={[styles.bottomCardSuggestDismissText, { fontSize: scaled(14) }]}>Dismiss all</Text>
+              <Text style={[styles.bottomCardSuggestDismissText, { fontSize: scaled(14) }]}>{t.dismissAll}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -2904,7 +2904,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         <View style={styles.errorBanner}>
           <Text style={[styles.errorText, { fontSize: scaled(14) }]}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-            <Text style={[styles.retryText, { fontSize: scaled(14) }]}>Retry</Text>
+            <Text style={[styles.retryText, { fontSize: scaled(14) }]}>{t.retry}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -2927,7 +2927,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
           ListEmptyComponent={
-            <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>No meals found for this period.</Text>
+            <Text style={[styles.emptyText, { fontSize: scaled(15) }]}>{t.noMealsForPeriod}</Text>
           }
           refreshing={refreshing}
           onRefresh={onRefresh}
@@ -2956,7 +2956,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
             <View style={styles.detailSheet}>
               <View style={styles.detailSheetHandle} />
               <View style={styles.detailSheetHeader}>
-                <Text style={[styles.detailSheetLabel, { fontSize: scaled(15) }]}>Customize order</Text>
+                <Text style={[styles.detailSheetLabel, { fontSize: scaled(15) }]}>{t.customizeOrder}</Text>
                 <TouchableOpacity
                   style={styles.detailCloseButton}
                   onPress={() => setShowMealDetail(false)}
@@ -3030,10 +3030,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     <View
                       onLayout={(e) => setNoteInputY(e.nativeEvent.layout.y)}
                     >
-                      <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>Special note for kitchen</Text>
+                      <Text style={[styles.detailSectionLabel, { fontSize: scaled(15) }]}>{t.specialNoteForKitchen}</Text>
                       <TextInput
                         style={styles.detailNoteInput}
-                        placeholder="e.g. No onions, extra sauce…"
+                        placeholder={t.specialNotePlaceholder}
                         placeholderTextColor="#9CA3AF"
                         value={specialNote}
                         onChangeText={setSpecialNote}
@@ -3060,7 +3060,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                           {availableDrinks.length > 0 && (
                             <View style={styles.addonCol}>
                               <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
-                                Add a drink?
+                                {t.addADrink}
                               </Text>
                               <View style={styles.drinkPickerWrap}>
                                 <Picker
@@ -3090,7 +3090,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   style={styles.drinkPicker}
                                   itemStyle={styles.drinkPickerItem}
                                 >
-                                  <Picker.Item label="— No drink —" value="__none__" />
+                                  <Picker.Item label={t.noDrinkOption} value="__none__" />
                                   {availableDrinks.map(drink => {
                                     const reason = getMealUnsafeReason(drink);
                                     const prefix = reason ? '🚫 ' : '';
@@ -3129,7 +3129,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                           {availableSides.length > 0 && (
                             <View style={styles.addonCol}>
                               <Text style={[styles.detailSectionLabel, { fontSize: scaled(14) }]}>
-                                Add a side?
+                                {t.addASide}
                               </Text>
                               <View style={styles.drinkPickerWrap}>
                                 <Picker
@@ -3155,7 +3155,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                   style={styles.drinkPicker}
                                   itemStyle={styles.drinkPickerItem}
                                 >
-                                  <Picker.Item label="— No side —" value="__none__" />
+                                  <Picker.Item label={t.noSideOption} value="__none__" />
                                   {availableSides.map(side => {
                                     const reason = getMealUnsafeReason(side);
                                     const prefix = reason ? '🚫 ' : '';
@@ -3222,8 +3222,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     <TouchableOpacity style={styles.detailAddBtn} onPress={handleAddToCartFromModal} activeOpacity={0.85}>
                       <Text style={[styles.detailAddBtnText, { fontSize: scaled(17) }]}>
                         {selectedDrink || selectedSide
-                          ? `Add to Cart + ${[selectedDrink, selectedSide].filter(Boolean).map((m) => translateMealName((m as Meal).name, language)).join(' + ')}`
-                          : 'Add to Cart'}
+                          ? `${t.addToCart} + ${[selectedDrink, selectedSide].filter(Boolean).map((m) => translateMealName((m as Meal).name, language)).join(' + ')}`
+                          : t.addToCart}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -3529,7 +3529,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 </ScrollView>
 
             <TouchableOpacity style={styles.supportCloseBtn} onPress={() => setShowBrowseSupport(false)}>
-              <Text style={[styles.supportCloseBtnText, { fontSize: scaled(15) }]}>Close</Text>
+              <Text style={[styles.supportCloseBtnText, { fontSize: scaled(15) }]}>{t.close}</Text>
             </TouchableOpacity>
             </ScrollView>
           </View>

@@ -256,6 +256,18 @@ export type TranslationKeys = {
   dinnerServed: string;
   drinksAndSides: string;
   orderDrinksCta: string;
+  customizeOrder: string;
+  specialNoteForKitchen: string;
+  specialNotePlaceholder: string;
+  addADrink: string;
+  addASide: string;
+  noDrinkOption: string;
+  noSideOption: string;
+  addToCart: string;
+  close: string;
+  dismissAll: string;
+  noMealsForPeriod: string;
+  orderPlaced: string;
 };
 
 const EN: TranslationKeys = {
@@ -467,6 +479,18 @@ const EN: TranslationKeys = {
   orderDinnerCta: 'Order Dinner',
   drinksAndSides: 'Drinks & Sides',
   orderDrinksCta: 'Order drinks & sides',
+  customizeOrder: 'Customize order',
+  specialNoteForKitchen: 'Special note for kitchen',
+  specialNotePlaceholder: 'e.g. No onions, extra sauce…',
+  addADrink: 'Add a drink?',
+  addASide: 'Add a side?',
+  noDrinkOption: '— No drink —',
+  noSideOption: '— No side —',
+  addToCart: 'Add to Cart',
+  close: 'Close',
+  dismissAll: 'Dismiss all',
+  noMealsForPeriod: 'No meals found for this period.',
+  orderPlaced: 'Order Placed',
   breakfastServed: 'Served 7 – 10 AM',
   lunchServed: 'Served 11 AM – 2 PM',
   dinnerServed: 'Served 4 – 7 PM',
@@ -681,6 +705,18 @@ const ES: TranslationKeys = {
   orderDinnerCta: 'Pedir cena',
   drinksAndSides: 'Bebidas y Complementos',
   orderDrinksCta: 'Pedir bebidas y complementos',
+  customizeOrder: 'Personalizar pedido',
+  specialNoteForKitchen: 'Nota especial para la cocina',
+  specialNotePlaceholder: 'p. ej. Sin cebolla, salsa extra…',
+  addADrink: '¿Añadir una bebida?',
+  addASide: '¿Añadir un acompañamiento?',
+  noDrinkOption: '— Sin bebida —',
+  noSideOption: '— Sin acompañamiento —',
+  addToCart: 'Añadir al carrito',
+  close: 'Cerrar',
+  dismissAll: 'Descartar todo',
+  noMealsForPeriod: 'No se encontraron comidas para este período.',
+  orderPlaced: 'Pedido realizado',
   breakfastServed: 'Servido 7 a. m. - 10 a. m.',
   lunchServed: 'Servido 11 a. m. - 2 p. m.',
   dinnerServed: 'Servido 4 p. m. - 7 p. m.',
@@ -895,6 +931,18 @@ const FR: TranslationKeys = {
   orderDinnerCta: 'Commander le dîner',
   drinksAndSides: 'Boissons & Accompagnements',
   orderDrinksCta: 'Commander boissons & accompagnements',
+  customizeOrder: 'Personnaliser la commande',
+  specialNoteForKitchen: 'Note spéciale pour la cuisine',
+  specialNotePlaceholder: 'p. ex. Sans oignons, sauce en plus…',
+  addADrink: 'Ajouter une boisson ?',
+  addASide: 'Ajouter un accompagnement ?',
+  noDrinkOption: '— Pas de boisson —',
+  noSideOption: '— Pas d’accompagnement —',
+  addToCart: 'Ajouter au panier',
+  close: 'Fermer',
+  dismissAll: 'Tout rejeter',
+  noMealsForPeriod: 'Aucun repas trouvé pour cette période.',
+  orderPlaced: 'Commande passée',
   breakfastServed: 'Servi 7 h - 10 h',
   lunchServed: 'Servi 11 h - 14 h',
   dinnerServed: 'Servi 16 h - 19 h',
@@ -1109,6 +1157,18 @@ const ZH: TranslationKeys = {
   orderDinnerCta: '点晚餐',
   drinksAndSides: '饮料与小食',
   orderDrinksCta: '点饮料和小食',
+  customizeOrder: '自定义订单',
+  specialNoteForKitchen: '给厨房的特别说明',
+  specialNotePlaceholder: '例如：不要洋葱，多加酱料……',
+  addADrink: '加一杯饮料？',
+  addASide: '加一份小食？',
+  noDrinkOption: '— 不加饮料 —',
+  noSideOption: '— 不加小食 —',
+  addToCart: '加入购物车',
+  close: '关闭',
+  dismissAll: '全部忽略',
+  noMealsForPeriod: '此时段没有可用的餐点。',
+  orderPlaced: '订单已提交',
   breakfastServed: '上午7点 - 上午10点 供应',
   lunchServed: '上午11点 - 下午2点 供应',
   dinnerServed: '下午4点 - 晚上7点 供应',
