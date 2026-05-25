@@ -808,6 +808,60 @@ const TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
   'Texture Modified': { Español: 'Textura Modificada', Français: 'Texture Modifiée', 中文: '改良质地' },
 };
 
+// Allergens, medical conditions, and dietary restrictions shown as chips
+// on the home / cart / upcoming meals screens. Backend stores these as
+// canonical English keys (see COMMON_ALLERGENS / COMMON_MEDICAL_CONDITIONS
+// in mealSafetyService.ts) — we translate display-side only.
+const DIETARY_TAG_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
+  // ── Allergens ──
+  Dairy:        { Español: 'Lácteos',        Français: 'Produits laitiers', 中文: '乳制品' },
+  Eggs:         { Español: 'Huevos',         Français: 'Œufs',              中文: '鸡蛋' },
+  Gluten:       { Español: 'Gluten',         Français: 'Gluten',            中文: '麸质' },
+  Wheat:        { Español: 'Trigo',          Français: 'Blé',               中文: '小麦' },
+  Peanuts:      { Español: 'Cacahuates',     Français: 'Arachides',         中文: '花生' },
+  'Tree Nuts':  { Español: 'Frutos secos',   Français: 'Fruits à coque',    中文: '坚果' },
+  Nuts:         { Español: 'Nueces',         Français: 'Noix',              中文: '坚果' },
+  Shellfish:    { Español: 'Mariscos',       Français: 'Crustacés',         中文: '贝类' },
+  Fish:         { Español: 'Pescado',        Français: 'Poisson',           中文: '鱼' },
+  Soy:          { Español: 'Soja',           Français: 'Soja',              中文: '大豆' },
+  Sesame:       { Español: 'Sésamo',         Français: 'Sésame',            中文: '芝麻' },
+
+  // ── Medical conditions ──
+  Hypertension:          { Español: 'Hipertensión',           Français: 'Hypertension',           中文: '高血压' },
+  'High Blood Pressure': { Español: 'Presión arterial alta',  Français: 'Tension artérielle élevée', 中文: '高血压' },
+  Diabetes:              { Español: 'Diabetes',               Français: 'Diabète',                中文: '糖尿病' },
+  'Heart Disease':       { Español: 'Enfermedad cardíaca',    Français: 'Maladie cardiaque',      中文: '心脏病' },
+  'Kidney Disease':      { Español: 'Enfermedad renal',       Français: 'Maladie rénale',         中文: '肾脏疾病' },
+  'High Cholesterol':    { Español: 'Colesterol alto',        Français: 'Cholestérol élevé',      中文: '高胆固醇' },
+  'Celiac Disease':      { Español: 'Enfermedad celíaca',     Français: 'Maladie cœliaque',       中文: '乳糜泻' },
+  'Lactose Intolerance': { Español: 'Intolerancia a la lactosa', Français: 'Intolérance au lactose', 中文: '乳糖不耐受' },
+  GERD:                  { Español: 'ERGE',                   Français: 'RGO',                    中文: '胃食管反流' },
+  Dysphagia:             { Español: 'Disfagia',               Français: 'Dysphagie',              中文: '吞咽困难' },
+  'Soft Bite':           { Español: 'Bocado suave',           Français: 'Bouchée tendre',         中文: '软食' },
+  Dementia:              { Español: 'Demencia',               Français: 'Démence',                中文: '痴呆' },
+  Osteoporosis:          { Español: 'Osteoporosis',           Français: 'Ostéoporose',            中文: '骨质疏松' },
+  Arthritis:             { Español: 'Artritis',               Français: 'Arthrite',               中文: '关节炎' },
+
+  // ── Dietary preferences / restrictions ──
+  Vegetarian:    { Español: 'Vegetariano',    Français: 'Végétarien',     中文: '素食' },
+  Vegan:         { Español: 'Vegano',         Français: 'Végétalien',     中文: '纯素' },
+  Halal:         { Español: 'Halal',          Français: 'Halal',          中文: '清真' },
+  Kosher:        { Español: 'Kosher',         Français: 'Casher',         中文: '犹太洁食' },
+  Pescatarian:   { Español: 'Pescetariano',   Français: 'Pescétarien',    中文: '鱼素食' },
+  'Low Sodium':  { Español: 'Bajo en sodio',  Français: 'Faible en sodium', 中文: '低钠' },
+  'Low Sugar':   { Español: 'Bajo en azúcar', Français: 'Faible en sucre', 中文: '低糖' },
+  'Low Fat':     { Español: 'Bajo en grasa',  Français: 'Faible en gras', 中文: '低脂' },
+  'Gluten Free': { Español: 'Sin gluten',     Français: 'Sans gluten',    中文: '无麸质' },
+  'Gluten-Free': { Español: 'Sin gluten',     Français: 'Sans gluten',    中文: '无麸质' },
+  'Dairy Free':  { Español: 'Sin lácteos',    Français: 'Sans produits laitiers', 中文: '无乳制品' },
+  'Dairy-Free':  { Español: 'Sin lácteos',    Français: 'Sans produits laitiers', 中文: '无乳制品' },
+  'Nut Free':    { Español: 'Sin nueces',     Français: 'Sans fruits à coque', 中文: '无坚果' },
+  'Nut-Free':    { Español: 'Sin nueces',     Français: 'Sans fruits à coque', 中文: '无坚果' },
+  'Soft Diet':   { Español: 'Dieta blanda',   Français: 'Régime mou',     中文: '软食饮食' },
+  Pureed:        { Español: 'En puré',        Français: 'En purée',       中文: '糊状食物' },
+  'Mechanical Soft': { Español: 'Blando mecánico', Français: 'Mou mécanique', 中文: '机械软食' },
+};
+
 const PERIOD_TRANSLATIONS: Record<string, Partial<Record<AppLanguage, string>>> = {
   Breakfast: { Español: 'Desayuno',    Français: 'Petit-déjeuner',  中文: '早餐' },
   Lunch:     { Español: 'Almuerzo',    Français: 'Déjeuner',        中文: '午餐' },
@@ -1064,6 +1118,29 @@ export const translateMealTag = (tag: string, language: AppLanguage): string => 
 
 export const translateMealPeriod = (period: string, language: AppLanguage): string => {
   return PERIOD_TRANSLATIONS[period]?.[language] ?? period;
+};
+
+/**
+ * Translate a single dietary chip value (allergen, medical condition, or
+ * dietary restriction) for display. Backend stores these as canonical
+ * English keys; this only changes how they render. Falls back to the
+ * raw tag if there's no translation — better than dropping unknown
+ * conditions from the chip row.
+ */
+export const translateDietaryTag = (tag: string, language: AppLanguage): string => {
+  if (!tag) return tag;
+  if (language === 'English') return tag;
+  const direct = findKeyCaseInsensitive(DIETARY_TAG_TRANSLATIONS, tag);
+  if (direct && DIETARY_TAG_TRANSLATIONS[direct][language]) {
+    return DIETARY_TAG_TRANSLATIONS[direct][language] as string;
+  }
+  // Fall back to the meal-tag map (covers Vegetarian, Gluten-Free etc.
+  // that already had entries there).
+  const tagKey = findKeyCaseInsensitive(TAG_TRANSLATIONS, tag);
+  if (tagKey && TAG_TRANSLATIONS[tagKey][language]) {
+    return TAG_TRANSLATIONS[tagKey][language] as string;
+  }
+  return tag;
 };
 
 export const translateMealTimeRange = (timeRange: string, language: AppLanguage): string => {

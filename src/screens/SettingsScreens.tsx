@@ -14,6 +14,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useSettings, Language, TextSize } from './context/SettingsContext';
 
 import { ResidentService } from '../services/localDataService';
+import { translateDietaryTag } from '../services/mealLocalization';
 import { setResidentCaregiver, getResidentCaregiver, setResidentCaregivers, getResidentCaregivers, isTabletModeOn } from '../services/storage';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -294,7 +295,7 @@ function SettingsScreen({ navigation, route }: any) {
               {dietaryPills.length > 0 ? (
                 dietaryPills.map((pill, i) => (
                   <View key={i} style={[styles.activePill, hc && { backgroundColor: theme.accent }]}>
-                    <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>{pill}</Text>
+                    <Text style={[styles.activePillText, { fontSize: scaled(13) }, hc && { color: '#000000' }]}>{translateDietaryTag(pill, selectedLanguage)}</Text>
                   </View>
                 ))
               ) : (

@@ -13,7 +13,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
 import { useKitchenMessages } from './context/KitchenMessageContext';
-import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
+import { translateMealName, translateMealPeriod, translateDietaryTag } from '../services/mealLocalization';
 import { ResidentService } from '../services/localDataService';
 import { useMealtimeReminder } from '../hooks/useMealtimeReminder';
 import MealtimeReminderBanner from './components/MealtimeReminderBanner';
@@ -191,7 +191,7 @@ const HomeScreen = ({ navigation, route }: any) => {
               <View style={styles.dietaryRow}>
                 {dietaryRestrictions.map((tag, i) => (
                   <View key={`diet-${i}`} style={styles.dietaryChip}>
-                    <Text style={styles.dietaryChipText}>⚠ {tag}</Text>
+                    <Text style={styles.dietaryChipText}>⚠ {translateDietaryTag(tag, language)}</Text>
                   </View>
                 ))}
               </View>
