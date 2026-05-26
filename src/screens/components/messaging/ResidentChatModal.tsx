@@ -107,7 +107,31 @@ export default function ResidentChatModal({
   useEffect(() => {
     if (!visible || !selectedCaregiver) return;
     initChat(selectedCaregiver.caregiverId);
+    // Poll for new caregiver replies while the modal is open. Without
+    // this, the resident only sees messages that existed at the moment
+    // they tapped Message Caregiver — anything sent after stays hidden
+    // until they close and reopen.
+    const interval = setInterval(() => {
+      refreshConversation(selectedCaregiver.caregiverId);
+    }, 15_000);
+    return () => clearInterval(interval);
   }, [visible, selectedCaregiver]);
+
+  // Silent refresh — no loading spinner so it doesn't flicker the chat
+  // every 15s. Failures are swallowed; user already has the old messages.
+  const refreshConversation = async (cgId: string) => {
+    try {
+      const fresh = await getConversation(cgId);
+      if (Array.isArray(fresh)) {
+        setMessages(prev => {
+          if (prev.length === fresh.length) return prev; // no change
+          // Only scroll if we actually got new messages
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+          return fresh;
+        });
+      }
+    } catch { /* silent — keep stale */ }
+  };
 
   const initChat = async (cgId: string) => {
     setLoadingInit(true);

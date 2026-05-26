@@ -116,15 +116,35 @@ async function apiFetchMessages(): Promise<KitchenMessage[]> {
 export const KitchenMessageProvider = ({ children }: { children: ReactNode }) => {
   const [messages, setMessages] = useState<KitchenMessage[]>([]);
 
-  // Load persisted messages from backend on mount
+  // Load persisted messages from backend. Merges with any locally-optimistic
+  // messages so a just-sent message doesn't briefly disappear between the
+  // optimistic insert and the backend echo.
   const refreshMessages = useCallback(async () => {
     const remote = await apiFetchMessages();
-    if (remote.length > 0) {
-      setMessages(remote);
-    }
+    setMessages(prev => {
+      if (remote.length === 0) return prev;
+      // Keep any local-only messages (id starts with "msg_") that the backend
+      // hasn't echoed yet — drop them once a server message with the same
+      // text+timestamp shows up to avoid duplicates.
+      const remoteSig = new Set(
+        remote.map(m => `${m.fromName}|${m.text}|${m.timestamp.getTime()}`),
+      );
+      const pending = prev.filter(
+        m => m.id.startsWith('msg_') &&
+          !remoteSig.has(`${m.fromName}|${m.text}|${m.timestamp.getTime()}`),
+      );
+      return [...pending, ...remote];
+    });
   }, []);
 
-  useEffect(() => { refreshMessages(); }, [refreshMessages]);
+  // Load on mount + poll every 30s so kitchen → resident messages actually
+  // arrive without the resident having to close and reopen the app. Same
+  // poll covers caregiver → resident and staff-channel updates.
+  useEffect(() => {
+    refreshMessages();
+    const interval = setInterval(refreshMessages, 30_000);
+    return () => clearInterval(interval);
+  }, [refreshMessages]);
 
   const sendMessage = useCallback(
     (msg: Omit<KitchenMessage, 'id' | 'timestamp' | 'read'>) => {

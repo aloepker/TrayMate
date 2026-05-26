@@ -436,34 +436,39 @@ const AIAssistantChat = ({
 
   // Load meals for chat when modal opens
   useEffect(() => {
-    if (visible) {
-      MealService.getAllMeals().then(setChatMeals).catch(() => setChatMeals([]));
-    }
+    if (!visible) return;
+    let cancelled = false;
+    MealService.getAllMeals()
+      .then(meals => { if (!cancelled) setChatMeals(meals); })
+      .catch(() => { if (!cancelled) setChatMeals([]); });
+    return () => { cancelled = true; };
   }, [visible]);
 
   // Initialize Gemini chat session when modal opens
   useEffect(() => {
-    if (visible && geminiChat.isConfigured()) {
-      const resident = ResidentService.getResidentById(residentId);
-      // Pull the resident's usual-order list from the server so Granny BT
-      // can personalise recommendations. Fail silent — the rest of the
-      // prompt still works without it.
-      (async () => {
-        let favoriteMealIds: number[] = [];
-        try {
-          favoriteMealIds = await getDefaultMealsApi(residentId);
-        } catch { /* no-op */ }
-        const override = !resident
-          ? { name: residentName, dietaryRestrictions, foodAllergies, medicalConditions, favoriteMealIds }
-          : undefined;
-        // Optimistic: assume AI is available. Init only builds the
-        // system prompt locally — real Gemini calls happen on send,
-        // where the model fallback chain handles outages.
-        setAiAvailable(true);
-        geminiChat.initialize(residentId, language, override, favoriteMealIds)
-          .catch((err) => console.warn('[Granny BT] init issue, continuing optimistically:', err?.message ?? err));
-      })();
-    }
+    if (!(visible && geminiChat.isConfigured())) return;
+    let cancelled = false;
+    const resident = ResidentService.getResidentById(residentId);
+    // Pull the resident's usual-order list from the server so Granny BT
+    // can personalise recommendations. Fail silent — the rest of the
+    // prompt still works without it.
+    (async () => {
+      let favoriteMealIds: number[] = [];
+      try {
+        favoriteMealIds = await getDefaultMealsApi(residentId);
+      } catch { /* no-op */ }
+      if (cancelled) return;
+      const override = !resident
+        ? { name: residentName, dietaryRestrictions, foodAllergies, medicalConditions, favoriteMealIds }
+        : undefined;
+      // Optimistic: assume AI is available. Init only builds the
+      // system prompt locally — real Gemini calls happen on send,
+      // where the model fallback chain handles outages.
+      setAiAvailable(true);
+      geminiChat.initialize(residentId, language, override, favoriteMealIds)
+        .catch((err) => console.warn('[Granny BT] init issue, continuing optimistically:', err?.message ?? err));
+    })();
+    return () => { cancelled = true; };
   }, [visible, residentId, language, residentName, dietaryRestrictions, foodAllergies, medicalConditions]);
 
   // Minimal fallback when ALL Gemini models are down
@@ -1848,12 +1853,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     }
   }, [residentId, selectedPeriod.value, route?.params]);
 
-  // Pre-load drinks, sides, and backend order history once on mount
+  // Pre-load drinks, sides, and backend order history once on mount.
+  // Each .then sets state, which causes a React warning + memory hold
+  // if the screen unmounts before the promise resolves. With this
+  // screen being re-entered repeatedly during ordering flows, the
+  // orphaned setStates were the most likely contributor to the
+  // "slows down with more navigation" memory leak.
   useEffect(() => {
+    let cancelled = false;
     loadAutoOrderCandidates();
-    MealService.getMealsByPeriod("Drinks").then(d => setAvailableDrinks(d.map(mapServiceMeal)));
-    MealService.getMealsByPeriod("Sides").then(s => setAvailableSides(s.map(mapServiceMeal)));
+    MealService.getMealsByPeriod("Drinks")
+      .then(d => { if (!cancelled) setAvailableDrinks(d.map(mapServiceMeal)); })
+      .catch(() => {});
+    MealService.getMealsByPeriod("Sides")
+      .then(s => { if (!cancelled) setAvailableSides(s.map(mapServiceMeal)); })
+      .catch(() => {});
     if (residentId) fetchOrderHistory(residentId);
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

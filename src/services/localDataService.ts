@@ -239,18 +239,60 @@ async function fetchAllMealsFromApi(): Promise<Meal[]> {
   }
 }
 
+// ── /menu in-memory cache ────────────────────────────────────────────
+// The single biggest cause of the "menu view gets slower the more I
+// navigate" memory/perf issue: browseMealOptions kicks off SIX parallel
+// /menu fetches on every mount (3 for the auto-order candidates, plus
+// Drinks/Sides/loadMenu/loadRecommendation), upcomingMealsScreen does
+// three more for periodAlternatives, and none of them shared a result.
+// Every nav back into the menu re-fetched the entire catalog from the
+// server, in parallel, while the prior batch was still resolving.
+//
+// 20s TTL is short enough that admin edits propagate quickly, but long
+// enough to coalesce the burst that happens on a single screen mount
+// into one network round-trip. In-flight de-duping ensures concurrent
+// callers share the same promise instead of stacking parallel requests.
+const MENU_CACHE_TTL_MS = 20_000;
+let menuCache: { data: Meal[]; expiresAt: number } | null = null;
+let menuCacheInflight: Promise<Meal[]> | null = null;
+
+/** Invalidate the menu cache — call after an admin edit so the next
+ *  read goes back to the server. Safe to call repeatedly. */
+export function invalidateMenuCache(): void {
+  menuCache = null;
+  menuCacheInflight = null;
+}
+
 async function fetchAvailableMealsFromApi(): Promise<Meal[]> {
+  const now = Date.now();
+  if (menuCache && menuCache.expiresAt > now) {
+    return menuCache.data;
+  }
+  if (menuCacheInflight) {
+    // Another caller already kicked off a fetch — share its result.
+    return menuCacheInflight;
+  }
   // We intentionally fetch ALL meals (not just /menu/available) so that
   // unavailable items can still be shown (greyed out) in the UI. The
   // `isAvailable` flag is preserved on each meal for the screen to use.
-  try {
-    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu`);
-    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
-    return mergeBundledIntoBackend(list, FALLBACK_MEALS);
-  } catch (error) {
-    console.warn("Backend /menu unreachable, using fallback meals:", error);
-    return FALLBACK_MEALS;
-  }
+  menuCacheInflight = (async () => {
+    try {
+      const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu`);
+      const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+      const merged = mergeBundledIntoBackend(list, FALLBACK_MEALS);
+      menuCache = { data: merged, expiresAt: Date.now() + MENU_CACHE_TTL_MS };
+      return merged;
+    } catch (error) {
+      console.warn("Backend /menu unreachable, using fallback meals:", error);
+      // Cache the fallback briefly too so we don't hammer the network
+      // when offline. Shorter TTL so we recover quickly when back online.
+      menuCache = { data: FALLBACK_MEALS, expiresAt: Date.now() + 5_000 };
+      return FALLBACK_MEALS;
+    } finally {
+      menuCacheInflight = null;
+    }
+  })();
+  return menuCacheInflight;
 }
 
 async function fetchMealsByPeriodFromApi(period: Meal["mealPeriod"]): Promise<Meal[]> {
@@ -273,30 +315,59 @@ async function fetchMealsByPeriodFromApi(period: Meal["mealPeriod"]): Promise<Me
   }
 }
 
+// Same TTL + inflight-dedupe pattern as the main menu cache — drinks
+// and sides are pulled separately on every browseMealOptions mount
+// AND from the customize-order modal, so they were a second source
+// of redundant /menu/period/* calls.
+let drinksCache: { data: Meal[]; expiresAt: number } | null = null;
+let drinksInflight: Promise<Meal[]> | null = null;
+let sidesCache: { data: Meal[]; expiresAt: number } | null = null;
+let sidesInflight: Promise<Meal[]> | null = null;
+
 async function fetchDrinksFromApi(): Promise<Meal[]> {
+  const now = Date.now();
+  if (drinksCache && drinksCache.expiresAt > now) return drinksCache.data;
+  if (drinksInflight) return drinksInflight;
   const bundledDrinks = FALLBACK_MEALS.filter((m) => m.mealPeriod === "Drinks");
-  // Keep unavailable drinks in the list so the UI can show them greyed-out.
-  try {
-    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/drinks`);
-    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
-    return mergeBundledIntoBackend(list, bundledDrinks);
-  } catch (error) {
-    console.warn("Backend /menu/period/drinks unreachable, using fallback drinks:", error);
-    return bundledDrinks;
-  }
+  drinksInflight = (async () => {
+    try {
+      const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/drinks`);
+      const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+      const merged = mergeBundledIntoBackend(list, bundledDrinks);
+      drinksCache = { data: merged, expiresAt: Date.now() + MENU_CACHE_TTL_MS };
+      return merged;
+    } catch (error) {
+      console.warn("Backend /menu/period/drinks unreachable, using fallback drinks:", error);
+      drinksCache = { data: bundledDrinks, expiresAt: Date.now() + 5_000 };
+      return bundledDrinks;
+    } finally {
+      drinksInflight = null;
+    }
+  })();
+  return drinksInflight;
 }
 
 async function fetchSidesFromApi(): Promise<Meal[]> {
+  const now = Date.now();
+  if (sidesCache && sidesCache.expiresAt > now) return sidesCache.data;
+  if (sidesInflight) return sidesInflight;
   const bundledSides = FALLBACK_MEALS.filter((m) => m.mealPeriod === "Sides");
-  // Keep unavailable sides in the list so the UI can show them greyed-out.
-  try {
-    const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/sides`);
-    const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
-    return mergeBundledIntoBackend(list, bundledSides);
-  } catch (error) {
-    console.warn("Backend /menu/period/sides unreachable, using fallback sides:", error);
-    return bundledSides;
-  }
+  sidesInflight = (async () => {
+    try {
+      const data = await fetchJsonWithTimeout(`${API_BASE_URL}/menu/period/sides`);
+      const list = Array.isArray(data) ? data.map(apiMealToMeal) : [];
+      const merged = mergeBundledIntoBackend(list, bundledSides);
+      sidesCache = { data: merged, expiresAt: Date.now() + MENU_CACHE_TTL_MS };
+      return merged;
+    } catch (error) {
+      console.warn("Backend /menu/period/sides unreachable, using fallback sides:", error);
+      sidesCache = { data: bundledSides, expiresAt: Date.now() + 5_000 };
+      return bundledSides;
+    } finally {
+      sidesInflight = null;
+    }
+  })();
+  return sidesInflight;
 }
 // Fallback meals for when the API is unreachable
 export const FALLBACK_MEALS: Meal[] = [
