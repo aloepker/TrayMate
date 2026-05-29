@@ -1,4 +1,5 @@
 <h1 align="center">TrayMate</h1>
+
 ---
 
 # Prepared By
@@ -247,4 +248,4 @@ Special thanks to:
 
 * Professor Andy Cameron
 * Seattle Pacific University Board of Advisors
-* All project contributors and testers
+* All team members
