@@ -30,6 +30,87 @@ import { getAuthToken } from './storage';
 const AI_PROXY_BASE = 'https://traymate-auth.onrender.com';
 const AI_PROXY_URL  = `${AI_PROXY_BASE}/ai/gemini`;
 
+// New server-side chat endpoint. Unlike /ai/gemini (which expects the
+// client to build the entire Gemini request), this one does ALL the
+// work server-side: it looks up the resident by id, builds the
+// safety-aware prompt, calls Gemini, and returns the answer. The client
+// just sends { message, residentId }. This is the preferred path; the
+// /ai/gemini proxy below stays as a fallback so the AI keeps working if
+// this endpoint is down or returns something we can't parse.
+const AI_CHAT_URL = `${AI_PROXY_BASE}/ai`;
+
+/**
+ * Call the server-side /ai endpoint. Sends { message, residentId } and
+ * returns the assistant's reply text.
+ *
+ * The response shape is tolerant on purpose — the backend may wrap the
+ * answer as { reply }, { message }, { response }, { text }, { answer },
+ * { content }, or return a bare string. We probe each in turn so the
+ * frontend doesn't break if the backend's exact contract differs from
+ * what we assumed.
+ *
+ * Throws (with .status set when known) so the caller can fall back to
+ * the Gemini proxy path on any failure.
+ */
+async function callTraymateAI(message: string, residentId: number | string): Promise<string> {
+  const tok = await getAuthToken();
+  const ridNum = typeof residentId === 'number' ? residentId : parseInt(String(residentId).trim(), 10);
+  let resp: Response;
+  try {
+    resp = await fetch(AI_CHAT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+      },
+      body: JSON.stringify({
+        message,
+        residentId: Number.isFinite(ridNum) ? ridNum : residentId,
+      }),
+    });
+  } catch (e: any) {
+    throw new Error(`Network error contacting /ai: ${e?.message ?? e}`);
+  }
+
+  const raw = await resp.text().catch(() => '');
+  if (!resp.ok) {
+    const err = new Error(`[/ai ${resp.status}] ${raw?.slice(0, 200) || `HTTP ${resp.status}`}`);
+    (err as any).status = resp.status;
+    throw err;
+  }
+
+  // Try JSON first; fall back to treating the body as plain text.
+  let data: any = null;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try { data = JSON.parse(trimmed); } catch { data = null; }
+  }
+
+  if (data == null) {
+    // Plain-text response
+    if (trimmed.length > 0) return trimmed;
+    throw new Error('/ai returned an empty response');
+  }
+
+  // Probe common reply field names in priority order.
+  const candidate =
+    data.reply ?? data.message ?? data.response ?? data.text ??
+    data.answer ?? data.content ?? data.result ?? data.output;
+
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return candidate.trim();
+  }
+  // Some APIs nest under data.data or data.choices[0].message.content
+  const nested =
+    data?.data?.reply ?? data?.data?.message ?? data?.data?.text ??
+    data?.choices?.[0]?.message?.content ?? data?.choices?.[0]?.text;
+  if (typeof nested === 'string' && nested.trim().length > 0) {
+    return nested.trim();
+  }
+
+  throw new Error('/ai response had no recognizable reply field');
+}
+
 /**
  * Single helper used by every Gemini caller in this file. POSTs
  * `{ model, body }` to the backend, which forwards to Gemini using
@@ -509,6 +590,30 @@ export class GeminiChatService {
     if (this.initPromise) {
       await this.initPromise;
     }
+
+    // ── Preferred path: server-side /ai endpoint ──────────────────────
+    // Sends just { message, residentId } and lets the backend build the
+    // prompt + call Gemini. Only attempted when we have a numeric
+    // resident id (the override-only flows for API residents without a
+    // backend id skip straight to the proxy path below). Any failure —
+    // network, 4xx/5xx, unparseable body — falls through to the existing
+    // client-side Gemini proxy so the chat never goes dark.
+    const ridRaw = this.lastInitArgs?.residentId;
+    const ridNum = ridRaw != null ? parseInt(String(ridRaw).trim(), 10) : NaN;
+    if (Number.isFinite(ridNum)) {
+      try {
+        const reply = await callTraymateAI(userMessage, ridNum);
+        this.history.push({ role: 'user', parts: [{ text: userMessage }] });
+        this.history.push({ role: 'model', parts: [{ text: reply }] });
+        if (this.history.length > 20) this.history = this.history.slice(-20);
+        console.log('[Granny BT] Response from /ai (server-side)');
+        return reply;
+      } catch (err: any) {
+        console.warn(`[Granny BT] /ai failed (${err?.message ?? err}), falling back to Gemini proxy…`);
+        // fall through to the client-side Gemini path below
+      }
+    }
+
     // If init didn't populate the system prompt (network blip on resident
     // lookup, /menu 401, etc.), retry it once silently before giving up.
     if (!this.systemPrompt && this.lastInitArgs) {
