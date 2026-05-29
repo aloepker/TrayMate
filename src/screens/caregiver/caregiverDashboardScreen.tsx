@@ -821,6 +821,26 @@ export default function CaregiverDashboardScreen({
                     </Text>
                   </View>
                 </Pressable>
+              
+<Pressable
+  style={styles.secondaryActionBtn}
+  onPress={() => {
+    if (!selectedResident) return;
+
+    const residentToOpen = selectedResident;
+    closeResidentModal();
+
+    navigation.navigate("OrderHistory", {
+      residentId: residentToOpen.id,
+      residentName: residentToOpen.name,
+    });
+  }}
+>
+  <Feather name="clock" size={18} color="#6D6B3B" />
+  <Text style={styles.secondaryActionText}>
+    View Order History
+  </Text>
+</Pressable>
 
               </>
             )}
@@ -1581,4 +1601,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
   },
+  secondaryActionBtn: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  backgroundColor: "#F0F1DC",
+  borderRadius: 12,
+  paddingVertical: 14,
+  marginTop: 10,
+  borderWidth: 1,
+  borderColor: "#D9DBC0",
+},
+
+secondaryActionText: {
+  fontSize: 15,
+  fontWeight: "800",
+  color: "#6D6B3B",
+},
+
 });

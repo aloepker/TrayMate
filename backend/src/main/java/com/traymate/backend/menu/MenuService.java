@@ -1,6 +1,7 @@
 package com.traymate.backend.menu;
 
 import com.traymate.backend.coverage.MealCoverageAlertService;
+import com.traymate.backend.menu.dto.UpdateMeal;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -49,5 +50,54 @@ public class MenuService {
         // doing nothing and waiting for someone to hit a blocked order.
         coverageAlertService.evaluateAllResidents();
         return saved;
+    }
+
+    //edit meal
+    public Meal updateMeal(Integer mealId, UpdateMeal req) {
+
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new RuntimeException("Meal not found"));
+
+        if (req.getName() != null) {
+            meal.setName(req.getName());
+        }
+
+        if (req.getDescription() != null) {
+            meal.setDescription(req.getDescription());
+        }
+
+        if (req.getMealperiod() != null) {
+            meal.setMealperiod(req.getMealperiod());
+        }
+
+        if (req.getCalories() != null) {
+            meal.setCalories(req.getCalories());
+        }
+
+        if (req.getSodium() != null) {
+            meal.setSodium(req.getSodium());
+        }
+
+        if (req.getProtein() != null) {
+            meal.setProtein(req.getProtein());
+        }
+
+        if (req.getTags() != null) {
+            meal.setTags(req.getTags());
+        }
+
+        if (req.getSeasonal() != null) {
+            meal.setSeasonal(req.getSeasonal());
+        }
+
+        if (req.getImageUrl() != null) {
+            meal.setImageUrl(req.getImageUrl());
+        }
+
+        if (req.getAvailable() != null) {
+            meal.setAvailable(req.getAvailable());
+        }
+
+        return mealRepository.save(meal);
     }
 }

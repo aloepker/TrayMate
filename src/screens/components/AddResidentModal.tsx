@@ -11,7 +11,7 @@
 //import { getAuthToken } from "@/services/storage"; //to get tokens
 import { getAuthToken } from "../../services/storage";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -36,6 +36,7 @@ type Props = {
 
 export default function AddResidentModal({ visible, onClose, onSuccess }: Props) {
   const [saving, setSaving] = useState(false);
+  const formScrollRef = useRef<ScrollView>(null);
   // Collapsed-by-default chip pickers for Allergies and Medical Conditions
   // to keep the form short. Tap the header to expand the chip grid.
   const [allergiesOpen, setAllergiesOpen] = useState(false);
@@ -307,6 +308,13 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
     }
   };
 
+  // Scroll the focused input into view so keyboard never hides it.
+  const scrollToFocusedInput = (target?: number) => {
+    if (!target) return;
+    const responder = (formScrollRef.current as any)?.getScrollResponder?.();
+    responder?.scrollResponderScrollNativeHandleToKeyboard?.(target, 96, true);
+  };
+
   // -------------------- UI --------------------
 
   return (
@@ -314,13 +322,22 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
       <Modal visible={visible} transparent animationType="fade">
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Add Resident</Text>
 
-              <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                ref={formScrollRef}
+                style={styles.formScroll}
+                contentContainerStyle={styles.formContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+                automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+              >
               {/* Names row */}
               <View style={styles.row}>
                 <View style={[styles.col, { flex: 2 }]}>
@@ -329,6 +346,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.firstName}
                     onChangeText={(v) => update("firstName", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="John"
                   />
                 </View>
@@ -339,6 +357,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.middleName}
                     onChangeText={(v) => update("middleName", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="B."
                   />
                 </View>
@@ -349,6 +368,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.lastName}
                     onChangeText={(v) => update("lastName", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="Doe"
                   />
                 </View>
@@ -362,6 +382,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.dob}
                     onChangeText={(v) => update("dob", formatDob(v))}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="YYYY-MM-DD"
                     keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
                     maxLength={10}
@@ -384,6 +405,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 style={styles.modalInput}
                 value={form.roomNumber}
                 onChangeText={(v) => update("roomNumber", formatRoom(v))}
+                onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                 placeholder="e.g., 101A"
                 autoCapitalize="characters"
                 autoCorrect={false}
@@ -396,6 +418,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 style={styles.modalInput}
                 value={form.phone}
                 onChangeText={(v) => update("phone", v)}
+                onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                 placeholder="(555) 123-4567"
                 keyboardType="phone-pad"
               />
@@ -408,6 +431,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.emergencyContact}
                     onChangeText={(v) => update("emergencyContact", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="Jane Doe"
                   />
                 </View>
@@ -417,6 +441,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.emergencyPhone}
                     onChangeText={(v) => update("emergencyPhone", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="(555) 000-0000"
                     keyboardType="phone-pad"
                   />
@@ -431,6 +456,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.doctor}
                     onChangeText={(v) => update("doctor", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="Dr. Smith"
                   />
                 </View>
@@ -440,6 +466,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                     style={styles.modalInput}
                     value={form.doctorPhone}
                     onChangeText={(v) => update("doctorPhone", v)}
+                    onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                     placeholder="(555) 111-2222"
                     keyboardType="phone-pad"
                   />
@@ -468,6 +495,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 style={styles.modalInput}
                 value={String(form.dietaryRestrictions ?? "")}
                 onChangeText={(v) => update("dietaryRestrictions", v)}
+                onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                 placeholder="e.g., Vegetarian, Low Sodium"
               />
 
@@ -476,6 +504,7 @@ export default function AddResidentModal({ visible, onClose, onSuccess }: Props)
                 style={styles.modalInput}
                 value={form.medications}
                 onChangeText={(v) => update("medications", v)}
+                onFocus={(e) => scrollToFocusedInput(e.nativeEvent.target)}
                 placeholder="e.g., Metformin"
               />
             </ScrollView>
@@ -532,9 +561,16 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 720,
+    maxHeight: "92%",
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 18,
+  },
+  formScroll: {
+    maxHeight: 520,
+  },
+  formContent: {
+    paddingBottom: 8,
   },
   modalTitle: {
     fontSize: 18,
