@@ -250,4 +250,4 @@ Special thanks to:
 
 * Professor Andy Cameron
 * Seattle Pacific University Board of Advisors
-* All team members
+* Traymate development team
