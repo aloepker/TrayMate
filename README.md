@@ -62,7 +62,7 @@ The platform includes:
 
 # Product Demo Video
 
-(demo video link)
+Watch the demo here: [TrayMate Demo Video](https://www.youtube.com/watch?v=Wil1UaUq-1o) 
 
 ---
 
@@ -104,7 +104,7 @@ The platform includes:
 
 ---
 
-## Development & Collaboration Tools
+# Development & Collaboration Tools
 
 * GitHub
 * Jira
@@ -127,57 +127,53 @@ Install the following software before running the application:
 
 * npm  (Automatically included with Node.js installation)
 
+* Java Development Kit (JDK 17 Recommended) https://www.oracle.com/java/technologies/downloads/
+
 * Android Studio  https://developer.android.com/studio
 
 * Android SDK  (Installed through Android Studio)
 
 * Git  https://git-scm.com/downloads
 
----
+**Note:** The Spring Boot backend is already deployed on Render and does not need to be run locally for standard application testing. However, Android builds require Java because Gradle and the Android build toolchain run on the Java Virtual Machine (JVM).
 
-# Clone the Repository
+**Architecture Note:** The mobile application communicates directly with the deployed backend APIs, allowing the app to be tested without running backend services locally.
 
-```bash id="7f1bop"
+## Clone the Repository
+
+```bash
 git clone https://github.com/aloepker/TrayMate.git
 cd TrayMate
 ```
 
----
-
-# Install Dependencies
+## Install Dependencies
 
 Install all required frontend dependencies:
 
-```bash id="8grq1m"
+```bash
 npm install
 ```
 
----
-
-# Open Android Studio
+## Open Android Studio
 
 1. Open Android Studio
 2. Install the Android SDK if prompted
 3. Open the Android Virtual Device (AVD) Manager
 4. Create or launch an Android emulator/tablet device
 
----
-
-# Start the React Native Development Server
+## Start the React Native Development Server
 
 Run the Metro bundler:
 
-```bash id="xg6f0n"
+```bash
 npx react-native start
 ```
 
----
-
-# Run the Application on Android
+## Run the Application on Android
 
 Open a second terminal window and run:
 
-```bash id="4x7j9q"
+```bash
 npx react-native run-android
 ```
 
@@ -189,20 +185,26 @@ The application should automatically install and launch on the Android emulator.
 
 Navigate to the Android directory:
 
-```bash id="o5lt3r"
+```bash
 cd android
 ```
 
 Build the release APK:
 
-```bash id="a4ymde"
+```bash
 ./gradlew assembleRelease
 ```
 
 The APK file will be generated at:
 
-```bash id="vr6q3o"
+```bash
 android/app/build/outputs/apk/release/
+```
+
+The generated APK will be named:
+
+```text
+app-release.apk
 ```
 
 ---
@@ -211,7 +213,7 @@ android/app/build/outputs/apk/release/
 
 Use the following administrator account to access the application:
 
-```text id="7qf2ci"
+```text
 Email: admin@traymate.com
 Password: admin123
 ```
@@ -222,13 +224,13 @@ The administrator account can create and manage:
 * Kitchen staff accounts
 * Residents
 
-For the MVP version, the administrator account is assumed to already exist within the system.
+A preconfigured administrator account is included for demonstration and testing purposes.
 
 ---
 
 # Product Overview Poster
 
-(poster image)
+![TrayMate Poster](https://i.postimg.cc/D05Ysz5x/Your-paragraph-text-(5).png)
 
 ---
 
