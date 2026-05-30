@@ -38,3 +38,29 @@ export function parseServerTimestamp(raw: unknown): Date {
 export function parseServerTimestampMs(raw: unknown): number {
   return parseServerTimestamp(raw).getTime();
 }
+
+/**
+ * "YYYY-MM-DD" in the device's LOCAL timezone.
+ *
+ * Why: `new Date().toISOString().slice(0, 10)` returns the UTC date,
+ * which for any device west of UTC silently rolls forward to TOMORROW
+ * once the local clock passes (24 - offset)h. In PDT (UTC-7), an order
+ * placed at 6:30 PM is recorded as 01:30 AM the *next* day — so the
+ * kitchen dashboard's "today's orders" view never sees it.
+ *
+ * Use this for any date that represents "what day did this happen on
+ * for the user looking at the screen" — meal-order dates, schedule
+ * keys, "today's auto-suggest" keys. NOT for instants in time (use
+ * Date directly or ISO with Z for those).
+ */
+export function toLocalISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Shorthand for `toLocalISODate(new Date())`. */
+export function todayLocalISO(): string {
+  return toLocalISODate(new Date());
+}

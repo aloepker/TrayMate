@@ -10,6 +10,7 @@ import {
 } from '../../services/api';
 import { cachePersistedMealTranslations } from '../../services/mealLocalization';
 import { getOrderPlacedAt, setOrderPlacedAt } from '../../services/storage';
+import { todayLocalISO } from '../../services/dateUtils';
 
 // Meal type definition
 type Meal = {
@@ -206,7 +207,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
     const rid = residentId || 'unknown';
     const meal = mealOfDay || deriveMealOfDay();
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = todayLocalISO(); // local YYYY-MM-DD, not UTC
     const itemIds = itemsToUse.map((m) => String(m.id)).join(', ');
     const orderNote = buildOrderNote();
 
@@ -282,7 +283,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
     const rid = residentId || 'unknown';
     const meal = mealOfDay || deriveMealOfDay();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO(); // local YYYY-MM-DD, not UTC
     const itemIds = itemsToUse.map((m) => String(m.id)).join(', ');
     const orderNote = buildOrderNote();
 

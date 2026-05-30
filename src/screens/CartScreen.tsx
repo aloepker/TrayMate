@@ -18,6 +18,7 @@ import {
 } from '../services/mealLocalization';
 import { MealService, ResidentService } from '../services/localDataService';
 import { getUnsafeReason } from '../services/mealSafetyService';
+import { todayLocalISO } from '../services/dateUtils';
 import { createOverrideApi } from '../services/api';
 
 const COLORS = {
@@ -103,7 +104,9 @@ const CartScreen = ({ navigation, route }: any) => {
     try {
       const mealIds = cartItems.map((m) => Number(m.id)).filter((n) => !isNaN(n));
 //error for time order is placed is likely the line bellow:  
-      const today = new Date().toISOString().slice(0, 10);
+      // Local date, not UTC — otherwise orders placed after ~5pm PDT
+      // get filed under tomorrow on the kitchen dashboard.
+      const today = todayLocalISO();
       //const today = new Date().toISOString();  // didnt fix the time issue.. :(
       const ridNum = Number(residentId);
       if (!mealIds.length || isNaN(ridNum)) {

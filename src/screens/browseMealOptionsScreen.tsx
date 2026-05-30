@@ -19,6 +19,7 @@ import {
   Dimensions,
 } from "react-native";
 import { StatusBar } from "react-native";
+import { todayLocalISO, toLocalISODate } from "../services/dateUtils";
 import Feather from "react-native-vector-icons/Feather";
 import { useCart } from "./context/CartContext";
 import { useSettings } from './context/SettingsContext';
@@ -1182,11 +1183,14 @@ function pickAutoOrderMeal(
 
 const orderDateKey = (value: unknown): string | null => {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  // Use LOCAL date — otherwise an order placed at 6:30 PM PDT shows up
+  // as the NEXT day's key and "do they have an order today?" lookups
+  // miss it.
+  if (value instanceof Date) return toLocalISODate(value);
   const text = String(value);
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
   const parsed = new Date(text);
-  return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+  return isNaN(parsed.getTime()) ? null : toLocalISODate(parsed);
 };
 
 function hasOrderForPeriodOnDate(ordersForResident: any[], period: string, dateKey: string): boolean {
@@ -1924,7 +1928,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     let cancelled = false;
     (async () => {
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO(); // local YYYY-MM-DD, not UTC
 
     const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
     const startIdx = (() => {
@@ -2282,7 +2286,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         residentId: ridNum,
         mealIds:    [mealIdNum],
         mealOfDay:  meal.meal_period,
-        targetDate: new Date().toISOString().slice(0, 10),
+        targetDate: todayLocalISO(),
         reason:     `Requested from menu — ${meal.name}: ${reason}`,
       });
       Alert.alert(

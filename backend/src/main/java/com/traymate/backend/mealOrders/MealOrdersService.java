@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,10 +29,18 @@ public class MealOrdersService {
     private final DietaryComplianceService complianceService;
     private final MedicalOverrideService overrideService;
 
+    // Facility-local timezone used when the client doesn't send a date.
+    // Render hosts run in UTC, so plain LocalDate.now() returns TOMORROW
+    // any time after ~5 PM Pacific — which made dinner / late-evening
+    // orders show up on the kitchen dashboard a day late. Hard-coded to
+    // America/Los_Angeles for now since that's where the showcase is;
+    // make this an env var (`FACILITY_TZ`) if/when multi-site comes up.
+    private static final ZoneId FACILITY_ZONE = ZoneId.of("America/Los_Angeles");
+
     //updated logic to check at see if an order has already ben placed
     public MealOrders saveOrder(MealOrders order) {
         if (order.getDate() == null) {
-            order.setDate(LocalDate.now());
+            order.setDate(LocalDate.now(FACILITY_ZONE));
         }
 
     // 1. Check if an order already exists for this User/Meal/Date

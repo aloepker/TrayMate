@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { getAuthToken } from '../../services/storage';
-import { parseServerTimestamp } from '../../services/dateUtils';
+import { parseServerTimestamp, toLocalISODate } from '../../services/dateUtils';
 
 const BASE = 'https://traymate-auth.onrender.com';
 
@@ -76,7 +76,7 @@ async function apiPostMessage(msg: KitchenMessage): Promise<void> {
         senderRole: msg.fromRole,
         department: departmentFromRole(msg.fromRole),
         sentAt: msg.timestamp.toISOString(),
-        sentDate: msg.timestamp.toISOString().slice(0, 10), // YYYY-MM-DD
+        sentDate: toLocalISODate(msg.timestamp), // local YYYY-MM-DD (not UTC)
         // Back-compat aliases
         fromName: msg.fromName,
         fromRole: msg.fromRole,
