@@ -38,11 +38,13 @@ import {
   getAllMenuMeals,
   setMealAvailability,
   listCoverageAlertsApi,
+  getCaregivers,
+  type Caregiver as ApiCaregiver,
   type MealCoverageAlert,
 } from "../../services/api";
 import { FALLBACK_MEALS } from "../../services/localDataService";
 import MessagesModal from "../components/messaging/MessagesModal";
-import { clearAuth, getAuthToken, getUserEmail } from "../../services/storage";
+import { clearAuth, getAuthToken, getUserEmail, getResidentCaregivers } from "../../services/storage";
 import {
   setCachedMealTranslations,
   setCachedDescriptionTranslations,
@@ -1062,6 +1064,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
   const [token, setToken] = useState<string | null>(null);
   const [loggedInEmail, setLoggedInEmail] = useState<string | null>(null);
   const [backendResidents, setBackendResidents] = useState<ApiResident[]>([]);
+  // Caregivers and a residentId → caregiverName[] map so the kitchen
+  // dashboard can show who's responsible for each tray. Pulled from the
+  // same two sources the admin dashboard uses (resident.caregiverId from
+  // the backend + locally-stored multi-caregiver assignments) so the
+  // displayed caregiver matches what the database shows in admin.
+  const [caregivers, setCaregivers] = useState<ApiCaregiver[]>([]);
+  const [residentCaregiverNames, setResidentCaregiverNames] = useState<Record<string, string[]>>({});
 
   const [seasonalMeals, setSeasonalMeals] = useState<SeasonalEntry[]>([]);
   const [showSeasonalModal, setShowSeasonalModal] = useState(false);
@@ -1135,6 +1144,45 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
       } catch { /* silently ignore */ }
     })();
   }, []);
+
+  // Load caregivers + build resident→caregiver-names map. Two-source
+  // pattern matches the admin dashboard: backend resident.caregiverId
+  // (single, the legacy column) merged with stored multi-caregiver
+  // assignments (the per-resident array admin sets via AsyncStorage).
+  // Re-runs whenever the resident list changes so newly-loaded
+  // residents pick up their caregiver assignment immediately.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cgs = await getCaregivers();
+        if (cancelled) return;
+        setCaregivers(cgs);
+        const cgById = new Map<string, string>();
+        for (const c of cgs) cgById.set(String(c.id), c.name);
+
+        const map: Record<string, string[]> = {};
+        for (const r of backendResidents) {
+          const rid = String(r.id);
+          const ids = new Set<string>();
+          if (r.caregiverId != null && String(r.caregiverId).trim() !== '') {
+            ids.add(String(r.caregiverId));
+          }
+          try {
+            const stored = await getResidentCaregivers(rid);
+            for (const s of stored) ids.add(s.caregiverId);
+          } catch { /* storage miss is fine */ }
+          map[rid] = Array.from(ids)
+            .map(id => cgById.get(id))
+            .filter((n): n is string => !!n && n.trim().length > 0);
+        }
+        if (!cancelled) setResidentCaregiverNames(map);
+      } catch (e) {
+        console.warn('[KitchenDash] caregiver assignment load failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [backendResidents]);
 
   // ── check for unread backend messages ──
   useEffect(() => {
@@ -1971,6 +2019,30 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         {residentDisplayName}
                       </Text>
                     ) : null}
+                    {/* Caregiver assignment — sourced from the same data
+                        the admin dashboard uses (resident.caregiverId +
+                        stored multi-caregiver array). Hidden when no
+                        assignment exists rather than showing "—" so the
+                        unassigned case doesn't visually clutter the
+                        card. */}
+                    {(() => {
+                      const cgs = residentCaregiverNames[String(item.order.userId)] ?? [];
+                      if (cgs.length === 0) return null;
+                      const label = cgs.length === 1
+                        ? cgs[0]
+                        : `${cgs[0]} +${cgs.length - 1}`;
+                      return (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Feather name="user" size={10} color={C.textMuted} />
+                          <Text
+                            style={{ fontSize: 11, color: C.textMuted, fontWeight: '600' }}
+                            numberOfLines={1}
+                          >
+                            Caregiver: {label}
+                          </Text>
+                        </View>
+                      );
+                    })()}
                     {/* Order # + period pill */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <View style={s.orderIdPill}>
