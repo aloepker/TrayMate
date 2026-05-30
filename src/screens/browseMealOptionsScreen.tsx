@@ -2951,6 +2951,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           }
           refreshing={refreshing}
           onRefresh={onRefresh}
+          // Memory-leak mitigations for the menu list — the dominant
+          // image-heavy view in the app. Without these, every meal
+          // image stays mounted forever after first render, accumulating
+          // across the session as the user scrolls / re-enters the
+          // screen many times.
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={6}
+          initialNumToRender={8}
+          windowSize={5}
         />
       )}
 

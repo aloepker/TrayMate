@@ -113,6 +113,23 @@ async function apiFetchMessages(): Promise<KitchenMessage[]> {
 
 // ---------- Provider ----------
 
+// Hard cap on how many messages we hold in memory. Without this, the
+// 30s poll keeps appending whatever the backend returns and the JS
+// heap grows without bound during long-running kitchen / caregiver
+// sessions (the primary culprit behind the "app gets slower after a
+// few hours" reports). 300 keeps several days of normal traffic
+// available for scroll-back while bounding memory at ~150 KB of
+// message objects.
+const MAX_MESSAGES_IN_MEMORY = 300;
+
+const trimMessages = (msgs: KitchenMessage[]): KitchenMessage[] => {
+  if (msgs.length <= MAX_MESSAGES_IN_MEMORY) return msgs;
+  // Keep the newest N — messages are stored newest-first via [newMsg, ...prev]
+  // and the refresh path sorts before assigning, so slicing from the front
+  // preserves the most-recent window.
+  return msgs.slice(0, MAX_MESSAGES_IN_MEMORY);
+};
+
 export const KitchenMessageProvider = ({ children }: { children: ReactNode }) => {
   const [messages, setMessages] = useState<KitchenMessage[]>([]);
 
@@ -133,7 +150,7 @@ export const KitchenMessageProvider = ({ children }: { children: ReactNode }) =>
         m => m.id.startsWith('msg_') &&
           !remoteSig.has(`${m.fromName}|${m.text}|${m.timestamp.getTime()}`),
       );
-      return [...pending, ...remote];
+      return trimMessages([...pending, ...remote]);
     });
   }, []);
 
@@ -168,7 +185,7 @@ export const KitchenMessageProvider = ({ children }: { children: ReactNode }) =>
         timestamp: new Date(),
         read: false,
       };
-      setMessages(prev => [newMsg, ...prev]);
+      setMessages(prev => trimMessages([newMsg, ...prev]));
       // Fire-and-forget backend persistence
       apiPostMessage(newMsg);
     },

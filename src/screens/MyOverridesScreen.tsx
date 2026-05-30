@@ -14,6 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -181,15 +182,23 @@ export default function MyOverridesScreen({ navigation, route }: any) {
     }
   }, [residentId]);
 
-  useEffect(() => {
-    load();
-    // Light polling every 15s so approved/denied changes show up without
-    // the user having to pull-to-refresh. Cleared on unmount.
-    pollRef.current = setInterval(load, 15000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [load]);
+  // Poll only while focused. Was useEffect, which left the 15s
+  // interval firing forever after the user navigated away — each
+  // re-entry stacked another orphan poller on the JS thread. The
+  // useFocusEffect version starts polling on focus, tears down the
+  // interval on blur, and re-establishes on next focus.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      pollRef.current = setInterval(load, 15000);
+      return () => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+    }, [load]),
+  );
 
   const onRefresh = () => { setRefreshing(true); load(); };
 

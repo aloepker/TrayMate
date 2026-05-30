@@ -451,10 +451,22 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         for (const o of resolved) {
           if (o.backendId != null) seen.set(String(o.backendId), o);
         }
+        // Cap historical order retention to the last 60 days. The
+        // /mealOrders/history endpoint returns ALL of a resident's
+        // orders, so without this every poll loads months/years of
+        // history into JS heap — the dominant CartContext leak during
+        // long sessions. Today / yesterday / "recent" is all the UI
+        // ever shows; older orders just hold memory.
+        const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - SIXTY_DAYS_MS;
+        const isRecent = (o: Order) => {
+          const ts = o.placedAt instanceof Date ? o.placedAt.getTime() : new Date(o.placedAt as any).getTime();
+          return Number.isFinite(ts) ? ts >= cutoff : true; // keep entries we can't parse
+        };
         return [
-          ...otherResidents,
-          ...Array.from(seen.values()),
-          ...localOnlyForThisResident,
+          ...otherResidents.filter(isRecent),
+          ...Array.from(seen.values()).filter(isRecent),
+          ...localOnlyForThisResident, // always keep — these are pending writes
         ];
       });
     } catch (err: any) {

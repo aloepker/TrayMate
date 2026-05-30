@@ -193,15 +193,20 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     if (rid) setCurrentResidentId(String(rid));
   }, [route?.params?.residentId, setCurrentResidentId]);
 
-  useEffect(() => {
-    if (!residentId) return;
-    fetchOrderHistory(residentId);
-    const unsub = navigation.addListener('focus', () => fetchOrderHistory(residentId));
-    // Poll every 15s so kitchen-side status changes (preparing → ready →
-    // completed → cancelled) show up without a manual refresh.
-    const poll = setInterval(() => fetchOrderHistory(residentId), 15000);
-    return () => { unsub(); clearInterval(poll); };
-  }, [fetchOrderHistory, residentId, navigation]);
+  // Poll only while THIS screen is focused. Without useFocusEffect,
+  // the 15s interval kept firing forever after the resident navigated
+  // elsewhere — N screen visits over a long session = N orphaned
+  // pollers, each holding a closure over fetchOrderHistory. Switching
+  // to useFocusEffect tears down the interval on blur and re-establishes
+  // it on next focus.
+  useFocusEffect(
+    useCallback(() => {
+      if (!residentId) return;
+      fetchOrderHistory(residentId);
+      const poll = setInterval(() => fetchOrderHistory(residentId), 15000);
+      return () => { clearInterval(poll); };
+    }, [residentId, fetchOrderHistory]),
+  );
 
   // ── Only show today's orders, excluding soft-deleted ones ─────────────────
   const allResidentOrders = residentId ? getOrdersForResident(residentId) : orders;
