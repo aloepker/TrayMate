@@ -1145,6 +1145,31 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     })();
   }, []);
 
+  // Periodic resident-roster refresh so admin updates (room number,
+  // caregiver assignment, allergies) propagate to the kitchen dashboard
+  // WITHOUT requiring a full app restart. The mount-once effect above
+  // is the cold-start path; this is the staying-fresh path.
+  //
+  // 60s matches the orders polling cadence and stays well under the
+  // /admin/residents call cost. We merge — never replace — so the
+  // per-order hydration cache (line ~1254 useEffect) doesn't lose its
+  // additions between polls.
+  useEffect(() => {
+    const refreshRoster = async () => {
+      try {
+        const fresh = await getResidents();
+        if (!Array.isArray(fresh) || fresh.length === 0) return;
+        setBackendResidents((prev) => {
+          const byId = new Map(prev.map((r) => [String(r.id), r] as const));
+          fresh.forEach((r) => byId.set(String(r.id), r));
+          return Array.from(byId.values());
+        });
+      } catch { /* silent — keep stale until next tick */ }
+    };
+    const iv = setInterval(refreshRoster, 60_000);
+    return () => clearInterval(iv);
+  }, []);
+
   // Load caregivers + build resident→caregiver-names map. Two-source
   // pattern matches the admin dashboard: backend resident.caregiverId
   // (single, the legacy column) merged with stored multi-caregiver
