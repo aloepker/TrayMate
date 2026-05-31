@@ -23,7 +23,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import Feather from "react-native-vector-icons/Feather";
 import { launchImageLibrary } from "react-native-image-picker"; 
-import { useKitchenMessages, KitchenMessage } from "../context/KitchenMessageContext";
+import { useKitchenMessages, KitchenMessage, SPECIAL_NOTE_TAG } from "../context/KitchenMessageContext";
 import { getMealPlaceholder, getMealImage } from "../../services/mealDisplayService";
 import {
   getResidents,
@@ -88,7 +88,7 @@ const C = {
 };
 
 type MealPeriod = "Breakfast" | "Lunch" | "Dinner" | "Sides" | "Drinks";
-type Status = "pending" | "preparing" | "ready" | "served" | "cancelled" | "substitution_requested";
+type Status = "pending" | "preparing" | "ready" | "completed" | "cancelled" | "substitution_requested";
 
 // ─── Base URL + API helpers ────────────────────────────────────────────────────
 const BASE = "https://traymate-auth.onrender.com";
@@ -135,6 +135,7 @@ interface ApiOrder {
   order: {
     id: number;
     date: string;
+    createdAt?: string | null;
     mealOfDay: string;
     userId: string;
     status: Status | string;
@@ -1425,7 +1426,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     pending:   orders.filter((o) => o.order.status === "pending").length,
     preparing: orders.filter((o) => o.order.status === "preparing").length,
     ready:     orders.filter((o) => o.order.status === "ready").length,
-    served:    orders.filter((o) => o.order.status === "served").length,
+    completed: orders.filter((o) => o.order.status === "completed").length,
   };
 
   // Multi-stage progress shown in the AddMealOverlay. The overlay itself drives
@@ -1777,7 +1778,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
     if (s === "pending")                return { bg: C.warningBg,  text: C.warning,  icon: "clock"         as const };
     if (s === "preparing")              return { bg: "#FEE2E2",    text: C.danger,   icon: "loader"        as const };
     if (s === "ready")                  return { bg: C.successBg,  text: C.success,  icon: "check-circle"  as const };
-    if (s === "served")                 return { bg: "#E0F2FE",    text: "#0369A1",  icon: "check-square"  as const };
+    if (s === "completed" || s === "served") return { bg: "#E0F2FE", text: "#0369A1",  icon: "check-square"  as const };
     if (s === "cancelled")              return { bg: "#F3F4F6",    text: "#6B7280",  icon: "x-circle"      as const };
     if (s === "substitution_requested") return { bg: "#FEF3C7",    text: C.warning,  icon: "refresh-cw"    as const };
     return                                     { bg: C.surface,    text: C.textMuted, icon: "help-circle"  as const };
@@ -1842,7 +1843,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             { label: "Pending",   value: counts.pending,   icon: "clock"         as const, color: C.warning,  bg: "#FEF9EC", accent: "#F59E0B" },
             { label: "Preparing", value: counts.preparing, icon: "loader"        as const, color: C.danger,   bg: "#FEF2F2", accent: C.danger  },
             { label: "Ready",     value: counts.ready,     icon: "check-circle"  as const, color: C.success,  bg: "#F0FFF4", accent: C.success },
-            { label: "Served",    value: counts.served,    icon: "check-square"  as const, color: "#0369A1",  bg: "#EFF6FF", accent: "#0369A1" },
+            { label: "Completed", value: counts.completed,  icon: "check-square"  as const, color: "#0369A1",  bg: "#EFF6FF", accent: "#0369A1" },
           ].map(({ label, value, icon, color, bg, accent }) => (
             <View key={label} style={[s.summaryCard, { backgroundColor: bg, borderColor: accent + "55" }]}>
               <View style={[s.summaryCardAccent, { backgroundColor: accent }]} />
@@ -1945,9 +1946,16 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
         )}
 
         {(() => {
+          // Completed orders drop out of the active queue so the kitchen
+          // sees only what still needs work. They remain in `orders` (and
+          // in the Completed stat tally) and stay in the DB so the resident
+          // can still see + dismiss them on their Upcoming Meals screen.
+          const activeOrders = orders.filter(
+            (o) => String(o.order.status ?? "").toLowerCase() !== "completed",
+          );
           const filteredOrders = orderPeriodFilter === "All"
-            ? orders
-            : orders.filter((o) => String(o.order.mealOfDay ?? "").toLowerCase() === orderPeriodFilter.toLowerCase());
+            ? activeOrders
+            : activeOrders.filter((o) => String(o.order.mealOfDay ?? "").toLowerCase() === orderPeriodFilter.toLowerCase());
           if (loading) {
             return <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 40 }} />;
           }
@@ -1991,29 +1999,61 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
             const orderPeriod = item.order.mealOfDay || "Breakfast";
             const pa = PERIOD_ACCENT[orderPeriod] ?? PERIOD_ACCENT["Breakfast"];
             const rawOrderNote = String(item.order.note || item.order.specialInstructions || "");
-            // Pre-order marker — set by the resident browse screen when ordering
-            // breakfast after 7 PM the previous evening. Kitchen needs to queue
-            // these for the NEXT morning's tray run, not today's batch.
-            const isPreorderForTomorrow = /\[FOR TOMORROW'S BREAKFAST\]/i.test(rawOrderNote);
+            // Pre-order marker — set by the resident browse screen when a
+            // meal is ordered after its serving window has passed for the
+            // day. Tag is "[FOR TOMORROW'S <PERIOD>]" (Breakfast/Lunch/
+            // Dinner). Kitchen queues these for the NEXT day's tray run.
+            const isPreorderForTomorrow = /\[FOR TOMORROW'S [A-Z]+\]/i.test(rawOrderNote);
             // Strip the tag from the displayed note so it's not duplicated
             // (the banner above the note already conveys the meaning).
-            const orderNote = rawOrderNote.replace(/\[FOR TOMORROW'S BREAKFAST\]\s*/i, "").trim();
+            const orderNote = rawOrderNote.replace(/\[FOR TOMORROW'S [A-Z]+\]\s*/i, "").trim();
             const isReplying = replyingTo === item.order.id;
 
-            // Per-order messages: match by order ID tag in text (e.g. "[Order #123]")
-            // Falls back to all resident messages if no tag prefix found
+            // Per-order messages: match by explicit order ID tag OR, for
+            // resident replies that predate order tagging, by being from
+            // the same resident with no order prefix.
+            // IMPORTANT: staff-originated messages (kitchen alerts, caregiver
+            // notifications, etc.) are NEVER counted as unread for the
+            // kitchen — only actual resident replies trigger the bell.
             const orderTag = `[Order #${item.order.id}]`;
-            const orderMessages = messages.filter(
-              (m) => {
-                const sameResident = String(m.residentId).trim() === String(item.order.userId).trim();
-                const taggedOrderId = m.orderId ?? Number(m.text.match(/^\[Order #(\d+)\]/)?.[1]);
-                const taggedToThisOrder = Number(taggedOrderId) === Number(item.order.id);
-                const untaggedResidentMessage = sameResident && !m.text.match(/^\[Order #\d+\]/);
-                return sameResident && (taggedToThisOrder || m.text.startsWith(orderTag) || untaggedResidentMessage);
-              }
+            const orderMessages = messages.filter((m) => {
+              const sameResident = String(m.residentId).trim() === String(item.order.userId).trim();
+              if (!sameResident) return false;
+              const taggedOrderId = m.orderId ?? Number(m.text.match(/^\[Order #(\d+)\]/)?.[1]);
+              const taggedToThisOrder = Number(taggedOrderId) === Number(item.order.id);
+              if (taggedToThisOrder || m.text.startsWith(orderTag)) return true;
+              // Only pull in untagged messages that came FROM the resident
+              // (fromRole === 'resident'). Caregiver alerts, kitchen confirmations,
+              // and other staff messages that lack an [Order #N] prefix would
+              // otherwise show up on every order card for that resident.
+              return m.fromRole === 'resident' && !m.text.match(/^\[Order #\d+\]/);
+            });
+            // The resident's "special note for kitchen" is routed through the
+            // messages channel (tagged SPECIAL_NOTE_TAG) because the order.note
+            // backend round-trip is unreliable. Pull those out so they render
+            // in the dedicated note section, NOT mixed into the chat thread.
+            const specialNoteMsgs = orderMessages.filter((m) =>
+              m.text.includes(SPECIAL_NOTE_TAG),
             );
-            const unreadOrderMsgs = orderMessages.filter((m) => !m.read).length;
-            const orderBellCount = unreadOrderMsgs + (orderNote ? 1 : 0);
+            const noteFromMessages = specialNoteMsgs
+              .map((m) =>
+                m.text
+                  .replace(orderTag, '')
+                  .replace(SPECIAL_NOTE_TAG, '')
+                  .trim(),
+              )
+              .filter(Boolean)
+              .join('\n');
+            // Prefer the backend order note when present; otherwise fall back
+            // to the note delivered over the messages channel.
+            const displayNote = orderNote || noteFromMessages;
+            // Bell count: only RESIDENT chat messages are "incoming unread" for
+            // the kitchen. Kitchen-sent messages and special-note messages are
+            // excluded — the note is counted once via displayNote below.
+            const unreadOrderMsgs = orderMessages.filter(
+              (m) => !m.read && m.fromRole === 'resident' && !m.text.includes(SPECIAL_NOTE_TAG),
+            ).length;
+            const orderBellCount = unreadOrderMsgs + (displayNote ? 1 : 0);
 
             return (
               <View key={item.order.id} style={s.card}>
@@ -2068,7 +2108,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         </View>
                       );
                     })()}
-                    {/* Order # + period pill */}
+                    {/* Order # + period pill + placed-at time */}
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <View style={s.orderIdPill}>
                         <Feather name="hash" size={10} color={C.textMuted} />
@@ -2078,6 +2118,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         <Feather name={pa.icon as any} size={9} color={pa.color} />
                         <Text style={[s.periodPillText, { color: pa.color }]}>{orderPeriod}</Text>
                       </View>
+                      {item.order.createdAt ? (
+                        <View style={s.orderIdPill}>
+                          <Feather name="clock" size={10} color={C.textMuted} />
+                          <Text style={s.orderIdPillText}>
+                            {new Date(item.order.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                   {/* Per-order notification bell */}
@@ -2088,10 +2136,12 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                         roomDisplay !== "—" ? `Room ${roomDisplay}` : "",
                         residentDisplayName,
                       ].filter(Boolean).join(" · ");
-                      const residentNoteLine = orderNote
-                        ? `Resident order note${noteHeader ? ` (${noteHeader})` : ""}:\n${orderNote}`
+                      const residentNoteLine = displayNote
+                        ? `Special note from resident${noteHeader ? ` (${noteHeader})` : ""}:\n${displayNote}`
                         : "";
-                      const messageLines = orderMessages.map((m) => {
+                      const messageLines = orderMessages
+                        .filter((m) => !m.text.includes(SPECIAL_NOTE_TAG))
+                        .map((m) => {
                         const cleanText = m.text.startsWith(orderTag)
                           ? m.text.replace(orderTag, '').trim()
                           : m.text;
@@ -2130,12 +2180,13 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   </View>
                 </View>
 
-                {/* ── "For tomorrow" banner (breakfast pre-orders placed the night before) ── */}
+                {/* ── "For tomorrow" banner (pre-orders placed after the
+                       period's serving window has passed for the day) ── */}
                 {isPreorderForTomorrow && (
                   <View style={s.preorderBanner}>
                     <Feather name="sunrise" size={18} color="#FFFFFF" />
                     <Text style={s.preorderBannerText} numberOfLines={2}>
-                      PRE-ORDER FOR TOMORROW&apos;S BREAKFAST · Serve 7:00–10:00 AM
+                      PRE-ORDER FOR TOMORROW&apos;S {String(orderPeriod).toUpperCase()}
                     </Text>
                   </View>
                 )}
@@ -2164,11 +2215,14 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   </View>
                 )}
 
-                {/* ── Resident note (if provided with order) ── */}
-                {orderNote !== "" && (
+                {/* ── Special note from resident (provided with the order) ── */}
+                {displayNote !== "" && (
                   <View style={s.noteRow}>
-                    <Feather name="message-circle" size={13} color="#92400E" />
-                    <Text style={s.noteText}>{orderNote}</Text>
+                    <Feather name="edit-3" size={13} color="#92400E" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.noteLabel}>Special note from resident</Text>
+                      <Text style={s.noteText}>{displayNote}</Text>
+                    </View>
                   </View>
                 )}
 
@@ -2208,7 +2262,7 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
 
                 {/* ── Status buttons — 2×2 grid ── */}
                 <View style={s.statusGrid}>
-                  {(["pending", "preparing", "ready", "served"] as Status[]).map((status) => {
+                  {(["pending", "preparing", "ready", "completed"] as Status[]).map((status) => {
                     const active = item.order.status === status;
                     const st2 = statusStyle(status);
                     return (
@@ -2310,6 +2364,9 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       return String(m.residentId).trim() === String(item.order.userId).trim() &&
                         m.fromRole === 'resident' &&
                         m.channel === 'order' &&
+                        // Special-note messages render in their own note section,
+                        // not here in the chat thread.
+                        !m.text.includes(SPECIAL_NOTE_TAG) &&
                         (Number(taggedOrderId) === Number(item.order.id) || m.text.startsWith(orderTag));
                     }
                   );
@@ -2341,14 +2398,23 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                   );
                 })()}
 
-                {/* ── Sent kitchen messages for this order — shown inline ── */}
-                {orderMessages.length > 0 && (
+                {/* ── Sent kitchen messages for this order — shown inline ──
+                       Only kitchen-originated messages belong here. Resident
+                       messages are rendered above in the "Resident messages"
+                       section; including them here too produced the duplicate
+                       "shows twice" bug. */}
+                {(() => {
+                  const kitchenSentMsgs = orderMessages.filter(
+                    (m) => m.fromRole !== 'resident',
+                  );
+                  if (kitchenSentMsgs.length === 0) return null;
+                  return (
                   <View style={s.inlineMsgSection}>
                     <View style={s.inlineMsgHeader}>
                       <Feather name="message-square" size={11} color={C.primary} />
                       <Text style={s.inlineMsgLabel}>Messages sent</Text>
                     </View>
-                    {orderMessages.map((msg) => {
+                    {kitchenSentMsgs.map((msg) => {
                       const orderTag = `[Order #${item.order.id}]`;
                       const cleanText = msg.text.startsWith(orderTag)
                         ? msg.text.replace(orderTag, '').trim()
@@ -2363,7 +2429,8 @@ const KitchenDashboardScreen: React.FC<{ navigation?: any }> = ({ navigation }) 
                       );
                     })}
                   </View>
-                )}
+                  );
+                })()}
 
                 {/* ── Message / reply to resident ── */}
                 <View style={s.replySection}>
@@ -3333,6 +3400,14 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.5,
+  },
+  noteLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#92400E",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 2,
   },
   noteText: {
     flex: 1,

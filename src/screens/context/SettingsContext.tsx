@@ -149,6 +149,10 @@ export type TranslationKeys = {
   suggestedAutoOrder: string;
   autoOrderConfirmSub: string;
   autoOrderApprovalNote: string;
+  autoOrderForToday: string;
+  autoOrderForTomorrow: string;
+  autoOrderServedWindow: string;
+  autoOrderServingNow: string;
   dismiss: string;
   placeOrder: string;
   viewDietaryRestrictionsPrompt: string;
@@ -392,6 +396,10 @@ const EN: TranslationKeys = {
   suggestedAutoOrder: 'Suggested Auto-Order',
   autoOrderConfirmSub: 'Confirm or dismiss this safe {period} suggestion',
   autoOrderApprovalNote: 'Filtered against allergies and medical conditions. Confirming will send this order.',
+  autoOrderForToday: "For today's {period}",
+  autoOrderForTomorrow: "For tomorrow's {period}",
+  autoOrderServedWindow: 'Served {window}',
+  autoOrderServingNow: 'Being served now',
   dismiss: 'Dismiss',
   placeOrder: 'Place Order',
   viewDietaryRestrictionsPrompt: 'View dietary restrictions',
@@ -622,6 +630,10 @@ const ES: TranslationKeys = {
   suggestedAutoOrder: 'Pedido automático sugerido',
   autoOrderConfirmSub: 'Confirma o descarta esta sugerencia segura para {period}',
   autoOrderApprovalNote: 'Filtrado contra alergias y condiciones médicas. Al confirmar se enviará el pedido.',
+  autoOrderForToday: 'Para el {period} de hoy',
+  autoOrderForTomorrow: 'Para el {period} de mañana',
+  autoOrderServedWindow: 'Se sirve {window}',
+  autoOrderServingNow: 'Se sirve ahora',
   dismiss: 'Descartar',
   placeOrder: 'Hacer pedido',
   viewDietaryRestrictionsPrompt: 'Ver restricciones dietéticas',
@@ -852,6 +864,10 @@ const FR: TranslationKeys = {
   suggestedAutoOrder: 'Commande automatique suggérée',
   autoOrderConfirmSub: 'Confirmer ou rejeter cette suggestion sûre pour le {period}',
   autoOrderApprovalNote: 'Filtré selon les allergies et conditions médicales. Confirmer enverra la commande.',
+  autoOrderForToday: "Pour le {period} d'aujourd'hui",
+  autoOrderForTomorrow: 'Pour le {period} de demain',
+  autoOrderServedWindow: 'Servi {window}',
+  autoOrderServingNow: 'Servi maintenant',
   dismiss: 'Rejeter',
   placeOrder: 'Passer la commande',
   viewDietaryRestrictionsPrompt: 'Voir les restrictions alimentaires',
@@ -1082,6 +1098,10 @@ const ZH: TranslationKeys = {
   suggestedAutoOrder: '建议自动下单',
   autoOrderConfirmSub: '确认或忽略此安全的{period}建议',
   autoOrderApprovalNote: '已根据过敏和医疗条件过滤。确认后将发送订单。',
+  autoOrderForToday: '今天的{period}',
+  autoOrderForTomorrow: '明天的{period}',
+  autoOrderServedWindow: '供应时间 {window}',
+  autoOrderServingNow: '正在供应',
   dismiss: '忽略',
   placeOrder: '下单',
   viewDietaryRestrictionsPrompt: '查看饮食限制',

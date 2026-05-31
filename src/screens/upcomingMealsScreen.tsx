@@ -17,7 +17,7 @@ import {
 import type { Order } from './context/CartContext';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
-import { useKitchenMessages } from './context/KitchenMessageContext';
+import { useKitchenMessages, SPECIAL_NOTE_TAG } from './context/KitchenMessageContext';
 import { translateMealName, translateMealPeriod } from '../services/mealLocalization';
 import { getMealImage, getMealPlaceholder } from '../services/mealDisplayService';
 import { MealService } from '../services/localDataService';
@@ -65,18 +65,36 @@ function isToday(date: Date | string): boolean {
   );
 }
 
-/** Returns the estimated ready time: placedAt + 2 hours */
-function estimatedReadyTime(placedAt: Date, hour12 = true): string {
-  const d = new Date(placedAt);
-  d.setHours(d.getHours() + 2);
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12 });
+/**
+ * Service window end-times per meal period.
+ * "Ready by" is shown as a fixed facility target rather than
+ * a moving "order time + 2 hours" window, so every Breakfast
+ * order consistently says "Ready by 9:00 AM", etc.
+ */
+const MEAL_SERVICE_HOUR: Record<string, [number, number]> = {
+  breakfast: [9,   0],
+  lunch:     [12, 30],
+  dinner:    [18,  0],
+};
+
+function mealServiceDate(mealOfDay: string | undefined): Date {
+  const p = (mealOfDay ?? '').toLowerCase();
+  const [h, m] = MEAL_SERVICE_HOUR[p] ?? [12, 30];
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
 }
 
-/** Returns how many minutes until the estimated ready time; negative if past. */
-function minutesUntilReady(placedAt: Date): number {
-  const ready = new Date(placedAt);
-  ready.setHours(ready.getHours() + 2);
-  return Math.round((ready.getTime() - Date.now()) / 60000);
+/** Returns the facility-scheduled ready time for this meal period. */
+function estimatedReadyTime(mealOfDay: string | undefined, hour12 = true): string {
+  return mealServiceDate(mealOfDay).toLocaleTimeString([], {
+    hour: 'numeric', minute: '2-digit', hour12,
+  });
+}
+
+/** Returns minutes until the meal service window; negative = service time has passed. */
+function minutesUntilReady(mealOfDay: string | undefined): number {
+  return Math.round((mealServiceDate(mealOfDay).getTime() - Date.now()) / 60000);
 }
 
 function UpcomingMealsScreen({ navigation, route }: any) {
@@ -192,6 +210,17 @@ function UpcomingMealsScreen({ navigation, route }: any) {
     const rid = route?.params?.residentId;
     if (rid) setCurrentResidentId(String(rid));
   }, [route?.params?.residentId, setCurrentResidentId]);
+
+  // Mark kitchen messages as read after render — never during render,
+  // which triggers the "setState in KitchenMessageProvider while rendering
+  // UpcomingMealsScreen" React error.
+  useEffect(() => {
+    kitchenMessages.forEach((m) => {
+      if (!m.read && String(m.residentId) === String(residentId)) {
+        markKitchenMsgRead(m.id);
+      }
+    });
+  }, [kitchenMessages, residentId, markKitchenMsgRead]);
 
   // Poll only while THIS screen is focused. Without useFocusEffect,
   // the 15s interval kept firing forever after the resident navigated
@@ -660,9 +689,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                   {(() => {
                   const expanded   = expandedId === order.id;
                   const statusInfo = statusConfig[order.status];
-                  const minsLeft   = minutesUntilReady(order.placedAt);
-                  const estReady   = estimatedReadyTime(order.placedAt, !use24Hour);
-                  const isOverdue  = minsLeft <= 0;
 
                   return (
                     <TouchableOpacity
@@ -692,28 +718,6 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                           <Text style={styles.confirmPlacedLabel}>{t.placedAt}</Text>
                           <Text style={styles.confirmPlacedTime}>{formatTime(order.placedAt)}</Text>
                         </View>
-                      </View>
-
-                      {/* ── 2-Hour Reminder ── */}
-                      <View style={[styles.reminderRow, isOverdue ? styles.reminderRowReady : styles.reminderRowPending]}>
-                        <Feather
-                          name={isOverdue ? 'check-circle' : 'clock'}
-                          size={14}
-                          color={isOverdue ? '#15803d' : '#b45309'}
-                        />
-                        {isOverdue ? (
-                          <Text style={[styles.reminderRowText, { color: '#15803d' }]}>
-                            {t.estReadyBy.replace('{time}', estReady)} · {t.shouldBeReadySoon}
-                          </Text>
-                        ) : minsLeft <= 30 ? (
-                          <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
-                            {t.readyInAbout.replace('{min}', String(minsLeft)).replace('{time}', estReady)}
-                          </Text>
-                        ) : (
-                          <Text style={[styles.reminderRowText, { color: '#b45309' }]}>
-                            {t.twoHourReminder.replace('{time}', estReady)}
-                          </Text>
-                        )}
                       </View>
 
                       {/* Progress track */}
@@ -828,15 +832,18 @@ function UpcomingMealsScreen({ navigation, route }: any) {
 
                       {/* Meal rows */}
                       {order.items.map((item, idx) => {
-                        const img = getMealImage(item.name);
+                        // Backend imageUrl is the single source of truth (same as
+                        // the browse menu & kitchen). Only fall back to a bundled
+                        // image when the backend shipped no URL.
                         const remoteUri = (item as any).imageUrl?.trim?.() || null;
+                        const img = remoteUri ? null : getMealImage(item.name);
                         const ph  = getMealPlaceholder(item.name);
                         return (
                           <View key={`${item.id}-${idx}`} style={styles.mealRow}>
-                            {img ? (
-                              <Image source={img} style={styles.mealThumb} />
-                            ) : remoteUri ? (
+                            {remoteUri ? (
                               <Image source={{ uri: remoteUri }} style={styles.mealThumb} />
+                            ) : img ? (
+                              <Image source={img} style={styles.mealThumb} />
                             ) : (
                               <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
                                 <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
@@ -871,6 +878,43 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         );
                       })}
 
+                      {/* ── Special note this resident sent with the order ── */}
+                      {(() => {
+                        const backendId = order.backendId;
+                        const orderTag = backendId ? `[Order #${backendId}]` : null;
+                        const noteMsgs = kitchenMessages.filter(
+                          (m) =>
+                            String(m.residentId) === String(residentId) &&
+                            m.text.includes(SPECIAL_NOTE_TAG) &&
+                            (orderTag
+                              ? m.text.startsWith(orderTag)
+                              : !m.text.match(/^\[Order #\d+\]/)),
+                        );
+                        const noteText = noteMsgs
+                          .map((m) =>
+                            m.text
+                              .replace(orderTag ?? '', '')
+                              .replace(SPECIAL_NOTE_TAG, '')
+                              .trim(),
+                          )
+                          .filter(Boolean)
+                          .join('\n');
+                        if (!noteText) return null;
+                        return (
+                          <View style={styles.specialNoteSection}>
+                            <View style={styles.kitchenMsgHeader}>
+                              <Feather name="edit-3" size={13} color="#92400E" />
+                              <Text style={[styles.specialNoteTitle, { fontSize: scaled(11) }]}>
+                                {t.specialNoteForKitchen}
+                              </Text>
+                            </View>
+                            <Text style={[styles.specialNoteBody, { fontSize: scaled(14) }]}>
+                              {noteText}
+                            </Text>
+                          </View>
+                        );
+                      })()}
+
                       {/* ── Kitchen Messages for this order ── */}
                       {(() => {
                         const backendId = order.backendId;
@@ -878,6 +922,9 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                         const orderMsgs = kitchenMessages.filter(
                           (m) =>
                             String(m.residentId) === String(residentId) &&
+                            // The resident's own special note shows in its own
+                            // section above — keep it out of the chat thread.
+                            !m.text.includes(SPECIAL_NOTE_TAG) &&
                             (orderTag
                               ? m.text.startsWith(orderTag)
                               : !m.text.match(/^\[Order #\d+\]/))
@@ -896,7 +943,9 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                               const cleanText = orderTag
                                 ? msg.text.replace(orderTag, '').trim()
                                 : msg.text;
-                              if (!msg.read) markKitchenMsgRead(msg.id);
+                              // markRead is called in a useEffect below — never
+                              // during render (that causes the KitchenMessageProvider
+                              // setState-during-render React error).
                               return (
                                 <View key={msg.id} style={styles.kitchenMsgBubble}>
                                   <Text style={[styles.kitchenMsgText, { fontSize: scaled(13) }]}>
@@ -1016,15 +1065,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
 
                       {/* Item rows */}
                       {order.items.map((item, idx) => {
-                        const img = getMealImage(item.name);
                         const remoteUri = (item as any).imageUrl?.trim?.() || null;
+                        const img = remoteUri ? null : getMealImage(item.name);
                         const ph = getMealPlaceholder(item.name);
                         return (
                           <View key={`${item.id}-${idx}`} style={styles.mealRow}>
-                            {img ? (
-                              <Image source={img} style={styles.mealThumb} />
-                            ) : remoteUri ? (
+                            {remoteUri ? (
                               <Image source={{ uri: remoteUri }} style={styles.mealThumb} />
+                            ) : img ? (
+                              <Image source={img} style={styles.mealThumb} />
                             ) : (
                               <View style={[styles.mealThumbPlaceholder, { backgroundColor: ph.bg }]}>
                                 <Text style={{ fontSize: 22 }}>{ph.emoji}</Text>
@@ -1091,15 +1140,15 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                       </Text>
                     </View>
                     {order.items.map((item, idx) => {
-                      const img = getMealImage(item.name);
                       const remoteUri = (item as any).imageUrl?.trim?.() || null;
+                      const img = remoteUri ? null : getMealImage(item.name);
                       const ph  = getMealPlaceholder(item.name);
                       return (
                         <View key={`${item.id}-${idx}`} style={styles.completedRow}>
-                          {img ? (
-                            <Image source={img} style={styles.completedThumb} />
-                          ) : remoteUri ? (
+                          {remoteUri ? (
                             <Image source={{ uri: remoteUri }} style={styles.completedThumb} />
+                          ) : img ? (
+                            <Image source={img} style={styles.completedThumb} />
                           ) : (
                             <View style={[styles.completedThumbPlaceholder, { backgroundColor: ph.bg }]}>
                               <Feather name="coffee" size={14} color={COLORS.primary} />
@@ -1117,6 +1166,17 @@ function UpcomingMealsScreen({ navigation, route }: any) {
                     <Text style={[styles.completionText, { fontSize: scaled(13) }]}>
                       {t.mealCompleted}
                     </Text>
+                    <TouchableOpacity
+                      style={styles.dismissOrderBtn}
+                      onPress={() => handleRemoveOrder(order.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t.dismiss}
+                    >
+                      <Feather name="x" size={16} color={COLORS.textMuted} />
+                      <Text style={[styles.dismissOrderBtnText, { fontSize: scaled(14) }]}>
+                        {t.dismiss}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 ))}
               </>
@@ -1447,6 +1507,26 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
     fontWeight: '700',
   },
+  // Dismiss button on completed orders — neutral (not destructive) since the
+  // meal is already done; this just clears it from the resident's view.
+  dismissOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 40,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  dismissOrderBtnText: {
+    color: COLORS.textMuted,
+    fontWeight: '700',
+  },
 
   // Meal rows
   mealRow: {
@@ -1687,6 +1767,31 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E2DFD8',
     paddingTop: 10,
+  },
+  // Resident's own "special note for kitchen" — amber, distinct from the
+  // green kitchen-chat bubbles so it reads as their instruction, not a reply.
+  specialNoteSection: {
+    marginTop: 10,
+    marginBottom: 2,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    padding: 10,
+  },
+  specialNoteTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  specialNoteBody: {
+    color: '#92400E',
+    fontWeight: '500',
+    fontStyle: 'italic',
+    lineHeight: 19,
+    marginTop: 2,
   },
   kitchenMsgHeader: {
     flexDirection: 'row',

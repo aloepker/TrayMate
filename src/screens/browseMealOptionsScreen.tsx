@@ -232,6 +232,14 @@ type Meal = DisplayMeal;
 type PendingAuto = {
   period: string;
   items: Meal[];
+  /** Minutes until this period starts (or ends, if being served now). */
+  minsUntil: number;
+  /** True when the current device time falls inside this meal's service window. */
+  isNow: boolean;
+  /** True when this slot's window already passed today, so it's tomorrow's meal. */
+  forTomorrow: boolean;
+  /** Human-readable service window, e.g. "7:00 AM – 10:00 AM". */
+  windowLabel: string;
 };
 
 type ChatMessage = {
@@ -974,6 +982,16 @@ const MEAL_SCHEDULE = [
 // must SHOUT "for tomorrow" — residents have confused breakfast-at-night with
 // "breakfast is open now". The banner copy and disabled lunch/dinner are how
 // we keep that distinction obvious.
+/** Format a minute-of-day (0–1439) as a 12-hour clock label, e.g. 420 → "7:00 AM". */
+function formatMinOfDay(mins: number): string {
+  const m = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h24 = Math.floor(m / 60);
+  const min = m % 60;
+  const ampm = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(min).padStart(2, '0')} ${ampm}`;
+}
+
 const BREAKFAST_PREORDER_START = 19 * 60; // 7:00 PM
 
 /** True from 7:00 PM through midnight on the device clock. */
@@ -987,13 +1005,27 @@ const BREAKFAST_WINDOW_LABEL = '7:00 AM – 10:00 AM';
 
 export type MealAvailabilityStatus = 'available' | 'preorder_tomorrow' | 'unavailable';
 
+/** End minute of a time-range string, used to decide today-vs-tomorrow. */
+function timeRangeEndMinutes(timeRange: string): number {
+  if (!timeRange) return NaN;
+  const normalized = timeRange.replace(/[–—]/g, '-');
+  const parts = normalized.split('-').map((p) => p.trim());
+  if (parts.length < 2) return NaN;
+  const end = parseTimeToMinutes(parts[1]);
+  return isNaN(end) ? NaN : end;
+}
+
 /**
- * Three-state availability:
- *  - available           → order it right now
- *  - preorder_tomorrow   → breakfast after 7 PM: orderable, served tomorrow morning
- *  - unavailable         → outside window, and not a preorder case
- * UI branches on this to avoid showing a "Not available" grey-out on meals that
- * are actually orderable (just for a future serving).
+ * Three-state availability — ordering is now flexible (a resident can
+ * order ANY meal at ANY time), so this no longer locks anything out; it
+ * only tells the UI whether ordering *now* means today or tomorrow:
+ *  - available           → served now, or still upcoming later today
+ *  - preorder_tomorrow   → this period's window already ended today, so
+ *                          ordering now schedules it for tomorrow
+ *  - unavailable         → (legacy) effectively unused for time reasons
+ *
+ * Generalised from the old breakfast-only 7 PM rule to ALL periods so the
+ * "for today / for tomorrow" banner reads correctly around dinner time too.
  */
 function getAvailabilityStatus(
   timeRange: string,
@@ -1002,8 +1034,32 @@ function getAvailabilityStatus(
 ): MealAvailabilityStatus {
   if (period === 'Drinks' || period === 'Sides') return 'available';
   if (isWithinTimeRange(timeRange, period, now)) return 'available';
-  if (period === 'Breakfast' && isBreakfastPreorderTime(now)) return 'preorder_tomorrow';
-  return 'unavailable';
+  const endMins = timeRangeEndMinutes(timeRange);
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  // Window already finished for today → it's a pre-order for tomorrow.
+  if (!isNaN(endMins) && nowMins > endMins) return 'preorder_tomorrow';
+  // Window is still ahead of us today → orderable, served later today.
+  return 'available';
+}
+
+/**
+ * Banner plan for the meal-detail sheet. Returns null when the meal is
+ * being served right now (or is an all-day drink/side) — in that case no
+ * "today / tomorrow" clarification is needed. Otherwise it tells the
+ * resident, in plain words, which day this order lands on.
+ */
+function getServingPlan(
+  timeRange: string,
+  period: string | undefined,
+  now: Date = new Date(),
+): { day: 'today' | 'tomorrow'; window: string } | null {
+  if (period === 'Drinks' || period === 'Sides') return null;
+  if (isWithinTimeRange(timeRange, period, now)) return null;
+  const window = (timeRange || '').replace(/[–—]/g, '-').trim();
+  const endMins = timeRangeEndMinutes(timeRange);
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const isTomorrow = !isNaN(endMins) && nowMins > endMins;
+  return { day: isTomorrow ? 'tomorrow' : 'today', window };
 }
 
 function getCurrentMealPeriod(now: Date = new Date()): string | null {
@@ -1203,11 +1259,24 @@ function hasOrderForPeriodOnDate(ordersForResident: any[], period: string, dateK
 }
 
 function buildPendingAutoOrder(
-  suggestion: { period: string; meal: Meal; drink?: Meal; dessert?: Meal },
+  suggestion: {
+    period: string;
+    meal: Meal;
+    drink?: Meal;
+    dessert?: Meal;
+    minsUntil?: number;
+    isNow?: boolean;
+    forTomorrow?: boolean;
+    windowLabel?: string;
+  },
 ): PendingAuto {
   return {
     period: suggestion.period,
     items: [suggestion.meal, suggestion.drink, suggestion.dessert].filter(Boolean) as Meal[],
+    minsUntil: suggestion.minsUntil ?? 0,
+    isNow: suggestion.isNow ?? false,
+    forTomorrow: suggestion.forTomorrow ?? false,
+    windowLabel: suggestion.windowLabel ?? '',
   };
 }
 
@@ -1325,6 +1394,9 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   );
   const autoOrderListRef = useRef<FlatList<any>>(null);
   const [showAutoOrderPanel, setShowAutoOrderPanel] = useState(false);
+  // True only while an on-demand auto-order suggestion is being built (the
+  // resident tapped the suggest button). Drives the spinner on that button.
+  const [autoOrderLoading, setAutoOrderLoading] = useState(false);
   // Detail sheet — scroll ref + note input position for keyboard avoidance
   const detailScrollRef = useRef<ScrollView>(null);
   const [noteInputY, setNoteInputY] = useState(0);
@@ -1877,11 +1949,13 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load menu and recommendation when component mounts or period changes
+  // Load the menu grid when the component mounts or the period changes.
+  // NOTE: the AI recommendation is intentionally NOT loaded here — it now
+  // runs only when the resident taps "Recommend a meal" on the bottom card,
+  // so switching tabs / re-entering the screen never burns Gemini quota.
   useEffect(() => {
     loadMenu(selectedPeriod.value, selectedPeriod.key);
-    loadRecommendation();
-  }, [selectedPeriod, loadMenu, loadRecommendation]);
+  }, [selectedPeriod, loadMenu]);
 
   // Derived value that ONLY changes when the resident crosses a meal-
   // period boundary (e.g. 10am→11am brings them out of breakfast and
@@ -1914,19 +1988,15 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   // No matter how many times the resident's profile changes, the AI gets a
   // fresh-safety-filtered list every time the safety profile key changes
   // (key is in the deps array → effect re-runs → candidates rebuilt).
-  useEffect(() => {
+  // On-demand auto-order suggestion builder. Runs ONLY when the resident
+  // taps the suggest button — never on mount, tab switch, or the per-minute
+  // clock tick — so Gemini quota is spent strictly on explicit user intent.
+  // Returns the built suggestions (and also stores them in state for the
+  // panel + bottom banner to render).
+  const generateAutoOrderSuggestions = useCallback(async (): Promise<PendingAuto[]> => {
     const candidateMeals = autoOrderMeals.length > 0 ? autoOrderMeals : meals;
-    if (autoSuggestDismissed || candidateMeals.length === 0) return;
+    if (candidateMeals.length === 0) return [];
 
-    // Skip AI when only the display tab changed (meals dep fired) but the
-    // period boundary / resident / safety-profile is exactly the same as
-    // the last successful AI run. Use the cheap history-based fallback
-    // instead — this is what prevents quota burn on every tab switch.
-    const aiRunKey = `${residentId ?? ''}:${currentPeriodKey}:${residentSafetyProfileKey}`;
-    const skipAI = autoSuggestAIKeyRef.current === aiRunKey;
-
-    let cancelled = false;
-    (async () => {
     const resOrders = residentId ? getOrdersForResident(residentId) : orders;
     const today = todayLocalISO(); // local YYYY-MM-DD, not UTC
 
@@ -2008,27 +2078,23 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       );
 
       // Step 3 — ask the AI (returns null if Gemini unreachable / over-quota).
-      // Skipped when the period/resident/profile key hasn't changed since the
-      // last run (i.e. only the display tab switched) to avoid burning quota.
-      if (!skipAI) {
-        try {
-          const aiPick = await getAIRecommendation(
-            aiResident,
-            historyRanked.map(toAICandidate),
-            periodLabel,
+      try {
+        const aiPick = await getAIRecommendation(
+          aiResident,
+          historyRanked.map(toAICandidate),
+          periodLabel,
+        );
+        if (aiPick?.meal_name) {
+          const picked = historyRanked.find(
+            (m) => m.name.toLowerCase() === aiPick.meal_name.toLowerCase(),
           );
-          if (aiPick?.meal_name) {
-            const picked = historyRanked.find(
-              (m) => m.name.toLowerCase() === aiPick.meal_name.toLowerCase(),
-            );
-            // Step 4 — re-verify safety on AI's actual returned meal (FAILSAFE LAYER 2)
-            if (picked && isSafeForResident(picked)) {
-              return picked;
-            }
+          // Step 4 — re-verify safety on AI's actual returned meal (FAILSAFE LAYER 2)
+          if (picked && isSafeForResident(picked)) {
+            return picked;
           }
-        } catch {
-          /* swallow — fall through to history pick */
         }
+      } catch {
+        /* swallow — fall through to history pick */
       }
 
       // Step 5 — history-based fallback (safety-filtered internally)
@@ -2037,7 +2103,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
 
     // Build a suggestion for any given meal period. Returns null when
     // there isn't a safe main dish for that period.
-    const buildSuggestionFor = async (slot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean }) => {
+    const buildSuggestionFor = async (slot: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean; forTomorrow: boolean }) => {
       const periodLabel = slot.period.label;
       const mealFreq = getFrequencyRanked(periodLabel);
       const mainMeal = await pickMainMeal(periodLabel, mealFreq);
@@ -2059,6 +2125,8 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         period: periodLabel,
         minsUntil: slot.minsUntil,
         isNow: slot.isNow,
+        forTomorrow: slot.forTomorrow,
+        windowLabel: `${formatMinOfDay(slot.period.start)} – ${formatMinOfDay(slot.period.end)}`,
         meal: mainMeal,
         drink: suggestDrink,
         dessert: suggestDessert,
@@ -2070,7 +2138,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     // every remaining period — the modal shows them all as swipeable
     // slides, while the bottom auto-suggest panel keeps using the
     // closest-in-time one.
-    const slots: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean }[] = [];
+    const slots: { period: typeof MEAL_SCHEDULE[0]; minsUntil: number; isNow: boolean; forTomorrow: boolean }[] = [];
     for (let offset = 0; offset < MEAL_SCHEDULE.length; offset++) {
       const idx = (startIdx + offset) % MEAL_SCHEDULE.length;
       const period = MEAL_SCHEDULE[idx];
@@ -2081,42 +2149,57 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
         : (period.start > nowMins
             ? period.start - nowMins
             : 24 * 60 - nowMins + period.start);
-      slots.push({ period, minsUntil, isNow });
+      // The window has already started/passed today (and we're not inside it),
+      // so the next time this meal is served is tomorrow.
+      const forTomorrow = !isNow && period.start <= nowMins;
+      slots.push({ period, minsUntil, isNow, forTomorrow });
     }
 
-    // Parallel — AI service caches per (resident + period + candidate IDs)
-    // so repeated effect runs with the same profile re-use cached picks.
+    // AI service caches per (resident + period + candidate IDs), so tapping
+    // the suggest button again within the cache window re-uses the picks
+    // instead of making fresh Gemini calls.
     const built = await Promise.all(slots.map(buildSuggestionFor));
-    if (cancelled) return;
-    // Mark that AI ran for this key so subsequent tab-switch re-runs skip it.
-    if (!skipAI) autoSuggestAIKeyRef.current = aiRunKey;
     const allSuggestions = built.filter((s): s is NonNullable<typeof s> => s !== null);
 
     if (allSuggestions.length === 0) {
       setAutoSuggest(null);
       setPendingAutoOrder(null);
       setAllPendingAutoOrders([]);
-      setShowAutoOrderPanel(false);
-      return;
+      return [];
     }
     const closest = allSuggestions[0]!;
     setAutoSuggest(closest);
+    const list = allSuggestions.map((s) => buildPendingAutoOrder(s as any));
     if (residentId) {
-      setPendingAutoOrder(buildPendingAutoOrder(closest as any));
-      setAllPendingAutoOrders(allSuggestions.map((s) => buildPendingAutoOrder(s as any)));
+      setPendingAutoOrder(list[0] ?? null);
+      setAllPendingAutoOrders(list);
     }
-    })();
-
-    return () => { cancelled = true; };
+    return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // ⚠️  IMPORTANT: do NOT add currentTime.getMinutes() to this dep array.
-  // The clock provider ticks every 60s — if minutes are a dep, this effect
-  // re-runs every minute, which fires up to N AI calls per minute (one per
-  // unordered meal period) and burns through the Gemini free-tier quota
-  // (250 req/day per model) in roughly an hour PER DEVICE that has the
-  // app open. Period-boundary changes are captured by `currentPeriodKey`
-  // below — see the useMemo that derives it.
-  }, [meals, autoOrderMeals, autoSuggestDismissed, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfileKey, currentPeriodKey]);
+  }, [meals, autoOrderMeals, orders, residentId, getOrdersForResident, availableDrinks, availableSides, residentSafetyProfile, residentSafetyProfileKey, currentTime, residentName]);
+
+  // Tap handler for the header suggest button: build a fresh suggestion on
+  // demand, then open the panel. Resets the per-session "dismissed" flag so
+  // a previously dismissed suggestion can be re-requested explicitly.
+  const handleRequestAutoOrder = useCallback(async () => {
+    if (autoOrderLoading) return;
+    setAutoSuggestDismissed(false);
+    setAutoOrderLoading(true);
+    try {
+      const list = await generateAutoOrderSuggestions();
+      if (list.length > 0) {
+        setAutoOrderSlideIdx(0);
+        setShowAutoOrderPanel(true);
+      } else {
+        Alert.alert(
+          t.suggestedAutoOrder,
+          t.noRecommendation,
+        );
+      }
+    } finally {
+      setAutoOrderLoading(false);
+    }
+  }, [autoOrderLoading, generateAutoOrderSuggestions, t.suggestedAutoOrder, t.noRecommendation]);
 
   // Handle refresh
   const onRefresh = useCallback(async () => {
@@ -2242,6 +2325,22 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
     return getUnsafeReason(meal as any, residentSafetyProfile);
   };
 
+  /**
+   * Combined "why this add-on can't be picked" check for the drink/side
+   * pickers. Returns a human-readable reason (or null if selectable).
+   * Two independent gates, in priority order:
+   *   1. Kitchen "hide" feature — isAvailable === false → unavailable today.
+   *   2. Resident dietary/allergy conflict (via getMealUnsafeReason).
+   * Both render the item RED + 🚫 and block selection at the source.
+   */
+  const getAddonBlockReason = (
+    meal: (Meal & { isAvailable?: boolean }) | null | undefined,
+  ): string | null => {
+    if (!meal) return null;
+    if ((meal as any).isAvailable === false) return "Unavailable — hidden by the kitchen";
+    return getMealUnsafeReason(meal);
+  };
+
   const addSuggestedItemToCart = (item: Meal): boolean => {
     const unsafeReason = getMealUnsafeReason(item);
     if (unsafeReason) {
@@ -2347,18 +2446,19 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
       return;
     }
 
-    // If this is a breakfast pre-order (after 7 PM), prepend a clear
-    // "[FOR TOMORROW'S BREAKFAST]" tag to the note so the kitchen sorts it
-    // to the right tray run the next morning. Resident typed note is kept
-    // verbatim after the tag.
+    // If this period's window has already passed today, this order is a
+    // pre-order for tomorrow — prepend a clear "[FOR TOMORROW'S <PERIOD>]"
+    // tag so the kitchen sorts it to the right tray run the next day.
+    // Resident's typed note is kept verbatim after the tag.
     const isPreorderAdd = getAvailabilityStatus(
       selectedMeal.time_range,
       selectedMeal.meal_period,
       currentTime,
     ) === 'preorder_tomorrow';
     const trimmedNote = specialNote.trim();
+    const periodTag = (selectedMeal.meal_period || 'MEAL').toUpperCase();
     const finalNote = isPreorderAdd
-      ? `[FOR TOMORROW'S BREAKFAST]${trimmedNote ? ' ' + trimmedNote : ''}`
+      ? `[FOR TOMORROW'S ${periodTag}]${trimmedNote ? ' ' + trimmedNote : ''}`
       : (trimmedNote || undefined);
 
     addToCart({ ...selectedMeal, id: parseInt(selectedMeal.id), specialNote: finalNote });
@@ -2614,21 +2714,26 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
           >
             <Feather name="calendar" size={26} color={pt.titleColor} />
           </TouchableOpacity>
-          {/* Pending auto-order bell. Only renders while there's a resident
-              suggestion waiting for confirm/deny. */}
-          {pendingAutoOrder && (
-            <TouchableOpacity
-              style={[
-                styles.headerActionBtn,
-                { backgroundColor: pt.buttonBg, borderColor: '#DC2626', borderWidth: 1.5 },
-              ]}
-              onPress={() => setShowAutoOrderPanel(true)}
-              activeOpacity={0.85}
-            >
-              <Feather name="bell" size={26} color="#DC2626" />
-              <View style={styles.bellBadge} />
-            </TouchableOpacity>
-          )}
+          {/* Auto-order suggestion button. Always available — tapping it is
+              what triggers the AI pick (it no longer runs on load/tab switch).
+              Shows a spinner while the suggestion is being built. */}
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              { backgroundColor: pt.buttonBg, borderColor: '#DC2626', borderWidth: 1.5 },
+            ]}
+            onPress={handleRequestAutoOrder}
+            disabled={autoOrderLoading}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={t.suggestedAutoOrder}
+          >
+            {autoOrderLoading ? (
+              <ActivityIndicator size="small" color="#DC2626" />
+            ) : (
+              <Feather name="zap" size={26} color="#DC2626" />
+            )}
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerActionBtn, { backgroundColor: pt.buttonBg, borderColor: pt.buttonBorder, borderWidth: 1.5 }]}
             onPress={() => setShowBrowseSupport(true)}
@@ -2782,7 +2887,18 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               );
             })()
           ) : (
-            <Text style={[styles.bottomCardRecText, { fontSize: scaled(17), lineHeight: scaled(24) }]}>{t.noRecommendation}</Text>
+            // No recommendation loaded yet — show a button that fetches one on
+            // demand (the AI no longer runs automatically on load/tab switch).
+            <TouchableOpacity
+              style={styles.bottomCardRecBtn}
+              onPress={loadRecommendation}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t.recommendAMeal}
+            >
+              <Feather name="zap" size={18} color="#FFF" />
+              <Text style={[styles.bottomCardRecBtnText, { fontSize: scaled(16) }]}>{t.recommendAMeal}</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -3007,13 +3123,14 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                 ? selectedMeal.imageUrl.trim()
                 : null;
               const detailLocalImg = detailRemoteUri ? null : getMealImage(selectedMeal.name);
-              // Is this being customised during the breakfast pre-order window?
-              // Drives the big "for tomorrow" banner + the kitchen note prefix.
-              const detailIsPreorder = getAvailabilityStatus(
+              // Flexible ordering: tell the resident which day this order
+              // lands on. Null when the meal is being served right now.
+              const servingPlan = getServingPlan(
                 selectedMeal.time_range,
                 selectedMeal.meal_period,
                 currentTime,
-              ) === 'preorder_tomorrow';
+              );
+              const periodWord = (selectedMeal.meal_period || 'meal').toLowerCase();
               return (
                 <>
                   {/* Image */}
@@ -3027,22 +3144,44 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   {/* Info */}
                   <View style={styles.detailBody}>
                     {/*
-                      Pre-order explainer — the first thing the resident sees
-                      inside the detail sheet when it's past 7 PM. Written
-                      plainly so there's no room to misread it as
-                      "breakfast is being served now".
+                      Serving-day explainer — the first thing the resident
+                      sees inside the detail sheet. Ordering is flexible
+                      (any meal, any time), so this banner removes all doubt
+                      about WHICH DAY the tray lands on. Amber = tomorrow,
+                      green = later today. Hidden when the meal is being
+                      served right now (no clarification needed).
                     */}
-                    {detailIsPreorder && (
-                      <View style={styles.preorderBanner}>
-                        <View style={styles.preorderBannerIconWrap}>
-                          <Feather name="sunrise" size={18} color="#FFFFFF" />
+                    {servingPlan && (
+                      <View style={[
+                        styles.preorderBanner,
+                        servingPlan.day === 'today' && styles.servingTodayBanner,
+                      ]}>
+                        <View style={[
+                          styles.preorderBannerIconWrap,
+                          servingPlan.day === 'today' && styles.servingTodayIconWrap,
+                        ]}>
+                          <Feather
+                            name={servingPlan.day === 'tomorrow' ? 'sunrise' : 'clock'}
+                            size={18}
+                            color="#FFFFFF"
+                          />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.preorderBannerTitle, { fontSize: scaled(14) }]}>
-                            Pre-order for tomorrow morning
+                          <Text style={[
+                            styles.preorderBannerTitle,
+                            servingPlan.day === 'today' && styles.servingTodayTitle,
+                            { fontSize: scaled(14) },
+                          ]}>
+                            {servingPlan.day === 'tomorrow'
+                              ? `Pre-order for tomorrow`
+                              : `Served later today`}
                           </Text>
-                          <Text style={[styles.preorderBannerBody, { fontSize: scaled(13) }]}>
-                            Served {BREAKFAST_WINDOW_LABEL} when the kitchen opens.
+                          <Text style={[
+                            styles.preorderBannerBody,
+                            servingPlan.day === 'today' && styles.servingTodayBody,
+                            { fontSize: scaled(13) },
+                          ]}>
+                            {`This ${periodWord} will be served ${servingPlan.window} ${servingPlan.day}.`}
                           </Text>
                         </View>
                       </View>
@@ -3101,15 +3240,16 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                     }
                                     const found = availableDrinks.find(d => d.id === val);
                                     if (!found) { setSelectedDrink(null); return; }
-                                    // Block selection of restricted drinks at the
-                                    // source rather than waiting until the resident
-                                    // hits "Add to cart". The dropdown also marks
-                                    // them with ⚠ below — this is the safety net.
-                                    const reason = getMealUnsafeReason(found);
+                                    // Block selection of restricted OR kitchen-hidden
+                                    // drinks at the source rather than waiting until
+                                    // the resident hits "Add to cart". The dropdown
+                                    // also marks them 🚫 + red below — this is the
+                                    // safety net.
+                                    const reason = getAddonBlockReason(found);
                                     if (reason) {
                                       Alert.alert(
-                                        'Restricted drink',
-                                        `${found.name} is flagged: ${reason}. Pick a different drink, or skip the drink.`,
+                                        'Unavailable drink',
+                                        `${found.name}: ${reason}. Pick a different drink, or skip the drink.`,
                                       );
                                       setSelectedDrink(null);
                                       return;
@@ -3121,7 +3261,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                 >
                                   <Picker.Item label={t.noDrinkOption} value="__none__" />
                                   {availableDrinks.map(drink => {
-                                    const reason = getMealUnsafeReason(drink);
+                                    const reason = getAddonBlockReason(drink);
                                     const prefix = reason ? '🚫 ' : '';
                                     const suffix = reason ? '' : `  ·  ${drink.kcal} kcal`;
                                     return (
@@ -3170,11 +3310,11 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                     }
                                     const found = availableSides.find(s => s.id === val);
                                     if (!found) { setSelectedSide(null); return; }
-                                    const reason = getMealUnsafeReason(found);
+                                    const reason = getAddonBlockReason(found);
                                     if (reason) {
                                       Alert.alert(
-                                        'Restricted side',
-                                        `${found.name} is flagged: ${reason}. Pick a different side, or skip the side.`,
+                                        'Unavailable side',
+                                        `${found.name}: ${reason}. Pick a different side, or skip the side.`,
                                       );
                                       setSelectedSide(null);
                                       return;
@@ -3186,7 +3326,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                                 >
                                   <Picker.Item label={t.noSideOption} value="__none__" />
                                   {availableSides.map(side => {
-                                    const reason = getMealUnsafeReason(side);
+                                    const reason = getAddonBlockReason(side);
                                     const prefix = reason ? '🚫 ' : '';
                                     const suffix = reason ? '' : `  ·  ${side.kcal} kcal`;
                                     return (
@@ -3315,6 +3455,48 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                     </TouchableOpacity>
                   </View>
 
+                  {/* Timing banner — makes it unmistakable whether this is for
+                      the next few hours TODAY or for TOMORROW's tray. */}
+                  {activeSlide && (() => {
+                    const periodLower = translateMealPeriod(activeSlide.period, language).toLowerCase();
+                    const headline = (activeSlide.forTomorrow ? t.autoOrderForTomorrow : t.autoOrderForToday)
+                      .replace('{period}', periodLower);
+                    const subline = activeSlide.isNow
+                      ? t.autoOrderServingNow
+                      : t.autoOrderServedWindow.replace('{window}', activeSlide.windowLabel);
+                    const tomorrow = activeSlide.forTomorrow;
+                    return (
+                      <View
+                        style={[
+                          styles.autoOrderTimingBanner,
+                          tomorrow ? styles.autoOrderTimingTomorrow : styles.autoOrderTimingToday,
+                        ]}
+                        accessibilityRole="text"
+                        accessibilityLabel={`${headline}. ${subline}`}
+                      >
+                        <Feather
+                          name={tomorrow ? 'sunrise' : 'clock'}
+                          size={scaled(16)}
+                          color={tomorrow ? '#5C5FA8' : '#B45309'}
+                        />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={[
+                            styles.autoOrderTimingHeadline,
+                            { fontSize: scaled(14), color: tomorrow ? '#3F3F8A' : '#92400E' },
+                          ]}>
+                            {headline}
+                          </Text>
+                          <Text style={[
+                            styles.autoOrderTimingSub,
+                            { fontSize: scaled(12), color: tomorrow ? '#5C5FA8' : '#B45309' },
+                          ]}>
+                            {subline}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })()}
+
                   {/* Period tabs — also serve as swipe indicators. Tap
                       jumps the FlatList to that slide. */}
                   {slides.length > 1 && (
@@ -3346,7 +3528,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
                   {/* Horizontal swipeable slides — one per remaining period. */}
                   <View
                     onLayout={(e) => setAutoOrderSlideWidth(e.nativeEvent.layout.width)}
-                    style={{ marginBottom: 8 }}
+                    style={{ marginBottom: 8, flexShrink: 1 }}
                   >
                   <FlatList
                     ref={autoOrderListRef}
@@ -3759,6 +3941,7 @@ helpAccordionLeft: {
     maxHeight: '90%',
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
+    overflow: 'hidden', // keep buttons/content from spilling past the rounded corners
     padding: 24,
     shadowColor: '#000',
     shadowOpacity: 0.18,
@@ -3795,7 +3978,33 @@ helpAccordionLeft: {
   autoOrderSlide: {
     width: 672, // matches autoOrderCard inner width at maxWidth (720 - 48 padding)
     maxWidth: '100%',
+    minHeight: 140, // keep a single-item slide from looking cramped, without forcing overflow
     paddingHorizontal: 0,
+  },
+  // ── Timing banner (today vs tomorrow) ──────────────────────────
+  autoOrderTimingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  autoOrderTimingToday: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  autoOrderTimingTomorrow: {
+    backgroundColor: '#EEF0FB',
+    borderColor: '#D6D9F2',
+  },
+  autoOrderTimingHeadline: {
+    fontWeight: '700',
+  },
+  autoOrderTimingSub: {
+    fontWeight: '500',
+    marginTop: 1,
   },
   autoOrderHeader: {
     flexDirection: 'row',
@@ -4306,6 +4515,21 @@ helpAccordionLeft: {
     fontWeight: '900',
     fontSize: 18,
   },
+  bottomCardRecBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    backgroundColor: '#4A5C2A',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 6,
+  },
+  bottomCardRecBtnText: {
+    color: '#FFF',
+    fontWeight: '800',
+  },
   bottomCardSuggestDismiss: {
     alignSelf: 'center',
     paddingVertical: 4,
@@ -4445,6 +4669,21 @@ helpAccordionLeft: {
     fontSize: 13,
     lineHeight: 17,
     color: '#7C2D12',
+  },
+  // "Served later today" variant of the banner — green to read as
+  // "good to go today", visually distinct from the amber "tomorrow".
+  servingTodayBanner: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#4A7A60',
+  },
+  servingTodayIconWrap: {
+    backgroundColor: '#4A7A60',
+  },
+  servingTodayTitle: {
+    color: '#1F4736',
+  },
+  servingTodayBody: {
+    color: '#2F5D49',
   },
   aiRecommendationIcon: {
     width: 36,

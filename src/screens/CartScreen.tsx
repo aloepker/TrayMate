@@ -11,6 +11,7 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import { useCart } from './context/CartContext';
 import { useSettings } from './context/SettingsContext';
+import { useKitchenMessages, SPECIAL_NOTE_TAG } from './context/KitchenMessageContext';
 import {
   translateMealDescription,
   translateMealName,
@@ -54,6 +55,7 @@ const deriveMealOfDayFromCart = (
 const CartScreen = ({ navigation, route }: any) => {
   const { cart: cartItems, removeFromCart, placeOrder, replaceOrder, getTotalNutrition } = useCart();
   const { t, scaled, language, notifications, getTouchTargetSize, theme, setCurrentResidentId } = useSettings();
+  const { sendMessage: sendKitchenMessage } = useKitchenMessages();
   const touchTarget = getTouchTargetSize();
 
   useEffect(() => {
@@ -73,6 +75,8 @@ const CartScreen = ({ navigation, route }: any) => {
     route?.params?.residentName ||
     ResidentService.getResidentById(residentId)?.fullName ||
     ResidentService.getDefaultResident().fullName;
+  const residentRoom =
+    (route?.params?.roomNumber ?? route?.params?.room) as string | undefined;
   const dietaryRestrictions = route?.params?.dietaryRestrictions ?? [];
   const foodAllergies = route?.params?.foodAllergies ?? [];
 
@@ -138,7 +142,41 @@ const CartScreen = ({ navigation, route }: any) => {
     }
   };
 
+  // Collect the resident's "special note for kitchen" from the cart items
+  // BEFORE placing the order (placeOrder clears the cart on success). The
+  // [FOR TOMORROW'S X] pre-order tag is stripped — that's conveyed by its
+  // own banner, not part of the free-text note.
+  const collectSpecialNote = (): string =>
+    cartItems
+      .map((it) =>
+        String((it as any).specialNote ?? '')
+          .replace(/\[FOR TOMORROW'S [A-Z]+\]\s*/i, '')
+          .trim(),
+      )
+      .filter(Boolean)
+      .join('\n');
+
+  // Send the special note through the messages channel so the kitchen sees
+  // it reliably (the order.note backend round-trip is flaky). Tagged with
+  // SPECIAL_NOTE_TAG so both sides render it as a note, not a chat message.
+  const sendSpecialNote = (noteText: string, orderBackendId?: number) => {
+    if (!noteText) return;
+    const orderTag = orderBackendId ? `[Order #${orderBackendId}] ` : '';
+    sendKitchenMessage({
+      residentId: String(residentId),
+      orderId: orderBackendId,
+      residentName,
+      residentRoom: residentRoom ?? '',
+      fromRole: 'resident',
+      fromName: residentName,
+      text: `${orderTag}${SPECIAL_NOTE_TAG} ${noteText}`,
+      channel: 'order',
+    });
+  };
+
   const confirmOrder = async () => {
+    // Capture the note now — the cart is emptied once the order succeeds.
+    const specialNoteText = collectSpecialNote();
     // Safety gate — block checkout if any cart item is unsafe for this resident.
     if (hasUnsafe) {
       const lines = unsafeEntries
@@ -232,6 +270,7 @@ const CartScreen = ({ navigation, route }: any) => {
             return true;
           });
           const replaced = await replaceOrder(conflict.id, residentId, conflict.mealOfDay, merged as any);
+          if (replaced) sendSpecialNote(specialNoteText, replaced.backendId);
           if (replaced && notifications.orderUpdates) {
             Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
           }
@@ -248,6 +287,7 @@ const CartScreen = ({ navigation, route }: any) => {
               text: 'Replace Order',
               onPress: async () => {
                 const replaced = await replaceOrder(conflict.id, residentId);
+                if (replaced) sendSpecialNote(specialNoteText, replaced.backendId);
                 if (replaced && notifications.orderUpdates) {
                   Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
                 }
@@ -259,6 +299,7 @@ const CartScreen = ({ navigation, route }: any) => {
         return;
       }
 
+      if (order) sendSpecialNote(specialNoteText, order.backendId);
       if (order && notifications.orderUpdates) {
         Alert.alert(t.orderUpdates, t.orderUpdatesDesc);
       }

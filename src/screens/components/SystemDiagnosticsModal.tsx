@@ -91,23 +91,50 @@ async function checkBackend(): Promise<Omit<CheckResult, "key" | "label" | "desc
 }
 
 async function checkGemini(): Promise<Omit<CheckResult, "key" | "label" | "description">> {
-  // Pings the backend AI proxy rather than calling Gemini directly — the
-  // client no longer holds the API key. A 5xx from the proxy means the
-  // server is up but Gemini is unreachable/over quota.
+  // The app's AI works through a TWO-STEP path (see geminiService.ts):
+  //   1. POST /ai           — preferred server-side chat endpoint
+  //   2. POST /ai/gemini    — proxy fallback used whenever /ai is down
+  // GrannyGBT and auto-order keep working off step 2 even when /ai returns
+  // a 5xx (e.g. the 505 we've been seeing). The diagnostic must mirror that
+  // same fallback so it reports the AI as healthy when it actually is —
+  // it should only show "fail" when BOTH endpoints are unreachable.
   const started = Date.now();
+  const tok = await getAuthToken().catch(() => null);
+  const authHeader: Record<string, string> = tok ? { Authorization: `Bearer ${tok}` } : {};
+
+  // ── Step 1: preferred /ai endpoint ──────────────────────────────
+  let primaryDetail = "";
   try {
-    const tok = await getAuthToken();
+    const res = await withTimeout(
+      fetch("https://traymate-auth.onrender.com/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ message: "ping", residentId: 0 }),
+      }),
+      TIMEOUT_MS,
+    );
+    if (res.status === 429) {
+      return { status: "slow", latencyMs: Date.now() - started, detail: "quota limit (429)" };
+    }
+    if (res.ok) {
+      const latencyMs = Date.now() - started;
+      return { status: classify(latencyMs), latencyMs, detail: `${GEMINI_CONFIG.model} (/ai)` };
+    }
+    primaryDetail = `/ai HTTP ${res.status}`;
+  } catch (e: any) {
+    primaryDetail = `/ai ${e?.message ?? "unreachable"}`;
+  }
+
+  // ── Step 2: /ai/gemini proxy fallback (what the app uses) ───────
+  try {
     const res = await withTimeout(
       fetch("https://traymate-auth.onrender.com/ai/gemini", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
-        },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           model: GEMINI_CONFIG.model,
           body: {
-            contents: [{ role: "user", parts: [{ text: "ping" }] }],
+            contents: [{ role: "user", parts: [{ text: 'Say "ok"' }] }],
             generationConfig: { maxOutputTokens: 8 },
           },
         }),
@@ -115,19 +142,27 @@ async function checkGemini(): Promise<Omit<CheckResult, "key" | "label" | "descr
       TIMEOUT_MS,
     );
     const latencyMs = Date.now() - started;
-    if (!res.ok) {
+    if (res.status === 429) {
+      return { status: "slow", latencyMs, detail: "quota limit (429)" };
+    }
+    if (res.ok) {
+      // /ai is down but the proxy works — AI is fully functional, just note it.
       return {
-        status: "fail",
+        status: classify(latencyMs),
         latencyMs,
-        detail: `HTTP ${res.status}` + (res.status === 429 ? " (quota)" : ""),
+        detail: `${GEMINI_CONFIG.model} (via proxy; ${primaryDetail})`,
       };
     }
-    return { status: classify(latencyMs), latencyMs, detail: GEMINI_CONFIG.model };
+    return {
+      status: "fail",
+      latencyMs,
+      detail: `${primaryDetail} • /ai/gemini HTTP ${res.status}`,
+    };
   } catch (e: any) {
     return {
       status: "fail",
       latencyMs: Date.now() - started,
-      detail: e?.message ?? "unreachable",
+      detail: `${primaryDetail} • /ai/gemini ${e?.message ?? "unreachable"}`,
     };
   }
 }

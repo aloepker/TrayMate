@@ -34,6 +34,16 @@ type KitchenMessageContextType = {
 
 const KitchenMessageContext = createContext<KitchenMessageContextType | undefined>(undefined);
 
+/**
+ * Marks a resident's per-order "special note for kitchen" when it's sent
+ * through the messages channel. We route the note here (in addition to the
+ * order's `note` field) because the order.note backend round-trip is
+ * unreliable on the deployed instance, whereas /messages is dependable.
+ * Both the kitchen dashboard and the resident's upcoming-meals screen use
+ * this tag to show the note in its own section, separate from chat.
+ */
+export const SPECIAL_NOTE_TAG = '[SPECIAL NOTE]';
+
 // ---------- Backend helpers (graceful fallback) ----------
 
 /** Derive a human-readable department from the message's fromRole. */
