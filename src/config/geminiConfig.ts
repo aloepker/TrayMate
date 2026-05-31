@@ -15,10 +15,14 @@
  */
 
 export const GEMINI_CONFIG = {
-  // Models to try in order — if one hits quota, fall back to next.
-  // The backend uses whichever model the client sends in the request body.
+  // Models to try in order — if one 404s (retired) / 429s (quota) / 503s
+  // (overload), the proxy path falls back to the next. The backend uses
+  // whichever model the client sends in the request body. Keeping a small
+  // chain means one bad model never takes the assistant offline.
   models: [
     'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
   ] as const,
   model: 'gemini-2.5-flash',
 };
