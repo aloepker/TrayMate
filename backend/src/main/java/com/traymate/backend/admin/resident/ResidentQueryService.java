@@ -20,10 +20,10 @@ public class ResidentQueryService {
                         r.getFirstName() + " " + r.getLastName(),
                         r.getRoomNumber(),
                         r.getDietaryRestrictions(),
-                        r.getFoodAllergies()
-                        ,
+                        r.getFoodAllergies(),
                         r.getMedicalConditions(),
-                        r.getMedications()
+                        r.getMedications(),
+                        r.getCaregiver() != null ? r.getCaregiver().getId() : null
                 ))
                 .toList();
     }

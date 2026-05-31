@@ -51,22 +51,60 @@ export default function Login({ navigation }: any) {
     }
   };
 
+  // Render free-tier servers spin down after inactivity and return an empty
+  // body on the first wake-up request. Retry with backoff so the user sees
+  // a friendly "waking up" message instead of a raw JSON parse error.
+  const loginWithRetry = async (): Promise<{ token: string; role: string }> => {
+    const DELAYS = [7000, 14000]; // 2 retries: 7 s, 14 s
+    let lastErr: any;
+    for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
+      if (attempt > 0) {
+        setError(`Server is waking up… retrying (${attempt}/${DELAYS.length})`);
+        await new Promise(r => setTimeout(r, DELAYS[attempt - 1]));
+      }
+      try {
+        const response = await fetch(`${AUTH_BASE_URL}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        const text = await response.text();
+
+        // Empty body = server still spinning up → retry
+        if (!text.trim()) {
+          lastErr = new Error("empty_response");
+          continue;
+        }
+
+        let data: any;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          lastErr = new Error("invalid_response");
+          continue;
+        }
+
+        if (!response.ok) {
+          throw new Error(data?.message || "Invalid email or password");
+        }
+        return data as { token: string; role: string };
+      } catch (err: any) {
+        lastErr = err;
+        const isNetwork = err?.message === "Network request failed";
+        const isWakeUp = err?.message === "empty_response" || err?.message === "invalid_response";
+        if ((isNetwork || isWakeUp) && attempt < DELAYS.length) continue;
+        throw err;
+      }
+    }
+    throw lastErr ?? new Error("Server unavailable. Please try again.");
+  };
+
   const handleLogin = async () => {
     setError("");
     setLoading(true);
 
     try {
-      const response = await fetch(`${AUTH_BASE_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Invalid email or password");
-      }
+      const data = await loginWithRetry();
 
       await setAuth(data.token, data.role);
       await setUserEmail(email.trim().toLowerCase());
@@ -87,6 +125,7 @@ export default function Login({ navigation }: any) {
         console.warn("Failed to prime residents cache after login:", e);
       }
 
+      setError("");
       navigateByRole(data.role);
     } catch (err: any) {
       // Network unreachable — try mock credentials
@@ -101,7 +140,13 @@ export default function Login({ navigation }: any) {
         }
         setError("Server unreachable. Use a demo account (e.g. admin@traymate.com).");
       } else {
-        setError(err.message);
+        const raw = err?.message ?? "";
+        const isWakeUp = raw === "empty_response" || raw === "invalid_response" || raw === "Server unavailable after retries";
+        setError(
+          isWakeUp
+            ? "Server took too long to wake up. Please try again in a moment."
+            : raw || "Something went wrong. Please try again."
+        );
       }
     } finally {
       setLoading(false);

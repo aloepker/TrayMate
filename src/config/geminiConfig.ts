@@ -19,8 +19,6 @@ export const GEMINI_CONFIG = {
   // The backend uses whichever model the client sends in the request body.
   models: [
     'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
   ] as const,
   model: 'gemini-2.5-flash',
 };

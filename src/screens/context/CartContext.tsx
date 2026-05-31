@@ -365,6 +365,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           if (s === 'pending') return 'confirmed';
           if (s === 'cancelled' || s === 'canceled') return 'cancelled';
           if (s === 'substitution_requested') return 'substitution_requested';
+          // "served" is the legacy kitchen status — map to "completed" so the
+          // resident screen correctly moves it to the completed section.
+          if (s === 'served') return 'completed';
           if (['confirmed','preparing','ready','completed'].includes(s)) return s as Order['status'];
           return 'confirmed';
         })(),
@@ -414,7 +417,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
           if (existing) return existing.placedAt;
           const rawDate = entry?.date;
           if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-            return new Date(`${rawDate}T12:00:00`);
+            // Use a meal-period-appropriate fallback time rather than always noon,
+            // so Breakfast orders don't show "Placed at 12:00 PM".
+            const p = String(fallbackOrder.mealOfDay ?? '').toLowerCase();
+            const fallbackHour = p === 'breakfast' ? '08' : p === 'dinner' ? '17' : '12';
+            return new Date(`${rawDate}T${fallbackHour}:00:00`);
           }
           return new Date(rawDate ?? Date.now());
         };

@@ -14,60 +14,88 @@ async function getAuthHeaders() {
 }
 
 
+// Render free-tier servers spin down after inactivity and return an empty
+// body on the first request while they wake up (~15-30 s). We retry with
+// backoff so callers never see a raw "JSON Parse error: Unexpected end of input".
+const WAKE_RETRY_DELAYS_MS = [6000, 12000, 18000]; // 3 retries: 6 s, 12 s, 18 s
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const authHeaders = await getAuthHeaders();
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  let lastError: unknown;
 
-    ...options,
-    headers: {
-      ...authHeaders,
-      ...(options.headers || {}),
-    },
-  });
-
-  // Common for DELETE: backend returns 204 No Content
-  if (res.status === 204) {
-    if (!res.ok) throw new Error(`Request failed (${res.status})`);
-    return null as unknown as T;
-  }
-
-  const contentType = res.headers.get("content-type") || "";
-  const text = await res.text();
-
- 
-  const looksLikeJson =
-    text.trim().startsWith("{") || text.trim().startsWith("[");
-
-  let data: any = null;
-
-  if ((contentType.includes("application/json") || looksLikeJson) && text) {
+  for (let attempt = 0; attempt <= WAKE_RETRY_DELAYS_MS.length; attempt++) {
     try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
+      const res = await fetch(`${BASE_URL}${path}`, {
+        ...options,
+        headers: {
+          ...authHeaders,
+          ...(options.headers || {}),
+        },
+      });
+
+      // Common for DELETE: backend returns 204 No Content
+      if (res.status === 204) {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        return null as unknown as T;
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text();
+
+      // Empty body = server still waking up → retry if we have attempts left
+      if (!text.trim() && attempt < WAKE_RETRY_DELAYS_MS.length) {
+        await new Promise(r => setTimeout(r, WAKE_RETRY_DELAYS_MS[attempt]));
+        continue;
+      }
+
+      const looksLikeJson =
+        text.trim().startsWith("{") || text.trim().startsWith("[");
+
+      let data: any = null;
+
+      if ((contentType.includes("application/json") || looksLikeJson) && text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      } else {
+        // plain text like "Deleted" or empty string
+        data = text || null;
+      }
+
+      if (!res.ok) {
+        const message =
+          data?.message ||
+          data?.error ||
+          (typeof data === "string" ? data : "") ||
+          `Request failed (${res.status})`;
+        const error = new Error(message) as Error & {
+          status?: number;
+          data?: any;
+        };
+        error.status = res.status;
+        error.data = data;
+        throw error;
+      }
+
+      return data as T;
+    } catch (err: any) {
+      lastError = err;
+      // Network-level failure (connection refused while server wakes) → retry
+      const isNetworkError =
+        err?.message?.toLowerCase().includes("network request failed") ||
+        err?.message?.toLowerCase().includes("failed to fetch");
+      if (isNetworkError && attempt < WAKE_RETRY_DELAYS_MS.length) {
+        await new Promise(r => setTimeout(r, WAKE_RETRY_DELAYS_MS[attempt]));
+        continue;
+      }
+      throw err;
     }
-  } else {
-    // plain text like "Deleted" or empty string
-    data = text || null;
   }
 
-  if (!res.ok) {
-    const message =
-      data?.message ||
-      data?.error ||
-      (typeof data === "string" ? data : "") ||
-      `Request failed (${res.status})`;
-    const error = new Error(message) as Error & {
-      status?: number;
-      data?: any;
-    };
-    error.status = res.status;
-    error.data = data;
-    throw error;
-  }
-
-  return data as T;
+  throw lastError ?? new Error("Server unavailable after retries");
 }
 
 
@@ -578,6 +606,7 @@ export async function deleteEntity(
 export type MealOrderResponse = {
   id: number;
   date: string;            // "YYYY-MM-DD"
+  createdAt?: string | null; // ISO datetime set by backend @PrePersist — used for order time display
   mealOfDay: string;       // "Breakfast" | "Lunch" | "Dinner"
   userId: string;
   status: string;          // "pending", etc.
@@ -1156,8 +1185,13 @@ export async function getAllMenuMeals(): Promise<any[]> {
       headers: { Accept: "application/json" },
     });
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) return data;
+      const text = await res.text();
+      if (text.trim()) {
+        try {
+          const data = JSON.parse(text);
+          if (Array.isArray(data)) return data;
+        } catch { /* malformed — swallow */ }
+      }
     }
   } catch { /* swallow — caller decides what to do with [] */ }
   return [];

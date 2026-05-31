@@ -100,9 +100,16 @@ WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_key = 'tablet.pin');
 ALTER TABLE meal_orders
     ADD COLUMN IF NOT EXISTS created_at DATETIME(6) NULL;
 
+-- Backfill existing rows with a plausible time based on meal period so
+-- old orders don't all appear at midnight (00:00) or noon (12:00).
+-- Breakfast → 8:00 AM, Lunch → 12:00 PM, Dinner → 5:00 PM, unknown → 12:00 PM.
 UPDATE meal_orders
-   SET created_at = TIMESTAMP(date, '00:00:00')
- WHERE created_at IS NULL AND date IS NOT NULL;
+   SET created_at = CASE
+     WHEN LOWER(meal_of_day) = 'breakfast' THEN TIMESTAMP(`date`, '08:00:00')
+     WHEN LOWER(meal_of_day) = 'dinner'    THEN TIMESTAMP(`date`, '17:00:00')
+     ELSE                                       TIMESTAMP(`date`, '12:00:00')
+   END
+ WHERE created_at IS NULL AND `date` IS NOT NULL;
 
 -- Original status column was VARCHAR(7) — silently truncated longer status
 -- values like "preparing" (9), "completed" (9), and "cancelled" (9), which

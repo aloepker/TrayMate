@@ -505,8 +505,15 @@ async function callGeminiModel(
       // Transient overload — cool down for 1 minute and fall back silently
       rateLimitedUntil[modelName] = Date.now() + 60_000;
       console.warn(`[Granny BT] ${modelName} overloaded (503), cooling down 1 min.`);
+    } else if (status === 404) {
+      // Model retired / not found — cool down for 24 h and skip silently.
+      // Use warn, not error, so the red LogBox overlay never appears.
+      rateLimitedUntil[modelName] = Date.now() + 24 * 60 * 60 * 1000;
+      console.warn(`[Granny BT] ${modelName} returned 404 (model unavailable), skipping.`);
     } else {
-      console.error(`[Granny BT] ${modelName} error: ${err?.message ?? err}`);
+      // Unexpected error — log at warn level so the red LogBox stays away
+      // while still appearing in the dev console for debugging.
+      console.warn(`[Granny BT] ${modelName} error: ${err?.message ?? err}`);
     }
     throw err;
   }

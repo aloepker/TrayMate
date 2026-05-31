@@ -13,4 +13,5 @@ public class ResidentCardDto {
     private String foodAllergies;
     private String medicalConditions;
     private String medications;
+    private Long caregiverId;
 }
