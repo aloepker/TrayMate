@@ -1,97 +1,253 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+<h1 align="center">TrayMate</h1>
 
-# Getting Started
+---
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+# Prepared By
 
-## Step 1: Start Metro
+* Adam Loepker
+* Anthony Mao
+* Gerry Summers
+* Manxi Muhirwa
+* Sabina Salimova
+* Wendy Arenas Rosas
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+---
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+# Product Overview
 
-```sh
-# Using npm
-npm start
+TrayMate is a mobile meal ordering and management application designed for assisted living facilities and care environments. The platform helps residents independently order meals while ensuring dietary restrictions, allergies, and medical requirements are safely enforced.
 
-# OR using Yarn
-yarn start
+Many care facilities still rely on manual workflows, which can result in communication issues, incorrect meal deliveries, and difficulty managing dietary restrictions. TrayMate addresses these challenges by providing a centralized digital platform where residents, caregivers, kitchen staff, and administrators can efficiently coordinate meal-related workflows.
+
+The system improves resident independence through a clean and senior-friendly interface while reducing human error through automatic dietary validation and restriction tracking. It also integrates AI-powered meal recommendations to assist residents in selecting appropriate meals based on their preferences and dietary needs.
+
+The platform includes:
+
+* Resident meal ordering
+* Dietary restriction and allergy tracking
+* AI-powered meal recommendations
+* Messaging system between stakeholders
+* Meal delivery status tracking
+* Caregiver dashboard
+* Kitchen staff workflow interface
+* Administrative controls
+
+---
+
+# MVP Features
+
+## Core Features
+
+* Resident meal browsing and ordering
+* Dietary restriction and allergy tracking
+* AI-powered meal recommendations
+* Messaging system
+* Meal delivery tracking
+* Caregiver dashboard
+* Kitchen staff workflow interface
+* Administrative controls
+* Authentication and role-based access control
+
+## Dietary Safety Features
+
+* Automatic meal validation against restrictions and allergies
+* Unsafe meal prevention
+* Alternative meal suggestions
+* Restriction severity tracking
+* Staff override approval workflows
+* Default compliant meal selection
+* Alert system when no compliant meal exists
+
+---
+
+# Product Demo Video
+
+Watch the demo here: [TrayMate Demo Video](https://www.youtube.com/watch?v=Wil1UaUq-1o) 
+
+---
+
+# Technology Stack
+
+## Frontend
+
+* **React Native** — Used to build the cross-platform mobile application for Android devices while maintaining a responsive and accessible user interface.
+
+* **TypeScript** — Provides type safety, maintainability, and scalability for frontend development.
+
+## Backend
+
+- **Spring Boot** — Used to develop REST APIs and backend business logic for authentication, meal management, messaging, and workflow coordination.
+
+- **Spring Security** — Provides authentication and authorization functionality.
+
+- **Hibernate / Spring Data JPA** — Handles object-relational mapping and database interaction.
+
+## Database
+
+- **AWS MySQL RDS** — Cloud-hosted relational database used to store users, meals, dietary restrictions, orders, and messaging data.
+
+## AI Integration
+
+- **Gemini API** — Used to generate personalized AI-powered meal recommendations based on resident preferences and dietary restrictions.
+
+## Hosting & Deployment
+
+- **Render** — Used for backend hosting and deployment.
+
+- **Docker** — Used to containerize backend services for deployment consistency.
+
+## CI/CD
+
+- **GitHub Actions** — Used to automate workflows, testing, and deployment pipelines.
+
+- **Render Deployment Pipelines** — Used for automated backend deployment and continuous delivery.
+
+---
+
+# Development & Collaboration Tools
+
+* GitHub
+* Jira
+* VS Code
+* Android Studio
+* Postman
+* Cypress
+* Figma
+* Microsoft Teams
+
+---
+
+# Build & Run Instructions
+
+## Prerequisites
+
+Install the following software before running the application:
+
+* Node.js (LTS Version Recommended)  https://nodejs.org/
+
+* npm  (Automatically included with Node.js installation)
+
+* Java Development Kit (JDK 17 Recommended) https://www.oracle.com/java/technologies/downloads/
+
+* Android Studio  https://developer.android.com/studio
+
+* Android SDK  (Installed through Android Studio)
+
+* Git  https://git-scm.com/downloads
+
+**Note:** The Spring Boot backend is already deployed on Render and does not need to be run locally for standard application testing. However, Android builds require Java because Gradle and the Android build toolchain run on the Java Virtual Machine (JVM).
+
+**Architecture Note:** The mobile application communicates directly with the deployed backend APIs, allowing the app to be tested without running backend services locally.
+
+## Clone the Repository
+
+```bash
+git clone https://github.com/aloepker/TrayMate.git
+cd TrayMate
 ```
 
-## Step 2: Build and run your app
+## Install Dependencies
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+Install all required frontend dependencies:
 
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+npm install
 ```
 
-### iOS
+## Open Android Studio
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+1. Open Android Studio
+2. Install the Android SDK if prompted
+3. Open the Android Virtual Device (AVD) Manager
+4. Create or launch an Android emulator/tablet device
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+## Start the React Native Development Server
 
-```sh
-bundle install
+Run the Metro bundler:
+
+```bash
+npx react-native start
 ```
 
-Then, and every time you update your native dependencies, run:
+## Run the Application on Android
 
-```sh
-bundle exec pod install
+Open a second terminal window and run:
+
+```bash
+npx react-native run-android
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+The application should automatically install and launch on the Android emulator.
 
-```sh
-# Using npm
-npm run ios
+---
 
-# OR using Yarn
-yarn ios
+# Build Release APK
+
+Navigate to the Android directory:
+
+```bash
+cd android
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+Build the release APK:
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+```bash
+./gradlew assembleRelease
+```
 
-## Step 3: Modify your app
+The APK file will be generated at:
 
-Now that you have successfully run the app, let's make changes!
+```bash
+android/app/build/outputs/apk/release/
+```
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+The generated APK will be named:
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+```text
+app-release.apk
+```
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+---
 
-## Congratulations! :tada:
+# Login Credentials
 
-You've successfully run and modified your React Native App. :partying_face:
+Use the following administrator account to access the application:
 
-### Now what?
+```text
+Email: admin@traymate.com
+Password: admin123
+```
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+The administrator account can create and manage:
 
-# Troubleshooting
+* Caregiver accounts
+* Kitchen staff accounts
+* Residents
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+A preconfigured administrator account is included for demonstration and testing purposes.
 
-# Learn More
+---
 
-To learn more about React Native, take a look at the following resources:
+# Product Overview Poster
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+![TrayMate Poster](https://i.postimg.cc/D05Ysz5x/Your-paragraph-text-(5).png)
+
+---
+
+# Future Improvements
+
+* Voice assistant integration
+* Nutritional analysis scanner
+* Expanded accessibility support
+* Enhanced analytics dashboard
+* Improved AI recommendation system
+
+---
+
+# Acknowledgements
+
+Special thanks to:
+
+* Professor Andy Cameron
+* Seattle Pacific University Board of Advisors
+* Traymate development team
