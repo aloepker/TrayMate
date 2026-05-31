@@ -31,6 +31,7 @@ import MessagesModal from "../components/messaging/MessagesModal";
 import { getInbox, getMe, sendMessage } from "../../services/api";
 import { decodePendingAutoOrder, confirmPendingAutoOrder } from "../../services/autoOrderRequest";
 import InAppNotificationBanner from "../components/InAppNotificationBanner";
+import { TabletPinButton } from "../components/TabletModeAdminControls";
 import { clearAuth, getCaregiverResidentList } from "../../services/storage";
 
 const grandmaLogo = require("../../styles/pictures/grandma.png");
@@ -531,6 +532,9 @@ export default function CaregiverDashboardScreen({
               </View>
             </View>
           )}
+          {/* Facility-wide Tablet Mode unlock PIN (synced across tablets) */}
+          <TabletPinButton />
+
           <Pressable
             style={styles.logoutBtn}
             onPress={handleLogout}

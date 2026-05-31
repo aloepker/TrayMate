@@ -1245,15 +1245,15 @@ export async function reseedSoftBiteMeals(): Promise<SoftBiteReseedResult> {
 
 export type TabletModePin = { pin: string };
 
-/** Read the facility-wide Tablet Mode unlock PIN. Admin-only. */
+/** Read the facility-wide Tablet Mode unlock PIN. Admin + caregiver. */
 export async function getTabletPin(): Promise<string> {
-  const data = await request<TabletModePin>("/admin/settings/tablet-pin");
+  const data = await request<TabletModePin>("/tablet/pin");
   return data?.pin ?? "1234";
 }
 
-/** Update the facility-wide Tablet Mode unlock PIN. Admin-only. */
+/** Update the facility-wide Tablet Mode unlock PIN. Admin + caregiver. */
 export async function setTabletPin(pin: string): Promise<string> {
-  const data = await request<TabletModePin>("/admin/settings/tablet-pin", {
+  const data = await request<TabletModePin>("/tablet/pin", {
     method: "PUT",
     body: JSON.stringify({ pin }),
   });
