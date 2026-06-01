@@ -24,6 +24,21 @@ import { GEMINI_CONFIG } from '../config/geminiConfig';
 import { MealService, ResidentService } from './localDataService';
 import { isMealSafe, getUnsafeReason, SafetyResident, SafetyMeal } from './mealSafetyService';
 import { getAuthToken } from './storage';
+// Client-side Gemini key, injected at build time from .env via
+// react-native-dotenv. May be empty/undefined if no .env is present.
+import { GEMINI_API_KEY } from '@env';
+
+// ─── Direct-to-Gemini path (geo-block workaround) ────────────────────────
+// Our Render backend lives in a non-US region, and Gemini geo-restricts by
+// the CALLER's outbound IP — so every server-side call returns HTTP 400
+// "User location is not supported". The tablets, however, run in the US, so
+// calling Gemini DIRECTLY from the device sidesteps the geo-block entirely.
+// When a build-time key is present we use the direct path and skip Render;
+// when it's absent we fall back to the Render proxy (original behaviour).
+// The key ships in the app binary but NOT in git (.env is gitignored).
+const DIRECT_GEMINI_KEY = (GEMINI_API_KEY ?? '').trim();
+const HAS_DIRECT_GEMINI = DIRECT_GEMINI_KEY.length > 0;
+const GEMINI_REST_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 // Backend proxy — same Render host as the rest of the app's API calls.
 // One endpoint forwards to whichever Gemini model the client asks for.
@@ -123,17 +138,59 @@ async function callTraymateAI(message: string, residentId: number | string): Pro
 }
 
 /**
+ * Call Gemini DIRECTLY from the device (no Render in between). Used when a
+ * build-time `GEMINI_API_KEY` is present, to dodge the server-side geo-block.
+ * The key goes in the `?key=` query param only — Gemini keys are NOT OAuth
+ * tokens, so we must NOT send an Authorization header here. Returns the raw
+ * `:generateContent` JSON; throws with `.status` set so the existing 429/503
+ * cooldown logic still applies.
+ */
+async function callGeminiDirect(model: string, body: any): Promise<any> {
+  const url = `${GEMINI_REST_BASE}${model}:generateContent?key=${DIRECT_GEMINI_KEY}`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e: any) {
+    throw new Error(`Network error contacting Gemini directly: ${e?.message ?? e}`);
+  }
+  const text = await resp.text().catch(() => '');
+  let data: any = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { _raw: text }; }
+  if (!resp.ok) {
+    const err = new Error(`[${resp.status}] ${data?.error?.message || data?._raw || `HTTP ${resp.status}`}`);
+    (err as any).status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
+/**
  * Single helper used by every Gemini caller in this file. POSTs
  * `{ model, body }` to the backend, which forwards to Gemini using
  * its server-side key. Returns the parsed JSON response (same shape
  * as Gemini's `:generateContent`) or throws with `.status` set so
  * callers can apply the existing 429 cooldown logic.
  *
+ * When a build-time client key is present (HAS_DIRECT_GEMINI) we bypass
+ * Render entirely and hit Gemini straight from the device — the Render
+ * backend is geo-blocked (HTTP 400) from its non-US region, while the
+ * tablets are in the US. Falls back to the Render proxy when no client
+ * key is configured.
+ *
  * Sends the user's JWT in `Authorization: Bearer …` because the
  * `/ai/gemini` route is gated by Spring Security — this prevents
  * anyone with the URL from burning our Gemini quota.
  */
 async function callGeminiViaProxy(model: string, body: any): Promise<any> {
+  // Direct path wins when a client key is baked in (geo-block workaround).
+  if (HAS_DIRECT_GEMINI) {
+    return callGeminiDirect(model, body);
+  }
+
   const tok = await getAuthToken();
   let resp: Response;
   try {
@@ -618,9 +675,12 @@ export class GeminiChatService {
     // backend id skip straight to the proxy path below). Any failure —
     // network, 4xx/5xx, unparseable body — falls through to the existing
     // client-side Gemini proxy so the chat never goes dark.
+    // Skip the server-side /ai hop when we have a direct client key — that
+    // endpoint is geo-blocked (HTTP 400) and would just waste a round-trip
+    // before falling through to the direct Gemini path below anyway.
     const ridRaw = this.lastInitArgs?.residentId;
     const ridNum = ridRaw != null ? parseInt(String(ridRaw).trim(), 10) : NaN;
-    if (Number.isFinite(ridNum)) {
+    if (!HAS_DIRECT_GEMINI && Number.isFinite(ridNum)) {
       try {
         const reply = await callTraymateAI(userMessage, ridNum);
         this.history.push({ role: 'user', parts: [{ text: userMessage }] });
