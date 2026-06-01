@@ -1604,10 +1604,10 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
   };
 
   const HELP_SECTIONS = [
-  { id: 'placeOrder',    icon: 'shopping-cart',  title: t.howToPlaceOrder,    description: t.howToPlaceOrderDesc,    video: null },
-  { id: 'upcomingMeals', icon: 'calendar',       title: t.howToCheckUpcoming, description: t.howToCheckUpcomingDesc, video: null },
-  { id: 'cancelMeal',    icon: 'x-circle',       title: t.howToCancelMeal,    description: t.howToCancelMealDesc,    video: null },
-  { id: 'grannyBT',      icon: 'message-circle', title: t.howToUseGrannyBT,   description: t.howToUseGrannyBTDesc,   video: null },
+  { id: 'placeOrder',    icon: 'shopping-cart',  title: t.howToPlaceOrder,    description: t.howToPlaceOrderDesc,    video: require('../styles/videos/place-order-walkthrough.mp4') },
+  { id: 'upcomingMeals', icon: 'calendar',       title: t.howToCheckUpcoming, description: t.howToCheckUpcomingDesc, video: require('../styles/videos/upcoming-walkthrough.mp4') },
+  { id: 'cancelMeal',    icon: 'x-circle',       title: t.howToCancelMeal,    description: t.howToCancelMealDesc,    video: require('../styles/videos/delete-walkthrough.mp4') },
+  { id: 'grannyBT',      icon: 'message-circle', title: t.howToUseGrannyBT,   description: t.howToUseGrannyBTDesc,   video: require('../styles/videos/ai-walkthrough.mp4') },
 ];
 
   const loadAutoOrderCandidates = useCallback(async () => {
@@ -3725,7 +3725,7 @@ const BrowseMealOptionsScreen = ({ navigation, route }: any) => {
               paused={false}
               repeat={true}
               controls={true}
-              muted={true}
+              muted={false}
               onLoad={() => console.log('Video loaded')}
               onError={(error) => console.log('Video error:', error)}
             />
