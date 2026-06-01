@@ -39,6 +39,17 @@ const AI_PROXY_URL  = `${AI_PROXY_BASE}/ai/gemini`;
 // this endpoint is down or returns something we can't parse.
 const AI_CHAT_URL = `${AI_PROXY_BASE}/ai`;
 
+// ─── Background quota kill-switch ────────────────────────────────────────
+// The meal-name/description/tag translators run AUTOMATICALLY (on screen
+// open, on meal select, on language change) — i.e. they burn Gemini quota
+// in the background without the user ever tapping anything. With a flag set
+// to false they no-op (return {}), so the app falls back to static
+// translations / English display and NO background Gemini calls are made.
+// Chat and the explicit "Ask Granny BT" button are unaffected — those only
+// fire on a real user action. Flip this back to true once the API key has
+// paid/available quota.
+const AI_MEAL_TRANSLATION_ENABLED = false;
+
 /**
  * Call the server-side /ai endpoint. Sends { message, residentId } and
  * returns the assistant's reply text.
@@ -745,6 +756,7 @@ export const geminiChat = new GeminiChatService();
 export async function translateMealNamesWithGemini(
   names: string[],
 ): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (!AI_MEAL_TRANSLATION_ENABLED) return {};
   if (names.length === 0) return {};
 
   const prompt = `Translate these English food/meal names into Spanish (Español), French (Français), and Chinese (中文).
@@ -780,6 +792,7 @@ ${names.join('\n')}`;
 export async function translateMealDescriptionsWithGemini(
   descriptions: string[],
 ): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (!AI_MEAL_TRANSLATION_ENABLED) return {};
   if (descriptions.length === 0) return {};
 
   // Use numeric keys in the prompt to avoid JSON escaping issues with quotes
@@ -825,6 +838,7 @@ ${numbered}`;
 export async function translateMealTagsWithGemini(
   tags: string[],
 ): Promise<Record<string, { Español: string; Français: string; 中文: string }>> {
+  if (!AI_MEAL_TRANSLATION_ENABLED) return {};
   const uniqueTags = Array.from(new Set(tags.map((t) => t.trim()).filter(Boolean)));
   if (uniqueTags.length === 0) return {};
 
