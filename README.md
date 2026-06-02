@@ -161,23 +161,17 @@ npm install
 3. Open the Android Virtual Device (AVD) Manager
 4. Create or launch an Android emulator/tablet device
 
-## Start the React Native Development Server
+---
 
-Run the Metro bundler:
+# Configure the AI API befure building
 
-```bash
-npx react-native start
-```
+For the AI to work correctly, 
+you must configure the AI API with your personal API key before building the project using the following steps:
 
-## Run the Application on Android
-
-Open a second terminal window and run:
-
-```bash
-npx react-native run-android
-```
-
-The application should automatically install and launch on the Android emulator.
+1. Copy the template: cp .env.example .env 
+2. Get a key from https://aistudio.google.com/apikey 
+3. Add it to  the newly created .env: GEMINI_API_KEY=your_key_here 
+4. Save the .env file
 
 ---
 
@@ -206,6 +200,8 @@ The generated APK will be named:
 ```text
 app-release.apk
 ```
+
+The generated APK can be moved to the android studio environment or any android device for testing.
 
 ---
 
