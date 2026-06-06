@@ -163,15 +163,104 @@ npm install
 
 ---
 
-# Configure the AI API befure building
+# Configure the AI API before building
 
 For the AI to work correctly, 
 you must configure the AI API with your personal API key before building the project using the following steps:
 
-1. Copy the template: cp .env.example .env 
+1. Copy the template:  
+```bash
+cp .env.example .env
+```
 2. Get a key from https://aistudio.google.com/apikey 
 3. Add it to  the newly created .env: GEMINI_API_KEY=your_key_here 
 4. Save the .env file
+
+---
+
+# Running the Backend Locally (Optional)
+
+The backend API is already deployed on Render and does not need to be run locally for normal application testing.
+
+Developers who wish to run the backend locally can do so using the following steps.
+
+## Configure Database Credentials
+
+Before starting the backend, provide values for the following environment variables:
+
+```text
+DB_URL
+DB_USERNAME
+DB_PASSWORD
+```
+
+These variables are used by Spring Boot to connect to your database.
+
+## Start the Backend
+
+Navigate to the backend directory:
+
+```bash
+cd backend
+```
+
+Run the Spring Boot application:
+
+```bash
+./mvnw spring-boot:run
+```
+
+The backend will start on:
+
+```text
+http://localhost:8080
+```
+
+unless a different port is specified.
+
+---
+
+## Connect the Mobile App to the Local Backend
+
+By default, the mobile application points to the deployed backend.
+
+To use a locally running backend, open:
+
+```text
+src/services/api.tsx
+```
+
+and update the `BASE_URL` value to your local backend address.
+
+Example:
+
+```typescript
+const BASE_URL = "http://localhost:8080";
+```
+
+> Note: If using an Android emulator, you may need to use `http://10.0.2.2:8080` instead of `localhost`.
+
+---
+
+## Running with Docker (Optional)
+
+The backend is containerized and can also be run using Docker.
+
+Build the image:
+
+```bash
+docker build -t traymate-backend .
+```
+
+Run the container:
+
+```bash
+docker run -p 8080:8080 \
+  -e DB_URL=<your-db-url> \
+  -e DB_USERNAME=<your-db-username> \
+  -e DB_PASSWORD=<your-db-password> \
+  traymate-backend
+```
 
 ---
 
